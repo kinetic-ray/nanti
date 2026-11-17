@@ -15,6 +15,7 @@ model Wishlist {
   currency  String   @db.Char(3)
   createdAt DateTime @default(now())
   items     Item[]
+  assessments Assessment[]
 
   @@unique([ownerId, id])
   @@index([ownerId, createdAt])
@@ -30,6 +31,34 @@ model Item {
   quantity     Int
   createdAt    DateTime @default(now())
   wishlist     Wishlist @relation(fields: [ownerId, wishlistId], references: [ownerId, id], onDelete: Cascade)
+  assessments  Assessment[]
 
+  @@unique([ownerId, wishlistId, id])
   @@index([ownerId, wishlistId, createdAt])
+}
+
+enum AssessmentKind {
+  impulse
+  comparison
+}
+
+model Assessment {
+  id          String         @id @default(uuid()) @db.Char(36)
+  ownerId     String         @db.Char(36)
+  wishlistId  String         @db.Char(36)
+  itemId      String?        @db.Char(36)
+  kind        AssessmentKind
+  version     String         @db.VarChar(24)
+  input       Json
+  result      Json
+  createdAt   DateTime       @default(now())
+  wishlist    Wishlist       @relation(fields: [ownerId, wishlistId], references: [ownerId, id], onDelete: Cascade)
+  item        Item?          @relation(fields: [ownerId, wishlistId, itemId], references: [ownerId, wishlistId, id], onDelete: Cascade)
+
+  @@index([ownerId, wishlistId, itemId, kind, createdAt, id])
+}
+
+model IntelligencePreference {
+  ownerId        String @id @db.Char(36)
+  coolingOffDays Int
 }

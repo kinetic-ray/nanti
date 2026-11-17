@@ -1,10 +1,13 @@
 import { createRoot } from 'react-dom/client';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { formatPrice, safeProductUrl } from '../shared/wishlist.js';
 import type { Currency, Item, ItemInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { DeleteForm, ItemForm, ListForm } from './forms.js';
+import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.js';
 import './styles.css';
+
+const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
 
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
@@ -20,6 +23,8 @@ function App() {
   const [detailError, setDetailError] = useState('');
   const [revision, setRevision] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [tools, setTools] = useState<IntelligenceSelection | null>(null);
+  const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map(), comparison: new Map() }));
   const [status, setStatus] = useState('');
 
   useEffect(() => {
@@ -141,6 +146,10 @@ function App() {
               </div>
               <button className="primary" onClick={() => setEditor({ kind: 'item', list: selected })}>Add product</button>
             </div>
+            {list && list.items.length > 0 && <div className="actions decision-entry">
+              {list.items.length >= 2 && <button type="button" onClick={() => setTools({ kind: 'comparison' })}>Compare products</button>}
+              <button type="button" onClick={() => setTools({ kind: 'timing' })}>Check wishlist timing</button>
+            </div>}
             {detailError ? <div><p className="error" role="alert">{detailError}</p>
               <button onClick={refresh}>Try again</button></div>
               : !list ? <p role="status">Loading products…</p>
@@ -162,6 +171,8 @@ function App() {
                           </span>
                         </div>
                         <div className="actions">
+                          <button type="button" aria-label={`Purchase tools for ${item.name}`}
+                            onClick={() => setTools({ kind: 'product', item })}>Purchase tools</button>
                           <button aria-label={`Edit ${item.name}`} onClick={() => setEditor({ kind: 'item', list, item })}>Edit</button>
                           <button aria-label={`Remove ${item.name}`} onClick={() => setEditor({ kind: 'delete', list, item })}>Remove</button>
                         </div>
@@ -177,6 +188,9 @@ function App() {
         close={() => setEditor(null)} save={saveItem} />}
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}
+      {tools && list && <Suspense fallback={<p role="status" className="sr-only">Opening purchase tools…</p>}>
+        <PurchaseTools list={list} selection={tools} close={() => setTools(null)} drafts={drafts} />
+      </Suspense>}
     </div>
   );
 }

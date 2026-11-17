@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { currencies, safeProductUrl } from '../shared/wishlist.js';
 import { readWishlist } from './wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
+import { intelligenceRoutes } from './intelligence-routes.js';
+import type { IntelligenceRepository } from './intelligence.js';
 
 const uuid = z.uuid();
 const listName = z.string().trim().min(1, 'Enter a wishlist name.').max(100);
@@ -28,6 +30,7 @@ const itemInput = z.strictObject({
 
 type Options = {
   repository: WishlistRepository;
+  intelligence?: IntelligenceRepository;
   preview: (url: URL) => Promise<string | null>;
   secret: string;
   secureCookies: boolean;
@@ -38,7 +41,7 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, preview, secret, secureCookies, webRoot }: Options) {
+export function createApp({ repository, intelligence, preview, secret, secureCookies, webRoot }: Options) {
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
@@ -85,6 +88,7 @@ export function createApp({ repository, preview, secret, secureCookies, webRoot 
     res.locals.ownerId = session.data;
     next();
   });
+  if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence));
 
   api.get('/wishlists', async (_req, res) => {
     res.json(await repository.list(res.locals.ownerId));

@@ -1,25 +1,33 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { currencies, parsePrice, safeProductUrl } from '../shared/wishlist.js';
 import type { Currency, Item, ItemInput, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 
-function Dialog({ title, busy, close, children }: {
+export function Dialog({ title, busy, close, children, className, focusHeading = false }: {
   title: string; busy: boolean; close: () => void; children: ReactNode;
+  className?: string; focusHeading?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const heading = useId();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
+    const trigger = document.activeElement;
     dialog?.showModal();
-    return () => dialog?.close();
-  }, []);
+    if (focusHeading) titleRef.current?.focus();
+    return () => {
+      dialog?.close();
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+    };
+  }, [focusHeading]);
   return (
-    <dialog ref={ref} aria-labelledby={heading} onCancel={(event) => {
+    <dialog ref={ref} className={className} aria-labelledby={heading} onCancel={(event) => {
+      event.stopPropagation();
       event.preventDefault();
       if (!busy) close();
     }}>
-      <h2 id={heading}>{title}</h2>
+      <h2 ref={titleRef} id={heading} tabIndex={focusHeading ? -1 : undefined}>{title}</h2>
       {children}
     </dialog>
   );

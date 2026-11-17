@@ -3,6 +3,7 @@ import { connectDatabase } from './database.js';
 import { z } from 'zod';
 import { createApp } from './app.js';
 import { prismaWishlists } from './prisma-wishlists.js';
+import { prismaIntelligence } from './prisma-intelligence.js';
 import { previewProduct } from './product-preview.js';
 
 const config = z.object({
@@ -29,6 +30,7 @@ try {
 
 const server = createApp({
   repository: prismaWishlists(db),
+  intelligence: prismaIntelligence(db),
   preview: previewProduct,
   secret: env.SESSION_SECRET,
   secureCookies: env.NODE_ENV === 'production',
