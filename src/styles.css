@@ -76,6 +76,11 @@ small { color: var(--muted); font-size: .78rem; }
 .products li:nth-child(even) .product-mark { background: var(--mint); color: #245447; }
 .product-price { display: flex; align-items: baseline; gap: .35rem .65rem; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
 .product-tools { color: var(--accent-strong); background: var(--wash); border-color: transparent; }
+.buy-link { margin: .9rem 0; padding: .75rem 0; border-block: 1px solid var(--line); }
+.buy-link .hint { margin: .5rem 0 0; }
+.buy-action, .buy-original { display: inline-flex; align-items: center; min-height: 44px; padding: .45rem .8rem; font-weight: 650; }
+.buy-action { color: var(--paper); background: var(--accent); border-radius: var(--radius); text-decoration: none; }
+.buy-action:hover { background: var(--accent-strong); }
 .actions, .form-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
 dialog { color: inherit; border: 1px solid var(--line); border-radius: 1.75rem; width: min(31rem, calc(100% - 1.25rem)); max-height: calc(100% - 1.25rem); overflow: auto; padding: clamp(1rem, 5vw, 1.75rem); box-shadow: var(--shadow); }
 dialog::backdrop { background: rgb(33 27 55 / 56%); }
@@ -137,8 +142,33 @@ input, select { width: 100%; display: block; border: 1px solid var(--field); bor
 .plan-line { border: 1px solid var(--line); padding: .65rem; border-radius: var(--radius); }
 .plan-line .actions { align-items: center; }
 .plan-line select { width: auto; max-width: 100%; }
+.admin-site { max-width: 90rem; }
+.admin-signin { max-width: 30rem; }
+.admin-grid { display: grid; gap: .85rem; align-items: start; }
+.admin-panel { min-width: 0; background: var(--paper); border: 1px solid var(--line); border-radius: var(--card-radius); padding: 1rem; box-shadow: var(--shadow); }
+.admin-panel h3 { margin: 1.35rem 0 .5rem; }
+.admin-tabs { align-items: center; margin: .8rem 0; }
+.admin-tabs [aria-pressed="true"], .admin-queue [aria-pressed="true"] { color: var(--accent-strong); background: var(--wash); border-color: var(--accent); }
+.admin-queue, .admin-records { list-style: none; padding: 0; margin: 0 0 .8rem; }
+.admin-queue li + li { margin-top: .4rem; }
+.admin-queue button { width: 100%; display: grid; gap: .15rem; text-align: left; overflow-wrap: anywhere; }
+.admin-queue button span, .admin-queue button small { color: var(--muted); font-weight: 500; }
+.admin-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .45rem .9rem; }
+.admin-facts div { overflow-wrap: anywhere; }
+.admin-facts dt { color: var(--muted); font-size: .85rem; }
+.admin-facts dd { margin: 0; font-weight: 600; }
+.admin-candidate, .admin-mapping { margin-top: .75rem; padding: .75rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.admin-mapping h4 { margin: 0 0 .35rem; }
+.admin-mapping p, .admin-records p { margin-bottom: .25rem; }
+.admin-url { overflow-wrap: anywhere; }
+.admin-records li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .6rem; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); padding: .55rem 0; }
+.admin-records small { display: inline-block; }
+.admin-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .65rem; }
+.variant-label { text-transform: capitalize; }
+textarea { display: block; width: 100%; color: inherit; font: inherit; padding: .45rem .55rem; margin-top: .25rem; border: 1px solid var(--field); border-radius: var(--radius); background: var(--paper); }
 @media (min-width: 760px) {
   .workspace { grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr); gap: clamp(1.25rem, 4vw, 3rem); padding-top: 1rem; }
+  .admin-grid { grid-template-columns: minmax(14rem, .85fr) minmax(0, 2fr); }
   nav { display: grid; overflow: visible; }
   nav button { max-width: 100%; }
 }

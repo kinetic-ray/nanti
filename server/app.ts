@@ -10,6 +10,10 @@ import { readWishlist } from './wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
 import { intelligenceRoutes } from './intelligence-routes.js';
 import type { IntelligenceRepository } from './intelligence.js';
+import { adminRoutes } from './admin-routes.js';
+import type { AdminCredentials } from './admin-credentials.js';
+import type { AffiliateRepository } from './prisma-affiliate.js';
+import { purchaseDestinationRoutes } from './purchase-destinations.js';
 
 const uuid = z.uuid();
 const listName = z.string().trim().min(1, 'Enter a wishlist name.').max(100);
@@ -31,6 +35,8 @@ const itemInput = z.strictObject({
 type Options = {
   repository: WishlistRepository;
   intelligence?: IntelligenceRepository;
+  affiliate?: AffiliateRepository;
+  admin?: AdminCredentials;
   preview: (url: URL) => Promise<string | null>;
   secret: string;
   secureCookies: boolean;
@@ -41,7 +47,7 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, preview, secret, secureCookies, webRoot }: Options) {
+export function createApp({ repository, intelligence, affiliate, admin, preview, secret, secureCookies, webRoot }: Options) {
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
@@ -67,6 +73,10 @@ export function createApp({ repository, intelligence, preview, secret, secureCoo
     res.status(403).json({ error: 'Request could not be verified.' });
   });
   api.use(express.json({ limit: '12kb' }), cookieParser(secret));
+  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
+  api.use('/admin', (_req, res) => res.status(404).json({
+    error: affiliate && admin ? 'This administrator endpoint could not be found.' : 'Administrator sign-in is not configured.',
+  }));
 
   api.post('/session', async (req, res) => {
     const session = uuid.safeParse(req.signedCookies[cookieName]);
@@ -89,6 +99,7 @@ export function createApp({ repository, intelligence, preview, secret, secureCoo
     next();
   });
   if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence, secret));
+  api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
   api.get('/wishlists', async (_req, res) => {
     res.json(await repository.list(res.locals.ownerId));
@@ -144,6 +155,9 @@ export function createApp({ repository, intelligence, preview, secret, secureCoo
   app.use('/api', api);
 
   if (webRoot) {
+    app.get('/admin', (_req, res) => {
+      res.set('Cache-Control', 'no-store').sendFile('index.html', { root: webRoot });
+    });
     app.use(express.static(webRoot, { dotfiles: 'deny' }));
   }
   app.use((_req, res) => notFound(res));

@@ -10,6 +10,7 @@ import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.j
 import './styles.css';
 
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
+const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
 
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
@@ -215,4 +216,9 @@ function App() {
 }
 
 const root = document.getElementById('root');
-if (root) createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
+if (root) {
+  if (/^\/admin\/?$/u.test(location.pathname)) {
+    document.documentElement.lang = 'en';
+    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening Affiliate Center…</p>}><AdminCenter /></Suspense>);
+  } else createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
+}

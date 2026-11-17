@@ -7,6 +7,7 @@ import { ImpulseGuard } from './impulse-guard.js';
 import { PurchaseTiming } from './purchase-timing.js';
 import { ValueRanker } from './value-ranker.js';
 import { useLocale } from './locale.js';
+import { BuyLink } from './buy-link.js';
 
 export type IntelligenceSelection =
   | { kind: 'product'; item: Item }
@@ -33,6 +34,7 @@ function ProductDetails({ list, item, path, close, drafts }: {
     <p className="hint">{list.name}</p>
     <p>{t('Qty {n}', { n: number(item.quantity) })} · {item.priceMinor === null ? t('Price unknown') :
       money((BigInt(item.priceMinor) * BigInt(item.quantity)).toString(), list.currency)}</p>
+    <BuyLink key={item.url ?? item.id} listId={list.id} item={item} />
     <div className="actions">
       <button type="button" onClick={() => setTool('impulse')}>{t('Check buying impulse')}</button>
       <button type="button" onClick={() => setTool('timing')}>{t('Check purchase timing')}</button>

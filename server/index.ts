@@ -6,6 +6,8 @@ import { prismaWishlists } from './prisma-wishlists.js';
 import { prismaIntelligence } from './prisma-intelligence.js';
 import { assessmentRetentionDays } from './intelligence.js';
 import { previewProduct } from './product-preview.js';
+import { adminHashPattern, adminUsernamePattern } from './admin-credentials.js';
+import { prismaAffiliate } from './prisma-affiliate.js';
 
 const config = z.object({
   DATABASE_URL: z.string().startsWith('mysql://'),
@@ -13,6 +15,10 @@ const config = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default('127.0.0.1'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NANTI_ADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
+  NANTI_ADMIN_PASSWORD_HASH: z.string().regex(adminHashPattern).or(z.literal('')).default(''),
+}).refine((value) => Boolean(value.NANTI_ADMIN_USERNAME) === Boolean(value.NANTI_ADMIN_PASSWORD_HASH), {
+  path: ['NANTI_ADMIN_PASSWORD_HASH'], message: 'Set both administrator variables or leave both empty.',
 }).safeParse(process.env);
 
 if (!config.success) {
@@ -39,6 +45,10 @@ retentionTimer.unref();
 const server = createApp({
   repository: prismaWishlists(db),
   intelligence,
+  affiliate: prismaAffiliate(db),
+  admin: env.NANTI_ADMIN_USERNAME && env.NANTI_ADMIN_PASSWORD_HASH ? {
+    username: env.NANTI_ADMIN_USERNAME, passwordHash: env.NANTI_ADMIN_PASSWORD_HASH,
+  } : undefined,
   preview: previewProduct,
   secret: env.SESSION_SECRET,
   secureCookies: env.NODE_ENV === 'production',

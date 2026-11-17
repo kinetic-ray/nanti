@@ -2,6 +2,7 @@ import { Prisma } from './generated/prisma/client.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { currencies } from '../shared/wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
+import { getOrCreateProductIdentity } from './catalog-ingestion.js';
 
 const summary = { id: true, name: true, currency: true } as const;
 const item = { id: true, name: true, url: true, priceMinor: true, quantity: true } as const;
@@ -38,7 +39,10 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
     },
     async addItem(ownerId, wishlistId, data) {
       try {
-        await db.item.create({ data: { ownerId, wishlistId, ...data }, select: { id: true } });
+        await db.$transaction(async (tx) => {
+          const productIdentityId = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+          await tx.item.create({ data: { ownerId, wishlistId, ...data, productIdentityId }, select: { id: true } });
+        });
         return true;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') return false;
@@ -46,7 +50,14 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
       }
     },
     async updateItem(ownerId, wishlistId, id, data) {
-      return (await db.item.updateMany({ where: { ownerId, wishlistId, id }, data })).count > 0;
+      return db.$transaction(async (tx) => {
+        const where = { ownerId, wishlistId, id };
+        const updated = await tx.item.updateMany({ where, data: { ...data, productIdentityId: null } });
+        if (!updated.count) return false;
+        const productIdentityId = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+        if (productIdentityId) await tx.item.updateMany({ where, data: { productIdentityId } });
+        return true;
+      });
     },
     async removeItem(ownerId, wishlistId, id) {
       return (await db.item.deleteMany({ where: { ownerId, wishlistId, id } })).count > 0;

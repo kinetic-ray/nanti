@@ -32,9 +32,12 @@ model Item {
   createdAt    DateTime @default(now())
   wishlist     Wishlist @relation(fields: [ownerId, wishlistId], references: [ownerId, id], onDelete: Cascade)
   assessments  Assessment[]
+  productIdentityId String? @db.Char(36)
+  productIdentity   ProductIdentity? @relation(fields: [productIdentityId], references: [id], onDelete: SetNull)
 
   @@unique([ownerId, wishlistId, id])
   @@index([ownerId, wishlistId, createdAt])
+  @@index([productIdentityId])
 }
 
 enum AssessmentKind {
@@ -71,4 +74,102 @@ model IntelligencePreference {
   updatedAt      DateTime @default(now()) @updatedAt
 
   @@index([updatedAt])
+}
+
+model ProductIdentity {
+  id              String   @id @default(uuid()) @db.Char(36)
+  lookupKey       String   @unique @db.Char(64)
+  merchant        String   @db.VarChar(64)
+  market          String   @db.VarChar(16)
+  listingId       String   @db.VarChar(80)
+  canonicalUrl    String   @db.VarChar(2048)
+  title           String?  @db.VarChar(160)
+  normalizedTitle String?  @db.VarChar(220)
+  brand           String?  @db.VarChar(120)
+  model           String?  @db.VarChar(120)
+  sellerId        String?  @db.VarChar(120)
+  variants        Json?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  items           Item[]
+  mappings        AffiliateMapping[] @relation("IdentityMappings")
+  activeMapping   AffiliateMapping? @relation("ActiveAffiliateMapping")
+  audit           AffiliateAudit[]
+  notifications   AdminNotification[]
+
+  @@index([createdAt, id])
+}
+
+enum AffiliateStatus {
+  pending
+  approved
+  rejected
+  disabled
+  revoked
+  invalid
+}
+
+enum MatchClassification {
+  verified_exact
+  potential
+  mismatch
+  insufficient
+}
+
+model AffiliateMapping {
+  id               String @id @default(uuid()) @db.Char(36)
+  identityId       String @db.Char(36)
+  activeIdentityId String? @unique @db.Char(36)
+  originalUrl      String @db.VarChar(2048)
+  affiliateUrl     String @db.VarChar(2048)
+  candidateKey     String @db.Char(64)
+  status           AffiliateStatus @default(pending)
+  classification   MatchClassification
+  evidence         Json?
+  approvedBy       String? @db.VarChar(64)
+  approvedAt       DateTime?
+  validatedAt      DateTime?
+  revision         Int @default(0)
+  createdAt        DateTime @default(now())
+  identity         ProductIdentity @relation("IdentityMappings", fields: [identityId], references: [id], onDelete: Restrict)
+  activeIdentity   ProductIdentity? @relation("ActiveAffiliateMapping", fields: [activeIdentityId], references: [id], onDelete: Restrict)
+  audit            AffiliateAudit[]
+
+  @@unique([identityId, candidateKey])
+  @@index([identityId, createdAt, id])
+}
+
+model AffiliateAudit {
+  id         String @id @default(uuid()) @db.Char(36)
+  identityId String @db.Char(36)
+  mappingId  String @db.Char(36)
+  actor      String @db.VarChar(64)
+  action     String @db.VarChar(32)
+  details    Json
+  createdAt  DateTime @default(now())
+  identity   ProductIdentity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  mapping    AffiliateMapping @relation(fields: [mappingId], references: [id], onDelete: Restrict)
+
+  @@index([identityId, createdAt, id])
+}
+
+model AdminNotification {
+  id          String @id @default(uuid()) @db.Char(36)
+  eventKey    String @unique @db.VarChar(120)
+  identityId  String @db.Char(36)
+  kind        String @db.VarChar(32)
+  readAt      DateTime?
+  dismissedAt DateTime?
+  createdAt   DateTime @default(now())
+  identity    ProductIdentity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+
+  @@index([dismissedAt, createdAt, id])
+}
+
+model AdminSession {
+  tokenHash       String @id @db.Char(64)
+  credentialScope String @db.Char(64)
+  expiresAt       DateTime
+
+  @@index([expiresAt])
 }

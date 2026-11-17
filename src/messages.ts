@@ -197,6 +197,11 @@ export const idMessages = {
   'Enter a valid nonnegative amount.': 'Isi jumlah yang valid, mulai dari 0.',
   'Enter a valid target date.': 'Isi tanggal target yang valid.',
   'Enter a whole number from 1 to 999.': 'Isi angka bulat dari 1 sampai 999.',
+  'Buy product': 'Beli produk',
+  'Open original listing': 'Buka link produk asli',
+  'Nanti may earn a commission through this link, at no additional charge from Nanti.': 'Tautan ini bisa memberi Nanti komisi, tanpa biaya tambahan dari Nanti.',
+  'Checking the purchase link…': 'Mengecek link pembelian…',
+  'Add a product link to use this action.': 'Tambahkan link produk untuk memakai tombol ini.',
 } as const;
 
 export type Message = keyof typeof idMessages;
