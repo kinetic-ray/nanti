@@ -70,7 +70,14 @@ const original = {
   },
 } satisfies Record<IntelligenceModule, Methodology>;
 
+// Keep released entries here when documenting a new engine version.
+const versions: Record<IntelligenceModule, readonly Methodology[]> = {
+  impulse: [original.impulse],
+  comparison: [original.comparison],
+  timing: [original.timing],
+};
+
 export function getMethodology(module: IntelligenceModule, version?: string): Methodology | null {
-  const entry = original[module];
-  return version === undefined || entry.version === version ? entry : null;
+  const entries = versions[module];
+  return (version === undefined ? entries[0] : entries.find((entry) => entry.version === version)) ?? null;
 }

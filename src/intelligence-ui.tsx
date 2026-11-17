@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AssessmentPage, SavedAssessment } from '../shared/intelligence.js';
-import type { IntelligenceModule } from '../shared/methodology.js';
-import { getMethodology } from '../shared/methodology.js';
+import type { getMethodology, IntelligenceModule } from '../shared/methodology.js';
 import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
 
@@ -101,9 +100,9 @@ export function useAssessmentHistory(path: string) {
   return { page, busy, error, load, save, remove };
 }
 
-export function History({ history, name, onSelect, disabled }: {
+export function History({ history, name, onSelect, onDelete, disabled }: {
   history: ReturnType<typeof useAssessmentHistory>; name: string;
-  onSelect: (record: SavedAssessment) => void; disabled?: boolean;
+  onSelect: (record: SavedAssessment) => void; onDelete: (id: string) => void; disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [deletion, setDeletion] = useState<string | null>(null);
@@ -132,6 +131,7 @@ export function History({ history, name, onSelect, disabled }: {
                 <button type="button" disabled={busy || disabled} onClick={() => void remove(record.id).then((removed) => {
                   if (removed) {
                     setDeletion(null);
+                    onDelete(record.id);
                     summary.current?.focus();
                   }
                 })}>Delete result</button>

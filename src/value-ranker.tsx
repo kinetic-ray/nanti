@@ -59,6 +59,16 @@ export function ValueRanker({ list, path, close, drafts }: {
     edit((current) => ({ ...current, criteria: current.criteria.map((entry) => entry.id === id ? { ...entry, ...update } : entry) }));
   }
 
+  function weightInput(criterion: Criterion, index: number) {
+    return <label key={criterion.id}>Weight for {criterion.name.trim() || `criterion ${index + 1}`}
+      <input type="number" min={0} max={comparisonLimits.weight} step={1} value={criterion.weight} onChange={(event) => {
+        const weight = event.target.valueAsNumber;
+        if (Number.isInteger(weight) && weight >= 0 && weight <= comparisonLimits.weight) changeCriterion(criterion.id, { weight });
+        if (event.target.value === '') changeCriterion(criterion.id, { weight: 0 });
+      }} />
+    </label>;
+  }
+
   function removeCriterion(criterionId: string) {
     edit((current) => ({
       criteria: current.criteria.filter(({ id }) => id !== criterionId),
@@ -128,8 +138,13 @@ export function ValueRanker({ list, path, close, drafts }: {
               onChange={(event) => selectProduct(id, event.target.checked)} />{name}
           </label>)}
         </fieldset>
-      </> : step === 1 || step === 3 ? <>
-        <h3 ref={focus} tabIndex={-1}>{step === 1 ? 'Choose criteria and weights' : 'Adjust your priorities'}</h3>
+      </> : step === 3 ? <>
+        <h3 ref={focus} tabIndex={-1}>Adjust your priorities</h3>
+        <fieldset className="weight-list" aria-label="Comparison weights" disabled={busy}>
+          {input.criteria.map(weightInput)}
+        </fieldset>
+      </> : step === 1 ? <>
+        <h3 ref={focus} tabIndex={-1}>Choose criteria and weights</h3>
         <p className="hint">A larger weight gives a criterion more influence. Use 0 to leave it out of the ranking.</p>
         <fieldset className="criterion-list" disabled={busy}>
           {input.criteria.map((criterion, index) => <fieldset key={criterion.id} className="criterion">
@@ -142,13 +157,7 @@ export function ValueRanker({ list, path, close, drafts }: {
                 <option value="benefit">Benefit · higher is better</option><option value="cost">Cost · lower is better</option>
               </select></label>
             </>}
-            <label>Weight for {criterion.name.trim() || `criterion ${index + 1}`}
-              <input type="number" min={0} max={comparisonLimits.weight} step={1} value={criterion.weight} onChange={(event) => {
-                const weight = event.target.valueAsNumber;
-                if (Number.isInteger(weight) && weight >= 0 && weight <= comparisonLimits.weight) changeCriterion(criterion.id, { weight });
-                if (event.target.value === '') changeCriterion(criterion.id, { weight: 0 });
-              }} />
-            </label>
+            {weightInput(criterion, index)}
             <button type="button" onClick={() => removeCriterion(criterion.id)} aria-label={`Remove criterion ${criterion.name || index + 1}`}>Remove</button>
           </fieldset>)}
           {input.criteria.length < comparisonLimits.criteria && <div className="actions add-criterion">
@@ -191,6 +200,7 @@ export function ValueRanker({ list, path, close, drafts }: {
           </fieldset>}
       </>}
       <div className="actions">
+        {step === 3 && <button type="button" disabled={busy} onClick={() => go(1)}>Edit criteria</button>}
         {step > 0 && <button type="button" disabled={busy} onClick={() => go(step - 1)}>{step === 3 ? 'Edit ratings' : 'Back'}</button>}
         {step < 3 && <button className="primary" disabled={busy || selected.size < 2 ||
           (step > 0 && (!input.criteria.length || input.criteria.some(({ name }) => !name.trim())))}>
@@ -203,7 +213,10 @@ export function ValueRanker({ list, path, close, drafts }: {
     {result && <ComparisonBreakdown result={result} input={viewed?.input ?? input} products={products} currency={list.currency} />}
     {error && <p role="alert" className="error">{error}</p>}
     <p className="decision-status" role="status">{status}</p>
-    <History history={history} name="comparisons" disabled={busy} onSelect={(record) => {
+    <History history={history} name="comparisons" disabled={busy} onDelete={(id) => {
+      if (viewed?.id === id) setViewed(null);
+      setStatus('Comparison deleted.');
+    }} onSelect={(record) => {
       if (record.kind === 'comparison') {
         setViewed(record); setStatus(''); setError('');
         requestAnimationFrame(() => focus.current?.focus());
@@ -229,6 +242,9 @@ function ComparisonBreakdown({ result, input, products, currency }: {
       : result.status === 'no-weights' ? 'Give at least one criterion a positive weight to rank these products.'
       : result.status === 'not-enough-products' ? 'Choose at least two products to see a ranking.'
       : 'A ranking needs a value for each weighted criterion. Unknown values are marked in the table.'}</p>
+    {result.status === 'missing-data' && input.criteria.some(({ id, kind, weight }) => kind === 'price' && weight > 0 &&
+      result.breakdown.some(({ criteria }) => criteria.some((cell) => cell.id === id && cell.input === null))) &&
+      <p className="hint">Add missing unit prices to the saved products or set the price weight to 0.</p>}
     <div className="comparison-scroll" role="region" aria-label="Comparison table" tabIndex={0}>
       <table>
         <caption className="sr-only">Product values, weighted contributions and rankings</caption>

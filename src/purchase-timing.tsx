@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { parsePlanningAmount } from '../shared/purchase-timing.js';
 import type { TimingInput, TimingResult } from '../shared/purchase-timing.js';
 import { formatPrice } from '../shared/wishlist.js';
@@ -25,6 +25,8 @@ export function PurchaseTiming({ list, item, path, close }: {
   const known = item ? item.priceMinor === null ? null : (BigInt(item.priceMinor) * BigInt(item.quantity)).toString()
     : list.items.length && list.unpriced === 0 ? list.totalMinor : null;
 
+  useEffect(() => { if (result) heading.current?.focus(); }, [result]);
+
   function change(key: keyof TimingInput, value: string) {
     setValues((current) => ({ ...current, [key]: value }));
     setResult(null);
@@ -48,7 +50,6 @@ export function PurchaseTiming({ list, item, path, close }: {
     setBusy(true);
     try {
       setResult(await api<TimingResult>(`${path}/timing`, { method: 'POST', data: input }));
-      requestAnimationFrame(() => heading.current?.focus());
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {

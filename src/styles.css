@@ -93,6 +93,7 @@ input, select { width: 100%; display: block; border: 1px solid #879e93; border-r
 .decision .criterion legend { padding: 0 .2rem; font-weight: 650; overflow-wrap: anywhere; max-width: 100%; }
 .criterion > button { justify-self: start; }
 .criterion > .hint { margin: 0; align-self: center; }
+.weight-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap: .65rem; align-items: end; }
 .rating-fields { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
 .add-criterion { align-items: flex-end; }
 .comparison-scroll { overflow-x: auto; margin: .75rem 0; }
@@ -114,4 +115,5 @@ input, select { width: 100%; display: block; border: 1px solid #879e93; border-r
   .products li { grid-template-columns: minmax(0, 1fr) auto; }
   .products .actions { grid-column: 1 / -1; }
   .decision .criterion, .rating-fields, .decision-metrics > div { grid-template-columns: 1fr; }
+  .comparison-scroll th, .comparison-scroll td { min-width: 6.5rem; }
 }

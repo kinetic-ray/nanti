@@ -135,7 +135,10 @@ export function ImpulseGuard({ path, name, close, drafts }: {
     </details>
     {error && <p className="error" role="alert">{error}</p>}
     <p className="decision-status" role="status">{status}</p>
-    <History history={history} name="assessments" disabled={busy} onSelect={(record) => {
+    <History history={history} name="assessments" disabled={busy} onDelete={(id) => {
+      if (viewed?.id === id) { setViewed(null); setSavedId(null); }
+      setStatus('Assessment deleted.');
+    }} onSelect={(record) => {
       if (record.kind === 'impulse') {
         setViewed(record); setSavedId(null); setStatus(''); setError('');
       }
