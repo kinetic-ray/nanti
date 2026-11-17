@@ -2,16 +2,18 @@ export async function api<T>(path: string, options: {
   method?: string;
   data?: unknown;
   signal?: AbortSignal;
+  requestKey?: string;
 } = {}): Promise<T> {
-  const { method = 'GET', data, signal } = options;
+  const { method = 'GET', data, signal, requestKey } = options;
   const response = await fetch(`/api${path}`, {
     method,
     signal,
     ...(method === 'GET' ? {} : {
-      headers: { 'Content-Type': 'application/json', 'X-Nanti-Request': '1' },
+      headers: { 'Content-Type': 'application/json', 'X-Nanti-Request': '1',
+        ...(requestKey && { 'Idempotency-Key': requestKey }) },
       body: JSON.stringify(data ?? {}),
     }),
-  });
+  }).catch(() => { throw new Error('Could not reach Nanti. Try again.'); });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.error ?? 'Could not reach Nanti. Try again.');

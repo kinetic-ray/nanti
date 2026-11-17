@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createApp } from './app.js';
 import { prismaWishlists } from './prisma-wishlists.js';
 import { prismaIntelligence } from './prisma-intelligence.js';
+import { assessmentRetentionDays } from './intelligence.js';
 import { previewProduct } from './product-preview.js';
 
 const config = z.object({
@@ -28,9 +29,16 @@ try {
   process.exit(1);
 }
 
+const intelligence = prismaIntelligence(db);
+const prune = () => intelligence.prune(new Date(Date.now() - assessmentRetentionDays * 86_400_000))
+  .catch(() => console.error('Could not clear expired assessment data.'));
+void prune();
+const retentionTimer = setInterval(() => void prune(), 86_400_000);
+retentionTimer.unref();
+
 const server = createApp({
   repository: prismaWishlists(db),
-  intelligence: prismaIntelligence(db),
+  intelligence,
   preview: previewProduct,
   secret: env.SESSION_SECRET,
   secureCookies: env.NODE_ENV === 'production',
@@ -47,6 +55,7 @@ server.on('error', () => {
 server.requestTimeout = 15_000;
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
+    clearInterval(retentionTimer);
     server.close(() => void db.$disconnect());
   });
 }

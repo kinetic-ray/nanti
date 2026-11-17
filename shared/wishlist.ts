@@ -1,4 +1,4 @@
-export const currencies = ['USD', 'THB', 'EUR', 'GBP', 'CAD', 'AUD', 'SGD', 'MYR'] as const;
+export const currencies = ['USD', 'THB', 'EUR', 'GBP', 'CAD', 'AUD', 'SGD', 'MYR', 'IDR'] as const;
 export type Currency = typeof currencies[number];
 
 export type WishlistSummary = { id: string; name: string; currency: Currency };
@@ -17,10 +17,10 @@ export function parsePrice(value: string): number | null {
   return Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
 }
 
-export function formatPrice(minor: number | string, currency: Currency) {
+export function formatPrice(minor: number | string, currency: Currency, locale?: string) {
   const amount = BigInt(minor);
-  const formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency });
-  const fraction = new Intl.NumberFormat(undefined, { minimumIntegerDigits: 2 }).format(amount % 100n);
+  const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fraction = new Intl.NumberFormat(locale, { minimumIntegerDigits: 2 }).format(amount % 100n);
   return formatter.formatToParts(amount / 100n)
     .map((part) => part.type === 'fraction' ? fraction : part.value).join('');
 }

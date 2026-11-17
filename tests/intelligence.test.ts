@@ -12,6 +12,11 @@ const reflective: ImpulseAnswers = {
 };
 
 describe('Impulse Guard', () => {
+  it('scores the need question and preserves the original factor in version 1.0.0', () => {
+    expect(evaluateImpulse({ need: false }, null)).toMatchObject({ version: '1.1.0', contributing: ['need'], points: 2 });
+    expect(evaluateImpulse({ temporary: true }, null)).toMatchObject({ version: '1.0.0', contributing: ['temporary'], points: 2 });
+    expect(getMethodology('impulse', '1.0.0')?.rules[0]).toContain('want in the moment');
+  });
   it('reports low concern and no contributors when all seven answers are reflective', () => {
     expect(evaluateImpulse(reflective, null)).toMatchObject({ concern: 'Low', points: 0, contributing: [], unanswered: [] });
   });
@@ -119,6 +124,12 @@ const asOf = '2026-01-31';
 const budget: TimingInput = { purchaseMinor: '101', liquidMinor: '201', obligationsMinor: '30', reserveMinor: '70' };
 
 describe('Purchase Timing', () => {
+  it('distinguishes an explicit zero, missing capacity, and a same-day gap', () => {
+    const plan = { ...budget, extraMinor: '1', targetDate: '2026-02-28' };
+    expect(evaluateTiming({ ...plan, monthlyMinor: '0' }, asOf).target).toBe('short');
+    expect(evaluateTiming(plan, asOf).target).toBe('unknown');
+    expect(evaluateTiming({ ...plan, targetDate: asOf }, asOf).target).toBe('short');
+  });
   it('gives Buy Now when complete and exactly affordable, including an explicit zero', () => {
     expect(evaluateTiming(budget, asOf)).toMatchObject({ status: 'Buy Now', totalMinor: '101', availableMinor: '101', gapMinor: '0', months: '0' });
     expect(evaluateTiming({ purchaseMinor: '0', liquidMinor: '0', reserveMinor: '0', obligationsMinor: '0' }, asOf).status).toBe('Buy Now');

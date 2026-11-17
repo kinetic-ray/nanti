@@ -1,7 +1,10 @@
 export const comparisonVersion = '1.0.0';
 export const comparisonLimits = { alternatives: 6, criteria: 6, note: 60, name: 40, weight: 100, rating: 10 };
 
-export type Criterion = { id: string; name: string; kind: 'price' | 'benefit' | 'cost'; weight: number };
+export const criterionPresets = ['Unit price', 'Durability', 'Features', 'Performance', 'Maintenance cost', 'Warranty',
+  'Personal preference', 'Long-term usefulness'] as const;
+export type Criterion = { id: string; name: string; kind: 'price' | 'benefit' | 'cost'; weight: number;
+  preset?: typeof criterionPresets[number] };
 export type Rating = { value: number | null; note: string };
 export type ComparisonInput = {
   criteria: Criterion[];

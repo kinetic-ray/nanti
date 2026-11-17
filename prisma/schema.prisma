@@ -40,6 +40,7 @@ model Item {
 enum AssessmentKind {
   impulse
   comparison
+  timing
 }
 
 model Assessment {
@@ -51,14 +52,23 @@ model Assessment {
   version     String         @db.VarChar(24)
   input       Json
   result      Json
+  snapshot    Json?
+  financial   Json?
+  requestKey  String?        @db.Char(36)
+  requestHash String?        @db.Char(64)
   createdAt   DateTime       @default(now())
   wishlist    Wishlist       @relation(fields: [ownerId, wishlistId], references: [ownerId, id], onDelete: Cascade)
   item        Item?          @relation(fields: [ownerId, wishlistId, itemId], references: [ownerId, wishlistId, id], onDelete: Cascade)
 
   @@index([ownerId, wishlistId, itemId, kind, createdAt, id])
+  @@unique([ownerId, requestKey])
+  @@index([createdAt])
 }
 
 model IntelligencePreference {
   ownerId        String @id @db.Char(36)
   coolingOffDays Int
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([updatedAt])
 }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { impulseRules } from '../shared/impulse.js';
 import { intelligenceModules } from '../shared/methodology.js';
 import { isCalendarDate, minorPattern } from '../shared/purchase-timing.js';
-import { comparisonLimits } from '../shared/value-ranker.js';
+import { comparisonLimits, criterionPresets } from '../shared/value-ranker.js';
 
 export const id = z.uuid();
 export const methodologyModule = z.enum(intelligenceModules);
@@ -16,13 +16,15 @@ export const historyQuery = z.strictObject({
 
 export const impulseBody = z.strictObject({
   temporary: z.boolean().optional(),
+  need: z.boolean().optional(),
   alternative: z.boolean().optional(),
   promotion: z.boolean().optional(),
   pressure: z.boolean().optional(),
   research: z.boolean().optional(),
   waiting: z.boolean().optional(),
   planned: z.boolean().optional(),
-});
+}).refine((value) => value.temporary === undefined || value.need === undefined,
+  'Answer the current need question or use the original question.');
 
 export const preferenceBody = z.strictObject({
   coolingOffDays: z.number().int().min(1).max(impulseRules.maximumCoolingOffDays).nullable(),
@@ -33,6 +35,7 @@ const criterion = z.strictObject({
   name: z.string().trim().min(1, 'Give each criterion a name.').max(comparisonLimits.name),
   kind: z.enum(['price', 'benefit', 'cost']),
   weight: z.number().int().min(0).max(comparisonLimits.weight),
+  preset: z.enum(criterionPresets).optional(),
 });
 const rating = z.strictObject({
   value: z.number().min(0).max(comparisonLimits.rating).nullable(),
@@ -44,6 +47,10 @@ export const comparisonBody = z.strictObject({
     itemId: id,
     ratings: z.record(id, rating),
   })).min(2, 'Choose at least two products.').max(comparisonLimits.alternatives),
+  expectedProducts: z.array(z.strictObject({
+    id, priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
+    quantity: z.number().int().min(1).max(999),
+  })).max(comparisonLimits.alternatives).optional(),
 }).superRefine(({ criteria, alternatives }, ctx) => {
   const criteriaIds = new Set(criteria.map((entry) => entry.id));
   const ratingIds = new Set(criteria.filter(({ kind }) => kind !== 'price').map((entry) => entry.id));
@@ -67,4 +74,10 @@ export const timingBody = z.strictObject({
   extraMinor: minorAmount.optional(),
   monthlyMinor: minorAmount.optional(),
   targetDate: z.string().refine(isCalendarDate, 'Enter a valid target date.').optional(),
+  reviewId: id.optional(),
+  confirmedCurrent: z.boolean().optional(),
+  previewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  plan: z.array(z.strictObject({
+    id, included: z.boolean(), optional: z.boolean(), group: z.number().int().min(1).max(100).optional(),
+  })).max(100).optional(),
 });

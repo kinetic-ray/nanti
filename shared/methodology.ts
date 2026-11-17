@@ -1,10 +1,9 @@
-import { impulseFactors, impulseRules, impulseVersion } from './impulse.js';
-import { comparisonLimits, comparisonVersion } from './value-ranker.js';
+import { factorsForImpulseVersion, impulseFactors, impulseRules, impulseVersion } from './impulse.js';
 import { timingVersion } from './purchase-timing.js';
 
 export const intelligenceModules = ['impulse', 'comparison', 'timing'] as const;
 export type IntelligenceModule = typeof intelligenceModules[number];
-type Methodology = {
+export type Methodology = {
   title: string;
   version: string;
   updated: string;
@@ -18,13 +17,13 @@ type Methodology = {
 
 const original = {
   impulse: {
-    title: 'Impulse Guard', version: impulseVersion, updated: '2026-11-18',
+    title: 'Impulse Guard', version: '1.0.0', updated: '2026-11-18',
     purpose: 'Helps you reflect on what is driving a purchase decision.',
     concepts: 'Impulse-buying research examines immediate desire, situational cues, social norms, and self-regulation. Planning research explores how deciding in advance when and how to act can help people follow through.',
     inputs: 'Your answers about temporary interest, existing alternatives, offers, social pressure, research, waiting, and planning. You can also choose your own cooling-off period.',
     rules: [
-      ...impulseFactors.map((factor) => `${factor.question} ${'concernOnNo' in factor ? 'No' : 'Yes'} adds ${factor.weight} ${factor.weight === 1 ? 'point' : 'points'}.`),
-      `Low is below ${impulseRules.moderateAt}, Moderate starts at ${impulseRules.moderateAt}, and High starts at ${impulseRules.highAt} points. At least ${impulseRules.minimumAnswered} answers are required. If unanswered questions could change the band, the result is Insufficient information.`,
+      ...factorsForImpulseVersion('1.0.0').map((factor) => `${factor.question} ${'concernOnNo' in factor ? 'No' : 'Yes'} adds ${factor.weight} ${factor.weight === 1 ? 'point' : 'points'}.`),
+      'Low is below 4, Moderate starts at 4, and High starts at 8 points. At least 5 answers are required. If unanswered questions could change the band, the result is Insufficient information.',
     ],
     limitations: 'The points, thresholds, and recommendation rules are Nanti design choices without independent validation. The result is a reflection aid. Your cooling-off preference affects only the suggested action and has no scientific default.',
     references: [
@@ -35,7 +34,7 @@ const original = {
     ],
   },
   comparison: {
-    title: 'Value Ranker', version: comparisonVersion, updated: '2026-11-18',
+    title: 'Value Ranker', version: '1.0.0', updated: '2026-11-18',
     purpose: 'Compares saved products against the priorities you choose.',
     concepts: 'Multi-criteria decision analysis and multi-attribute value models combine separate measures of value. Sensitivity analysis checks how conclusions move as assumptions change.',
     inputs: 'The products, your choice of benefit or cost criteria, your importance weights, saved unit prices, and ratings you supply on a shared 0–10 scale. Evidence notes record your reasoning without changing the scores.',
@@ -43,7 +42,7 @@ const original = {
       'For each criterion, the best observed value is 1 and the worst is 0. Values in between are scaled linearly. More is better for benefits and less is better for costs. Identical values receive the same score of 1.',
       'Each contribution is the normalized value multiplied by its share of the total weight. The sum gives the overall score. A zero-weight criterion has no effect.',
       'Ranking requires at least two products, a positive weight, and a value for every product on every positively weighted criterion. Scores equal to nine decimal places share a rank.',
-      `Sensitivity checks each criterion at weights 0 and ${comparisonLimits.weight}, keeping all other weights set to your choices. It reports valid scenarios that change the order or create or break a tie.`,
+      'Sensitivity checks each criterion at weights 0 and 100, keeping all other weights set to your choices. It reports valid scenarios that change the order or create or break a tie.',
     ],
     limitations: 'The scaling, default criteria, and ranking rules are Nanti design choices without independent validation. Changing the products can change the best and worst values. An advantage on one criterion can offset a disadvantage on another. Affiliate commissions and sponsorships are excluded.',
     references: [
@@ -52,7 +51,7 @@ const original = {
     ],
   },
   timing: {
-    title: 'Purchase Timing', version: timingVersion, updated: '2026-11-18',
+    title: 'Purchase Timing', version: '1.0.0', updated: '2026-11-18',
     purpose: 'Checks whether a purchase fits after you set aside money for bills and your reserve.',
     concepts: 'The CFPB’s financial well-being framework includes meeting day-to-day obligations and having the capacity to absorb a financial shock.',
     inputs: 'The full purchase price, liquid funds, upcoming essential obligations, protected reserve, and any extra costs. You can also enter monthly savings and a target date.',
@@ -72,9 +71,25 @@ const original = {
 
 // Keep released entries here when documenting a new engine version.
 const versions: Record<IntelligenceModule, readonly Methodology[]> = {
-  impulse: [original.impulse],
+  impulse: [{
+    ...original.impulse, version: impulseVersion,
+    inputs: 'Your answers about a specific need, existing alternatives, offers, social pressure, research, waiting, and planning. You can also pick a waiting period.',
+    rules: [
+      ...impulseFactors.map((factor) => `${factor.question} ${'concernOnNo' in factor ? 'No' : 'Yes'} adds ${factor.weight} ${factor.weight === 1 ? 'point' : 'points'}.`),
+      `Low is below ${impulseRules.moderateAt}, Moderate starts at ${impulseRules.moderateAt}, and High starts at ${impulseRules.highAt} points. At least ${impulseRules.minimumAnswered} answers are required. If unanswered questions could change the band, the result is Insufficient information.`,
+    ],
+  }, original.impulse],
   comparison: [original.comparison],
-  timing: [original.timing],
+  timing: [{
+    ...original.timing, version: timingVersion,
+    inputs: original.timing.inputs + ' A wishlist check also uses your included products, quantities, and alternative groups.',
+    rules: [
+      'The purchase total includes selected items only, using each saved unit price times its quantity. Each alternative group contributes at most one product. If prices are missing, the total needs your full estimate.',
+      ...original.timing.rules,
+      'A known funding gap and zero savings, or no deposit before the target, means the target falls short.',
+    ],
+    limitations: 'This is educational planning support. Nanti chose these rules without independent validation. The estimate assumes steady savings and costs and uses the current UTC date. Saved checks retain a purchase snapshot and result summary. Keyed fingerprints detect changes to funds, bills, reserve and savings without keeping those amounts.',
+  }, original.timing],
 };
 
 export function getMethodology(module: IntelligenceModule, version?: string): Methodology | null {

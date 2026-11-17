@@ -88,7 +88,7 @@ export function createApp({ repository, intelligence, preview, secret, secureCoo
     res.locals.ownerId = session.data;
     next();
   });
-  if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence));
+  if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence, secret));
 
   api.get('/wishlists', async (_req, res) => {
     res.json(await repository.list(res.locals.ownerId));

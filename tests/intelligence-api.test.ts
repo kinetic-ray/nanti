@@ -29,6 +29,7 @@ describe('Purchase intelligence HTTP validation', () => {
   };
   const repository: IntelligenceRepository = {
     history: vi.fn(), save: vi.fn(), remove: vi.fn(), preferences: vi.fn(), setPreferences: vi.fn(),
+    find: vi.fn(), findRequest: vi.fn(), clear: vi.fn(), prune: vi.fn(),
   };
   const app = application(wishlists, repository);
 
@@ -139,7 +140,10 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
     const anotherConnection = connectDatabase(databaseUrl!);
     try {
       const rebooted = application(prismaWishlists(anotherConnection), prismaIntelligence(anotherConnection), secret);
-      await request(rebooted).get(itemPath).set('Cookie', cookie).expect(200, { records: [secondCheck.body, first.body], next: null });
+      await request(rebooted).get(itemPath).set('Cookie', cookie).expect(200, { records: [
+        { ...secondCheck.body, review: [{ kind: 'methodology' }] },
+        { ...first.body, review: [{ kind: 'methodology' }, { kind: 'preference' }] },
+      ], next: null });
     } finally {
       await anotherConnection.$disconnect();
     }
@@ -151,7 +155,7 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
     await agent.post(`${otherList.path}/items/${item.id}/impulse`).set(mutation).send({}).expect(404);
     await agent.delete(`${itemPath}/${first.body.id}`).set(mutation).send({}).expect(204);
     await agent.delete(`${itemPath}/${first.body.id}`).set(mutation).send({}).expect(404);
-    await agent.get(itemPath).expect(200, { records: [secondCheck.body], next: null });
+    await agent.get(itemPath).expect(200, { records: [{ ...secondCheck.body, review: [{ kind: 'methodology' }] }], next: null });
     await agent.delete(`${phaseOne}/items/${item.id}`).set(mutation).send({}).expect(204);
     expect(await db.assessment.findUnique({ where: { id: secondCheck.body.id } })).toBeNull();
   });
@@ -180,7 +184,7 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
     await other.agent.delete(`${endpoint}/${saved.body.id}`).set(mutation).send({}).expect(404);
     await agent.delete(`${endpoint}/${revised.body.id}`).set(mutation).send({}).expect(204);
     await agent.delete(`${phaseOne}/items/${item.id}`).set(mutation).send({}).expect(204);
-    await agent.get(endpoint).expect(200, { records: [saved.body], next: null });
+    await agent.get(endpoint).expect(200, { records: [{ ...saved.body, review: [{ kind: 'selection' }] }], next: null });
     await agent.get(phaseOne).expect(200).expect(({ body }) => {
       expect(body).not.toHaveProperty('assessments');
       expect(body.items[0]).not.toHaveProperty('assessment');
@@ -229,5 +233,110 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
       for (const key of [...Object.keys(input), 'assessments', 'result']) expect(body).not.toHaveProperty(key);
     });
     expect(await db.assessment.count({ where: { ownerId } })).toBe(0);
+  });
+
+  it('validates alternatives, excludes optional products and keeps timing snapshots private and immutable', async () => {
+    const { agent, ownerId } = await session();
+    const other = await session();
+    const { path, phaseOne, item, second } = await fixture(agent);
+    const history = `${path}/timing/history`;
+    const plan = [
+      { id: item.id, optional: false, included: true, group: 1 },
+      { id: second.id, optional: true, included: false, group: 1 },
+    ];
+    const funds = { liquidMinor: '7000', obligationsMinor: '500', reserveMinor: '500', monthlyMinor: '100' };
+    await agent.post(`${path}/timing`).set(mutation)
+      .send({ ...funds, plan: plan.map((line) => ({ ...line, included: true })) }).expect(400);
+    await agent.post(`${path}/timing`).set(mutation).send({ ...funds, plan: [plan[0], plan[0]] }).expect(400);
+    const key = randomUUID();
+    const send = () => agent.post(history).set(mutation).set('Idempotency-Key', key).send({ ...funds, plan });
+    const [saved, repeated] = await Promise.all([send().expect(201), send().expect(201)]);
+    expect(saved.body).toEqual(repeated.body);
+    expect(saved.body.result).toMatchObject({
+      status: 'Buy Now', totalMinor: '5000', quote: { source: 'saved', subtotalMinor: '5000', missingPrices: 0 },
+    });
+    expect(saved.body.snapshot.products).toMatchObject([{ id: item.id, quantity: 2 }]);
+    const stored = await db.assessment.findUniqueOrThrow({ where: { id: saved.body.id } });
+    expect(stored.financial).toMatchObject({ liquidMinor: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    for (const field of Object.keys(funds)) expect(JSON.stringify(saved.body)).not.toContain(field);
+    expect(JSON.stringify(stored)).not.toContain('"7000"');
+    await other.agent.get(history).expect(404);
+    await other.agent.delete(`${history}/${saved.body.id}`).set(mutation).send({}).expect(404);
+    await agent.put(`${phaseOne}/items/${item.id}`).set(mutation).send({ ...product, priceMinor: 3000, quantity: 3 }).expect(204);
+    await agent.get(history).expect(200).expect(({ body }) => {
+      expect(body.records[0].review).toEqual(expect.arrayContaining([{ kind: 'price', id: item.id, before: 2500, after: 3000, name: 'Lamp' },
+        { kind: 'quantity', id: item.id, before: 2, after: 3, name: 'Lamp' }]));
+    });
+    await agent.post(`${path}/timing`).set(mutation).send({ ...funds, reviewId: saved.body.id }).expect(400);
+    const current = { ...funds, liquidMinor: '12000', reviewId: saved.body.id, confirmedCurrent: true,
+      plan: plan.map((line) => ({ ...line, included: !line.included })) };
+    const review = await agent.post(`${path}/timing`).set(mutation).send(current).expect(200);
+    expect(review.body.review).toEqual(expect.arrayContaining([{ kind: 'selection' }, { kind: 'financial', field: 'liquidMinor' }]));
+    const recalculated = await agent.post(history).set(mutation).send({ ...current, previewToken: review.body.previewToken }).expect(201);
+    expect(recalculated.body.result.totalMinor).toBe('3500');
+    expect(await db.assessment.count({ where: { ownerId } })).toBe(2);
+    expect((await db.assessment.findUniqueOrThrow({ where: { id: saved.body.id } })).result).toEqual(saved.body.result);
+    await agent.put(`${phaseOne}/items/${second.id}`).set(mutation)
+      .send({ ...product, name: 'Chair', priceMinor: 4000, quantity: 1 }).expect(204);
+    await agent.post(history).set(mutation).send({ ...current, previewToken: review.body.previewToken }).expect(409);
+    await agent.post(history).set(mutation).set('Idempotency-Key', key).send(current).expect(409);
+    await other.agent.delete(`${intelligence}/data`).set(mutation).send({}).expect(204);
+    expect(await db.assessment.count({ where: { ownerId } })).toBe(2);
+    await agent.delete(`${intelligence}/data`).set(mutation).send({}).expect(204);
+    await agent.get(history).expect(200, { records: [], next: null });
+    await agent.get(phaseOne).expect(200);
+  });
+
+  it('quotes a selected known subtotal and uses estimates only for incomplete selections', async () => {
+    const { agent } = await session();
+    const { path, phaseOne, item, second } = await fixture(agent);
+    await agent.put(`${phaseOne}/items/${second.id}`).set(mutation)
+      .send({ ...product, name: 'Unpriced', priceMinor: null, quantity: 1 }).expect(204);
+    const funds = { liquidMinor: '10000', obligationsMinor: '0', reserveMinor: '0' };
+    const plan = [{ id: second.id, included: false, optional: true }];
+    await agent.post(`${path}/timing`).set(mutation).send({ ...funds, plan }).expect(200)
+      .expect(({ body }) => expect(body.quote).toEqual({ source: 'saved', subtotalMinor: '5000', missingPrices: 0 }));
+    await agent.post(`${path}/timing`).set(mutation).send({ ...funds, plan: [{ ...plan[0], included: true }] }).expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ status: 'Insufficient Data', totalMinor: null,
+        quote: { source: 'incomplete', subtotalMinor: '5000', missingPrices: 1 } }));
+    await agent.post(`${path}/timing`).set(mutation).send({ ...funds, purchaseMinor: '7500',
+      plan: [{ id: item.id, included: true, optional: false }] }).expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ totalMinor: '7500',
+        quote: { source: 'estimate', subtotalMinor: '5000', missingPrices: 1 } }));
+  });
+
+  it('marks comparisons stale after product changes and protects the user’s preview on save', async () => {
+    const { agent } = await session();
+    const { item, second, path, phaseOne } = await fixture(agent);
+    const endpoint = `${path}/comparisons`;
+    const input = {
+      criteria: [{ id: randomUUID(), name: 'Unit price', kind: 'price', weight: 1 }],
+      alternatives: [item, second].map(({ id }) => ({ itemId: id, ratings: {} })),
+      expectedProducts: [item, second].map(({ id, priceMinor, quantity }) => ({ id, priceMinor, quantity })),
+    };
+    const saved = await agent.post(endpoint).set(mutation).send(input).expect(201);
+    await agent.put(`${phaseOne}/items/${item.id}`).set(mutation).send({ ...product, priceMinor: 4000, quantity: 4 }).expect(204);
+    await agent.post(endpoint).set(mutation).send(input).expect(409);
+    await agent.get(endpoint).expect(200).expect(({ body }) => {
+      expect(body.records).toHaveLength(1);
+      expect(body.records[0]).toMatchObject({
+        id: saved.body.id, input: saved.body.input, result: saved.body.result,
+        review: [{ kind: 'price', before: 2500, after: 4000 }, { kind: 'quantity', before: 2, after: 4 }],
+      });
+    });
+  });
+
+  it('prunes expired intelligence records and preferences while keeping current records', async () => {
+    const { agent, ownerId } = await session();
+    const { path, item } = await fixture(agent);
+    const endpoint = `${path}/items/${item.id}/impulse`;
+    const old = await agent.post(endpoint).set(mutation).send({ need: true }).expect(201);
+    await agent.post(endpoint).set(mutation).send({ need: false }).expect(201);
+    const expired = new Date('2020-01-01T00:00:00Z');
+    await db.assessment.update({ where: { id: old.body.id }, data: { createdAt: expired } });
+    await db.intelligencePreference.create({ data: { ownerId, coolingOffDays: 3, updatedAt: expired } });
+    await assessments.prune(new Date('2021-01-01T00:00:00Z'));
+    expect(await db.assessment.count({ where: { ownerId } })).toBe(1);
+    expect(await db.intelligencePreference.findUnique({ where: { ownerId } })).toBeNull();
   });
 });

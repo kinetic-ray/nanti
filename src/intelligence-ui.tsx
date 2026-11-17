@@ -1,23 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AssessmentPage, SavedAssessment } from '../shared/intelligence.js';
-import type { getMethodology, IntelligenceModule } from '../shared/methodology.js';
+import type { AssessmentPage, ReviewChange, SavedAssessment } from '../shared/intelligence.js';
+import type { IntelligenceModule, Methodology } from '../shared/methodology.js';
+import type { TimingInput } from '../shared/purchase-timing.js';
+import type { Currency } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
+import { useLocale } from './locale.js';
+import { localizedMethodology } from './methodology-id.js';
+import type { Message } from './messages.js';
 
-type Methodology = NonNullable<ReturnType<typeof getMethodology>>;
+export const financialLabels = {
+  purchaseMinor: 'Full purchase cost', liquidMinor: 'Liquid funds',
+  obligationsMinor: 'Essential upcoming obligations', reserveMinor: 'Protected reserve',
+  extraMinor: 'Additional costs', monthlyMinor: 'Monthly savings', targetDate: 'Target date',
+} as const satisfies Record<keyof TimingInput, Message>;
 
 export function ToolDialog({ title, context, module, version, close, busy = false, wide = false, children }: {
   title: string; context: string; module: IntelligenceModule; version?: string; close: () => void;
   busy?: boolean; wide?: boolean; children: ReactNode;
 }) {
+  const { t } = useLocale();
   const [research, setResearch] = useState(false);
   return <Dialog title={title} busy={busy} close={close} focusHeading className={wide ? 'decision decision-wide' : 'decision'}>
     <div className="decision-bar">
       <p className="hint">{context}</p>
       <div className="actions">
-        <button type="button" onClick={() => setResearch(true)}><span aria-hidden="true">ⓘ</span> Research &amp; Methodology</button>
-        <button type="button" disabled={busy} onClick={close}>Close</button>
+        <button type="button" onClick={() => setResearch(true)}><span aria-hidden="true">ⓘ</span> {t('Research & Methodology')}</button>
+        <button type="button" disabled={busy} onClick={close}>{t('Close')}</button>
       </div>
     </div>
     {children}
@@ -28,6 +38,7 @@ export function ToolDialog({ title, context, module, version, close, busy = fals
 function MethodologyDialog({ module, version, close }: {
   module: IntelligenceModule; version?: string; close: () => void;
 }) {
+  const { language, t, date, error: localError } = useLocale();
   const [method, setMethod] = useState<Methodology | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -39,20 +50,21 @@ function MethodologyDialog({ module, version, close }: {
     });
     return () => controller.abort();
   }, [module, version, attempt]);
-  return <Dialog title="Research & Methodology" busy={false} close={close} focusHeading className="decision">
-    <div className="form-actions"><button type="button" onClick={close}>Close methodology</button></div>
-    {error ? <div><p role="alert" className="error">{error}</p>
-      <button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>Try again</button></div>
-      : !method ? <p role="status">Loading methodology…</p> : <div className="methodology">
-        <h3>{method.title}</h3><p className="hint">Version {method.version} · Updated <time dateTime={method.updated}>{method.updated}</time></p>
-        <p>{method.purpose}</p>
-        <h4>Research concepts</h4><p>{method.concepts}</p>
-        <h4>Inputs</h4><p>{method.inputs}</p>
-        <h4>How Nanti calculates the result</h4><ul>{method.rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
-        <h4>Assumptions and limitations</h4><p>{method.limitations}</p>
-        <h4>References</h4><ul>{method.references.map(({ href, label }) =>
-          <li key={href}><a href={href} target="_blank" rel="noopener noreferrer">{label}
-            <span className="sr-only"> (opens in a new tab)</span></a></li>)}</ul>
+  const copy = method ? localizedMethodology(module, method, language) : null;
+  return <Dialog title={t('Research & Methodology')} busy={false} close={close} focusHeading className="decision">
+    <div className="form-actions"><button type="button" onClick={close}>{t('Close methodology')}</button></div>
+    {error ? <div><p role="alert" className="error">{localError(error)}</p>
+      <button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>{t('Try again')}</button></div>
+      : !copy ? <p role="status">{t('Loading methodology…')}</p> : <div className="methodology">
+        <h3>{copy.title}</h3><p className="hint">{t('Version {version} · Updated {date}', { version: copy.version, date: date(copy.updated) })}</p>
+        <p>{copy.purpose}</p>
+        <h4>{t('Research concepts')}</h4><p>{copy.concepts}</p>
+        <h4>{t('Inputs')}</h4><p>{copy.inputs}</p>
+        <h4>{t('How Nanti calculates the result')}</h4><ul>{copy.rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+        <h4>{t('Assumptions and limitations')}</h4><p>{copy.limitations}</p>
+        <h4>{t('References')}</h4><ul>{copy.references.map(({ href, label }) =>
+          <li key={href}><a href={href} target="_blank" rel="noopener noreferrer"><span lang="en">{label}</span>
+            <span className="sr-only"> ({t('opens in a new tab')})</span></a></li>)}</ul>
       </div>}
   </Dialog>;
 }
@@ -61,6 +73,7 @@ export function useAssessmentHistory(path: string) {
   const [page, setPage] = useState<AssessmentPage | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const pending = useRef<{ signature: string; key: string } | null>(null);
 
   const load = useCallback(async (before?: string) => {
     setBusy(true);
@@ -77,8 +90,11 @@ export function useAssessmentHistory(path: string) {
   }, [path]);
 
   async function save(data: unknown) {
-    const saved = await api<SavedAssessment>(path, { method: 'POST', data });
-    setPage((current) => current && { ...current, records: [saved, ...current.records] });
+    const signature = JSON.stringify(data);
+    if (pending.current?.signature !== signature) pending.current = { signature, key: crypto.randomUUID() };
+    const saved = await api<SavedAssessment>(path, { method: 'POST', data, requestKey: pending.current.key });
+    pending.current = null;
+    setPage((current) => current && { ...current, records: [saved, ...current.records.filter(({ id }) => id !== saved.id)] });
     return saved;
   }
 
@@ -97,56 +113,106 @@ export function useAssessmentHistory(path: string) {
     }
   }
 
-  return { page, busy, error, load, save, remove };
+  function markReview(id: string, review: ReviewChange[]) {
+    setPage((current) => current && { ...current,
+      records: current.records.map((record) => record.id === id ? { ...record, review } : record),
+    });
+  }
+
+  return { page, busy, error, load, save, remove, markReview };
 }
 
-export function History({ history, name, onSelect, onDelete, disabled }: {
-  history: ReturnType<typeof useAssessmentHistory>; name: string;
-  onSelect: (record: SavedAssessment) => void; onDelete: (id: string) => void; disabled?: boolean;
+export function ReviewDetails({ changes, currency, label = 'Needs review' }: {
+  changes?: ReviewChange[]; currency: Currency; label?: 'Needs review' | 'Changes since the previous check';
 }) {
-  const [open, setOpen] = useState(false);
+  const { t, number, money, date } = useLocale();
+  if (!changes?.length) return null;
+  return <div className="review-details">
+    <p className="review-badge">{t(label)}</p>
+    <ul>{changes.map((change, index) => {
+      switch (change.kind) {
+        case 'legacy': return <li key={index}>{t('This older result has no product snapshot. Check it again using today’s data.')}</li>;
+        case 'methodology': return <li key={index}>{t('The calculation method has changed.')}</li>;
+        case 'selection': return <li key={index}>{t('The selected products or alternative groups have changed.')}</li>;
+        case 'preference': return <li key={index}>{t('The waiting preference has changed.')}</li>;
+        case 'financial': return <li key={index}>{t('{field} differs from the previous check.', { field: t(financialLabels[change.field]) })}</li>;
+        case 'planning': {
+          const format = (value: string | null) => value === null ? t('Unknown') :
+            change.field === 'targetDate' ? date(value) : money(value, currency);
+          return <li key={index}>{t('{field} changed from {before} to {after}.', {
+            field: t(change.field === 'purchaseMinor' ? 'User-supplied estimate' : financialLabels[change.field]),
+            before: format(change.before), after: format(change.after),
+          })}</li>;
+        }
+        case 'price':
+        case 'quantity': {
+          const format = (value: number | null) => value === null ? t('Unknown') :
+            change.kind === 'price' ? money(value, currency) : number(value);
+          return <li key={index}>{t('{name} · {field} changed from {before} to {after}.', {
+            name: change.name, field: t(change.kind === 'price' ? 'Price' : 'Quantity'),
+            before: format(change.before), after: format(change.after),
+          })}</li>;
+        }
+      }
+    })}</ul>
+  </div>;
+}
+
+export function History({ history, name, onSelect, onDelete, disabled, initialOpen = false }: {
+  history: ReturnType<typeof useAssessmentHistory>; name: Message;
+  onSelect: (record: SavedAssessment) => void; onDelete: (id: string) => void; disabled?: boolean; initialOpen?: boolean;
+}) {
+  const { t, date, number, error: localError } = useLocale();
+  const [open, setOpen] = useState(initialOpen);
   const [deletion, setDeletion] = useState<string | null>(null);
   const summary = useRef<HTMLElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const previousButton = useRef<HTMLButtonElement>(null);
   const { page, busy, load, remove, error } = history;
+  useLayoutEffect(() => { if (deletion) cancel.current?.focus(); }, [deletion]);
   useEffect(() => {
     if (open && !page && !busy && !error && !disabled) void load();
   }, [open, page, busy, error, disabled, load]);
   return <section className="decision-history">
-    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary ref={summary}>Saved {name}</summary>
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary ref={summary}>{t(name)}</summary>
       {open && <>
-        {error && <p className="error" role="alert">{error}</p>}
-        {busy && <p role="status">Working…</p>}
-        {!busy && !page && error && <button type="button" onClick={() => void load()}>Try again</button>}
-        {page?.records.length === 0 && <p className="hint">You have no saved {name} here yet.</p>}
+        {error && <p className="error" role="alert">{localError(error)}</p>}
+        {busy && <p role="status">{t('Working…')}</p>}
+        {!busy && !page && error && <button type="button" onClick={() => void load()}>{t('Try again')}</button>}
+        {page?.records.length === 0 && <p className="hint">{t('No saved results here yet.')}</p>}
         {page && page.records.length > 0 && <ul className="history-list">
           {page.records.map((record) => <li key={record.id}>
             <div>
-              <strong>{record.kind === 'impulse' ? record.result.concern : `${record.input.alternatives.length} products`}</strong>
-              <div className="hint"><time dateTime={record.createdAt}>{new Date(record.createdAt).toLocaleString()}</time></div>
+              <strong>{record.kind === 'impulse' ? t(record.result.concern) :
+                record.kind === 'timing' ? t(record.result.status) : t('{n} products', { n: number(record.input.alternatives.length) })}</strong>
+              <div className="hint"><time dateTime={record.createdAt}>{date(record.createdAt)}</time></div>
+              {!!record.review?.length && <span className="review-badge">{t('Needs review')}</span>}
             </div>
             <div className="actions">
               {deletion === record.id ? <>
-                <span>Delete this saved result?</span>
-                <button type="button" disabled={busy || disabled} onClick={() => void remove(record.id).then((removed) => {
+                <span>{t('Delete this saved result?')}</span>
+                <button type="button" className="danger" disabled={busy || disabled} onClick={() => void remove(record.id).then((removed) => {
                   if (removed) {
                     setDeletion(null);
                     onDelete(record.id);
                     summary.current?.focus();
                   }
-                })}>Delete result</button>
-                <button type="button" disabled={busy} onClick={() => {
+                })}>{t('Delete result')}</button>
+                <button ref={cancel} type="button" disabled={busy} onClick={() => {
                   setDeletion(null);
-                  requestAnimationFrame(() => summary.current?.focus());
-                }}>Cancel</button>
+                  requestAnimationFrame(() => previousButton.current?.focus());
+                }}>{t('Cancel')}</button>
               </> : <>
-                <button type="button" disabled={disabled} onClick={() => onSelect(record)}>View result</button>
-                <button type="button" disabled={busy || disabled} onClick={() => setDeletion(record.id)}>Delete</button>
+                <button type="button" disabled={disabled} onClick={() => onSelect(record)}>{t('View result')}</button>
+                <button ref={(element) => { if (element && element.dataset.target === previousButton.current?.dataset.target) previousButton.current = element; }}
+                  data-target={record.id} type="button" disabled={busy || disabled}
+                  onClick={(event) => { previousButton.current = event.currentTarget; setDeletion(record.id); }}>{t('Delete')}</button>
               </>}
             </div>
           </li>)}
         </ul>}
-        {page?.next && <button type="button" disabled={busy || disabled} onClick={() => void load(page.next ?? undefined)}>Load older results</button>}
+        {page?.next && <button type="button" disabled={busy || disabled} onClick={() => void load(page.next ?? undefined)}>{t('Load older results')}</button>}
       </>}
     </details>
   </section>;

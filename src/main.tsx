@@ -1,9 +1,11 @@
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { formatPrice, safeProductUrl } from '../shared/wishlist.js';
+import { safeProductUrl } from '../shared/wishlist.js';
 import type { Currency, Item, ItemInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
-import { DeleteForm, ItemForm, ListForm } from './forms.js';
+import { DeleteForm, ItemForm, ListForm, PrivacyForm } from './forms.js';
+import { LanguagePicker, LocaleProvider, useLocale } from './locale.js';
+import type { Message } from './messages.js';
 import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.js';
 import './styles.css';
 
@@ -12,9 +14,11 @@ const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseToo
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
   | { kind: 'item'; item?: Item; list: WishlistSummary }
+  | { kind: 'privacy' }
   | { kind: 'delete'; list: WishlistSummary; item?: Item };
 
 function App() {
+  const { t, error, money, number } = useLocale();
   const [lists, setLists] = useState<WishlistSummary[] | null>(null);
   const [sessionError, setSessionError] = useState('');
   const [sessionAttempt, setSessionAttempt] = useState(0);
@@ -25,7 +29,7 @@ function App() {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [tools, setTools] = useState<IntelligenceSelection | null>(null);
   const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map(), comparison: new Map() }));
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<Message | ''>('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,7 +59,7 @@ function App() {
     setRevision((current) => current + 1);
   }
 
-  function finish(message: string) {
+  function finish(message: Message) {
     setEditor(null);
     setStatus(message);
   }
@@ -101,16 +105,20 @@ function App() {
   return (
     <div className="site">
       <header className="masthead">
-        <div className="brand">nanti<span>.</span></div>
-        <span className="tagline">Save what you want. Decide when to buy.</span>
+        <div className="brand-group">
+          <span className="brand-symbol" aria-hidden="true" />
+          <div><div className="brand">nanti<span>.</span></div>
+            <span className="tagline">{t('Save it now. Decide later.')}</span></div>
+        </div>
+        <LanguagePicker />
       </header>
       <div className="workspace">
         <aside>
           <div className="rail-heading">
-            <h2>Wishlists</h2>
-            <button disabled={!lists} onClick={() => setEditor({ kind: 'list' })}>New wishlist</button>
+            <h2>{t('Wishlists')}</h2>
+            <button disabled={!lists} onClick={() => setEditor({ kind: 'list' })}>{t('New wishlist')}</button>
           </div>
-          {lists && lists.length > 0 && <nav aria-label="Your wishlists">
+          {lists && lists.length > 0 && <nav aria-label={t('Your wishlists')}>
             {lists.map((entry) => <button key={entry.id} type="button"
               aria-current={entry.id === activeId ? 'true' : undefined} onClick={() => {
                 if (entry.id !== activeId) { setSelectedId(entry.id); setDetailError(''); }
@@ -118,69 +126,77 @@ function App() {
               <span>{entry.name}</span><small>{entry.currency}</small>
             </button>)}
           </nav>}
-          <p className="hint">Your wishlists are private to this browser.</p>
+          <p className="hint">{t('Your wishlists are private to this browser.')}</p>
+          <button className="privacy-entry" disabled={!lists} onClick={() => setEditor({ kind: 'privacy' })}>{t('Privacy and history')}</button>
         </aside>
         <main>
           {sessionError ? <>
-            <h1>Your wishlists</h1><p role="alert" className="error">{sessionError}</p>
-            <button onClick={() => { setSessionError(''); setSessionAttempt((value) => value + 1); }}>Try again</button>
-          </> : !lists ? <p role="status">Opening your wishlists…</p> : !selected ? <>
-            <h1>Your wishlists</h1>
-            <p>Start a wishlist to keep links, quantities, and prices in one place.</p>
-            <button className="primary" onClick={() => setEditor({ kind: 'list' })}>Create a wishlist</button>
-          </> : <>
+            <h1>{t('Your wishlists')}</h1><p role="alert" className="error">{error(sessionError)}</p>
+            <button onClick={() => { setSessionError(''); setSessionAttempt((value) => value + 1); }}>{t('Try again')}</button>
+          </> : !lists ? <p role="status">{t('Opening your wishlists…')}</p> : !selected ? <section className="empty">
+            <h1>{t('Your wishlists')}</h1>
+            <p>{t('Start a wishlist to keep links, quantities, and prices in one place.')}</p>
+            <button className="primary" onClick={() => setEditor({ kind: 'list' })}>{t('Create a wishlist')}</button>
+          </section> : <>
             <div className="list-heading">
               <h1>{selected.name}</h1>
               <div className="actions">
-                <button onClick={() => setEditor({ kind: 'list', list: selected })}>Rename</button>
-                <button onClick={() => setEditor({ kind: 'delete', list: selected })}>Delete wishlist</button>
+                <button onClick={() => setEditor({ kind: 'list', list: selected })}>{t('Rename')}</button>
+                <button onClick={() => setEditor({ kind: 'delete', list: selected })}>{t('Delete wishlist')}</button>
               </div>
             </div>
             <div className="total">
               <div>
-                <div className="total-label">Known total <small>{selected.currency}</small></div>
-                <strong>{list ? formatPrice(list.totalMinor, list.currency) : '—'}</strong>
+                <div className="total-label">{t('Known total')} <small>{selected.currency}</small></div>
+                <strong>{list ? money(list.totalMinor, list.currency) : '—'}</strong>
                 {list && list.unpriced > 0 && <div className="hint">
-                  {list.unpriced} {list.unpriced === 1 ? 'product has' : 'products have'} no price yet
+                  {t(list.unpriced === 1 ? '{n} product without a price' : '{n} products without a price', { n: number(list.unpriced) })}
                 </div>}
               </div>
-              <button className="primary" onClick={() => setEditor({ kind: 'item', list: selected })}>Add product</button>
+              <button className="primary" onClick={() => setEditor({ kind: 'item', list: selected })}>{t('Add product')}</button>
             </div>
-            {list && list.items.length > 0 && <div className="actions decision-entry">
-              {list.items.length >= 2 && <button type="button" onClick={() => setTools({ kind: 'comparison' })}>Compare products</button>}
-              <button type="button" onClick={() => setTools({ kind: 'timing' })}>Check wishlist timing</button>
+            {list && <div className="actions decision-entry">
+              <button type="button" onClick={() => setTools({ kind: 'comparison' })}>
+                {t(list.items.length >= 2 ? 'Compare products' : 'Saved comparisons')}
+              </button>
+              <button type="button" onClick={() => setTools({ kind: 'timing' })}>
+                {t(list.items.length ? 'Check wishlist timing' : 'Saved timing checks')}
+              </button>
             </div>}
-            {detailError ? <div><p className="error" role="alert">{detailError}</p>
-              <button onClick={refresh}>Try again</button></div>
-              : !list ? <p role="status">Loading products…</p>
-                : list.items.length === 0 ? <p className="empty">Add a product with a link or enter its details manually.</p>
-                  : <ul className="products" aria-label="Saved products">
+            {detailError ? <div><p className="error" role="alert">{error(detailError)}</p>
+              <button onClick={refresh}>{t('Try again')}</button></div>
+              : !list ? <p role="status">{t('Loading products…')}</p>
+                : list.items.length === 0 ? <div className="empty"><h2>{t('No products yet')}</h2>
+                  <p>{t('Add a product with a link or enter its details manually.')}</p></div>
+                  : <ul className="products" aria-label={t('Saved products')}>
                     {list.items.map((item) => {
                       const link = item.url ? safeProductUrl(item.url) : null;
                       return <li key={item.id}>
                         <div className="product-info">
-                          <h2>{item.name}</h2>
-                          {link && <a href={link.href} target="_blank" rel="noopener noreferrer">
-                            {link.hostname} <span className="sr-only">(opens in a new tab)</span>
-                          </a>}
+                          <span className="product-mark" aria-hidden="true">{Array.from(item.name)[0]?.toLocaleUpperCase()}</span>
+                          <div><h2>{item.name}</h2>
+                            {link && <a href={link.href} target="_blank" rel="noopener noreferrer">
+                              {link.hostname} <span className="sr-only">({t('opens in a new tab')})</span>
+                            </a>}
+                          </div>
                         </div>
                         <div className="product-price">
-                          <strong>{item.priceMinor === null ? 'No price' : formatPrice(item.priceMinor * item.quantity, list.currency)}</strong>
-                          <span className="hint">Qty {item.quantity}
-                            {item.priceMinor !== null && item.quantity > 1 ? ` · ${formatPrice(item.priceMinor, list.currency)} each` : ''}
+                          <strong>{item.priceMinor === null ? t('No price') : money(item.priceMinor * item.quantity, list.currency)}</strong>
+                          <span className="hint">{t('Qty {n}', { n: number(item.quantity) })}
+                            {item.priceMinor !== null && item.quantity > 1 ? ` · ${t('{price} each', { price: money(item.priceMinor, list.currency) })}` : ''}
                           </span>
                         </div>
                         <div className="actions">
-                          <button type="button" aria-label={`Purchase tools for ${item.name}`}
-                            onClick={() => setTools({ kind: 'product', item })}>Purchase tools</button>
-                          <button aria-label={`Edit ${item.name}`} onClick={() => setEditor({ kind: 'item', list, item })}>Edit</button>
-                          <button aria-label={`Remove ${item.name}`} onClick={() => setEditor({ kind: 'delete', list, item })}>Remove</button>
+                          <button className="product-tools" type="button" aria-label={t('Purchase tools for {name}', { name: item.name })}
+                            onClick={() => setTools({ kind: 'product', item })}>{t('Purchase tools')}</button>
+                          <button aria-label={t('Edit {name}', { name: item.name })} onClick={() => setEditor({ kind: 'item', list, item })}>{t('Edit')}</button>
+                          <button aria-label={t('Remove {name}', { name: item.name })} onClick={() => setEditor({ kind: 'delete', list, item })}>{t('Remove')}</button>
                         </div>
                       </li>;
                     })}
                   </ul>}
           </>}
-          <p role="status" className="sr-only">{status}</p>
+          <p role="status" className="sr-only">{status && t(status)}</p>
         </main>
       </div>
       {editor?.kind === 'list' && <ListForm list={editor.list} close={() => setEditor(null)} save={saveList} />}
@@ -188,7 +204,10 @@ function App() {
         close={() => setEditor(null)} save={saveItem} />}
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}
-      {tools && list && <Suspense fallback={<p role="status" className="sr-only">Opening purchase tools…</p>}>
+      {editor?.kind === 'privacy' && <PrivacyForm close={() => setEditor(null)} cleared={() => {
+        drafts.impulse.clear(); drafts.comparison.clear(); finish('Assessment data cleared.');
+      }} />}
+      {tools && list && <Suspense fallback={<p role="status" className="sr-only">{t('Opening purchase tools…')}</p>}>
         <PurchaseTools list={list} selection={tools} close={() => setTools(null)} drafts={drafts} />
       </Suspense>}
     </div>
@@ -196,4 +215,4 @@ function App() {
 }
 
 const root = document.getElementById('root');
-if (root) createRoot(root).render(<App />);
+if (root) createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);

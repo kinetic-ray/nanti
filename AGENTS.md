@@ -42,3 +42,7 @@ This project is indexed by GitNexus as **nanti** (156 symbols, 318 relationships
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Public interface
+
+Before changing any public-facing interface, coding agents must read and follow [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md). It is Nanti’s source of truth for public design, localization, UX writing, accessibility, and purchase-intelligence presentation.

@@ -1,4 +1,4 @@
-export const timingVersion = '1.0.0';
+export const timingVersion = '1.1.0';
 export const maxMoneyDigits = 18;
 
 export type TimingInput = {
@@ -63,8 +63,10 @@ export function evaluateTiming(input: TimingInput, asOf: string) {
   const months = gap === null ? null : gap === 0n ? 0n : monthly !== null && monthly > 0n
     ? (gap + monthly - 1n) / monthly : null;
   const status = gap === null ? 'Insufficient Data' : gap === 0n ? 'Buy Now' : months === null ? 'Reconsider' : 'Wait';
-  const target = !targetDate ? null : targetDate < asOf ? 'past' : months === null ? 'unknown'
-    : months <= depositsBy(asOf, targetDate) ? 'reachable' : 'short';
+  const deposits = targetDate && targetDate >= asOf ? depositsBy(asOf, targetDate) : null;
+  const target = !targetDate ? null : deposits === null ? 'past' : gap === null ? 'unknown'
+    : gap === 0n ? 'reachable' : deposits === 0n || monthly === 0n ? 'short'
+    : monthly === null ? 'unknown' : monthly * deposits >= gap ? 'reachable' : 'short';
   return {
     version: timingVersion, asOf, status, target,
     missing: Object.entries(requiredAmounts).filter(([key]) => input[key as keyof TimingInput] === undefined)
