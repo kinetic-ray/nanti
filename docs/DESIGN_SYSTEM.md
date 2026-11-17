@@ -40,6 +40,7 @@ Use Plus Jakarta Sans for the public interface with Aptos and system sans-serif 
 - Use native dialogs with named headings. On phones they appear as bottom sheets with safe-area padding. Focus the heading or first field on entry, return focus to the trigger on exit, and explicitly place focus after a step change or when opening inline confirmation.
 - Use primary buttons for the next action, secondary controls for navigation and alternatives, and danger buttons inside explicit confirmation. Keep practical touch targets at least 44 CSS pixels. Preserve semantic table headers and a named, focusable horizontal scroll region for wide comparisons.
 - Use skeletons for loading content, timed live notices for success, and inline live alerts with a recovery action for errors. Pair status colors with explicit text. Disable optional motion when reduced motion is requested.
+- In price history, show the current unit price and source first. Keep target editing and manual updates one action away. Give charts an equivalent readable list with exact values and dates, and explain the empty state until a second price is recorded. Keep user-entered and unverified listing prices labeled wherever they appear, including alerts.
 
 ## Language and UX writing
 

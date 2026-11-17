@@ -5,7 +5,9 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
-import { currencies, safeProductUrl } from '../shared/wishlist.js';
+import { currencies } from '../shared/wishlist.js';
+import { productMerchant, safeImportUrl } from '../shared/product-import.js';
+import type { ProductImport } from '../shared/product-import.js';
 import { readWishlist } from './wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
 import { intelligenceRoutes } from './intelligence-routes.js';
@@ -14,17 +16,20 @@ import { adminRoutes } from './admin-routes.js';
 import type { AdminCredentials } from './admin-credentials.js';
 import type { AffiliateRepository } from './prisma-affiliate.js';
 import { purchaseDestinationRoutes } from './purchase-destinations.js';
-import { createProductMedia } from './product-media.js';
+import type { createProductMedia } from './product-media.js';
 import { accountRoutes } from './account-routes.js';
 import type { Accounts } from './prisma-accounts.js';
 import type { OAuthProviders } from './oauth-providers.js';
+import { databaseProblem, databaseUnavailable } from './database-health.js';
+import { priceRoutes } from './price-routes.js';
+import type { Prices } from './prisma-prices.js';
 
 const uuid = z.uuid();
 const listName = z.string().trim().min(1, 'Enter a wishlist name.').max(100);
 const listInput = z.strictObject({ name: listName, currency: z.enum(currencies) });
 const renameInput = z.strictObject({ name: listName });
 const productUrl = z.string().trim().max(2048).transform((value, context) => {
-  const parsed = safeProductUrl(value);
+  const parsed = safeImportUrl(value);
   if (parsed) return parsed;
   context.addIssue({ code: 'custom', message: 'Enter a valid HTTP or HTTPS product link.' });
   return z.NEVER;
@@ -39,6 +44,7 @@ const itemInput = z.strictObject({
 type Options = {
   repository: WishlistRepository;
   intelligence?: IntelligenceRepository;
+  prices?: Prices;
   affiliate?: AffiliateRepository;
   admin?: AdminCredentials;
   consumer?: { accounts: Accounts; providers: OAuthProviders };
@@ -48,14 +54,15 @@ type Options = {
   secureCookies: boolean;
   trustedProxy?: string;
   webRoot?: string;
+  checkDatabase?: () => Promise<void>;
 };
 
 function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, affiliate, admin, consumer, preview, productMedia = createProductMedia(),
-  secret, secureCookies, trustedProxy, webRoot }: Options) {
+export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, productMedia = async () => null,
+  secret, secureCookies, trustedProxy, webRoot, checkDatabase }: Options) {
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
@@ -74,6 +81,14 @@ export function createApp({ repository, intelligence, affiliate, admin, consumer
     windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many requests. Try again in a minute.' },
   }));
+  api.get('/health', async (_req, res) => {
+    try {
+      await checkDatabase?.();
+      res.json({ service: 'nanti', status: 'ready' });
+    } catch {
+      res.status(503).json({ service: 'nanti', ...databaseProblem });
+    }
+  });
   api.use(cookieParser(secret));
   if (account) api.use('/account', account.callbacks);
   api.use((req, res, next) => {
@@ -118,6 +133,7 @@ export function createApp({ repository, intelligence, affiliate, admin, consumer
     next();
   });
   if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence, secret));
+  if (prices) api.use(priceRoutes(prices));
   api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
   api.get('/wishlists/:listId/items/:itemId/image', rateLimit({
@@ -174,13 +190,25 @@ export function createApp({ repository, intelligence, affiliate, admin, consumer
     res.sendStatus(204);
   });
 
-  api.post('/products/preview', rateLimit({
+  const limitProductLookup = rateLimit({
     windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many lookups. Enter the product details below.' },
-  }), async (req, res) => {
+  });
+  api.post('/products/preview', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const name = await preview(url);
     res.json(name ? { name } : { name: null });
+  });
+  api.post('/products/import', limitProductLookup, async (req, res) => {
+    const { url } = z.strictObject({ url: productUrl }).parse(req.body);
+    const merchant = productMerchant(url.hostname);
+    const canLookUp = url.origin === 'https://www.ikea.com' && /^\/[a-z]{2}\/[a-z]{2}\/p\/[a-z0-9-]+-\d{8}\/?$/iu.test(url.pathname);
+    const name = canLookUp ? await preview(url) : null;
+    const result: ProductImport = {
+      merchant, hostname: url.hostname, originalUrl: url.href, name,
+      status: name ? 'name_available' : 'manual_required',
+    };
+    res.json(result);
   });
 
   api.use((_req, res) => notFound(res));
@@ -199,6 +227,10 @@ export function createApp({ repository, intelligence, affiliate, admin, consumer
 
 const handleError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
   if (res.headersSent) return next(error);
+  if (databaseUnavailable(error)) {
+    res.status(503).json(databaseProblem);
+    return;
+  }
   if (error instanceof z.ZodError) {
     res.status(400).json({ error: error.issues[0]?.message ?? 'Check the details you entered.' });
     return;

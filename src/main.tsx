@@ -10,12 +10,14 @@ import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.j
 import { AccountDialog, announceAuthChange, authChangeKey, authNotices } from './account.js';
 import type { AuthNotice } from './account.js';
 import type { AccountStatus } from '../shared/account.js';
+import type { PriceInbox } from '../shared/prices.js';
 import { BookmarkArt, Icon, Loading, ProductMedia } from './visual.js';
 import './styles.css';
 import './consumer.css';
 
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
+const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
 
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
@@ -39,6 +41,8 @@ function App() {
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
   const [showAccount, setShowAccount] = useState(/^\/account\/?$/u.test(location.pathname));
   const [notice, setNotice] = useState<AuthNotice | null>(null);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
 
   useEffect(() => {
     const changed = (event: StorageEvent) => { if (event.key === authChangeKey) location.reload(); };
@@ -85,6 +89,15 @@ function App() {
 
   const selected = lists?.find((list) => list.id === selectedId) ?? lists?.[0];
   const activeId = selected?.id;
+
+  useEffect(() => {
+    if (!activeId) return;
+    const controller = new AbortController();
+    api<PriceInbox>('/prices/alerts', { signal: controller.signal }).then(
+      inbox => setUnreadAlerts(inbox.unread), () => undefined,
+    );
+    return () => controller.abort();
+  }, [activeId, revision]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -161,6 +174,10 @@ function App() {
         </div>
         <div className="masthead-controls">
           <LanguagePicker />
+          <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
+            title={t('Price alerts')} disabled={!lists} onClick={() => setAlertsOpen(true)}>
+            <Icon name="bell" />{activeId && unreadAlerts > 0 && <span aria-hidden="true">{number(Math.min(99, unreadAlerts))}</span>}
+          </button>
           <button type="button" className="account-entry" disabled={!lists} onClick={() => {
             setShowAccount(true);
             void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
@@ -294,7 +311,11 @@ function App() {
         drafts.impulse.clear(); drafts.comparison.clear(); finish('Assessment data cleared.');
       }} />}
       {tools && list && <Suspense fallback={<p role="status" className="sr-only">{t('Opening purchase tools…')}</p>}>
-        <PurchaseTools list={list} selection={tools} close={() => setTools(null)} drafts={drafts} />
+        <PurchaseTools list={list} selection={tools} close={() => setTools(null)} drafts={drafts}
+          onPriceUpdate={() => setRevision(value => value + 1)} />
+      </Suspense>}
+      {alertsOpen && <Suspense fallback={<p role="status" className="sr-only">{t('Loading price alerts…')}</p>}>
+        <PriceAlerts close={() => setAlertsOpen(false)} onRead={() => setRevision(value => value + 1)} />
       </Suspense>}
       {showAccount && lists && <AccountDialog status={accountStatus} notice={notice}
         close={() => {

@@ -11,6 +11,8 @@ import { adminHashPattern, adminUsernamePattern } from './admin-credentials.js';
 import { prismaAffiliate } from './prisma-affiliate.js';
 import { prismaAccounts } from './prisma-accounts.js';
 import { configureOAuth } from './oauth-providers.js';
+import { prismaPrices } from './prisma-prices.js';
+import { createProductMedia } from './product-media.js';
 
 const config = z.object({
   DATABASE_URL: z.string().startsWith('mysql://'),
@@ -19,6 +21,7 @@ const config = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   NANTI_TRUST_PROXY: z.string().refine(value => !value || isIP(value) !== 0).default(''),
+  NANTI_IKEA_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
   NANTI_ADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
   NANTI_ADMIN_PASSWORD_HASH: z.string().regex(adminHashPattern).or(z.literal('')).default(''),
 }).refine((value) => Boolean(value.NANTI_ADMIN_USERNAME) === Boolean(value.NANTI_ADMIN_PASSWORD_HASH), {
@@ -36,15 +39,27 @@ const providers = await configureOAuth(process.env, env.NODE_ENV === 'production
   process.exit(1);
 });
 const db = connectDatabase(env.DATABASE_URL);
+const checkDatabase = async () => {
+  // Verify the ownership schema and the three tables introduced by the latest migration.
+  await db.$transaction([
+    db.dataOwner.findFirst({ select: { id: true } }),
+    db.priceObservation.findFirst({ select: { id: true } }),
+    db.priceTarget.findFirst({ select: { itemId: true } }),
+    db.priceAlert.findFirst({ select: { id: true } }),
+  ]);
+};
 try {
   await db.$connect();
+  await checkDatabase();
 } catch {
-  console.error('Could not connect to the configured database.');
+  console.error('The Nanti database is not ready. Start MySQL, check DATABASE_URL and run npm run db:migrate against the intended local database.');
+  await db.$disconnect().catch(() => undefined);
   process.exit(1);
 }
 
 const intelligence = prismaIntelligence(db);
 const accounts = prismaAccounts(db);
+const ikeaMetadataAllowed = env.NANTI_IKEA_METADATA_PERMISSION === 'granted';
 const prune = () => Promise.all([
   intelligence.prune(new Date(Date.now() - assessmentRetentionDays * 86_400_000))
     .catch(() => console.error('Could not clear expired assessment data.')),
@@ -57,22 +72,26 @@ retentionTimer.unref();
 const server = createApp({
   repository: prismaWishlists(db),
   intelligence,
+  prices: prismaPrices(db),
   affiliate: prismaAffiliate(db),
   consumer: { accounts, providers },
   admin: env.NANTI_ADMIN_USERNAME && env.NANTI_ADMIN_PASSWORD_HASH ? {
     username: env.NANTI_ADMIN_USERNAME, passwordHash: env.NANTI_ADMIN_PASSWORD_HASH,
   } : undefined,
-  preview: previewProduct,
+  preview: ikeaMetadataAllowed ? previewProduct : async () => null,
+  productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
   secret: env.SESSION_SECRET,
   secureCookies: env.NODE_ENV === 'production' || process.env.AUTH_PUBLIC_ORIGIN?.startsWith('https://') === true,
   trustedProxy: env.NANTI_TRUST_PROXY,
+  checkDatabase,
   webRoot: fileURLToPath(new URL('../web/', import.meta.url)),
 }).listen(env.PORT, env.HOST, () => {
   console.log(`Nanti listening on ${env.HOST}:${env.PORT}`);
 });
 
-server.on('error', () => {
-  console.error('Could not start the HTTP server.');
+server.on('error', (error: NodeJS.ErrnoException) => {
+  console.error(error.code === 'EADDRINUSE' ? `API port ${env.PORT} is already in use. Stop the other API or set PORT.` :
+    'Could not start the HTTP server. Check HOST and PORT.');
   void db.$disconnect().finally(() => process.exit(1));
 });
 

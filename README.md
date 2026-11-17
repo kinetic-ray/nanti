@@ -2,7 +2,7 @@
 
 Simpan dulu. Putuskan nanti.
 
-Nanti is a wishlist and purchase-planning app. Phase 1 supports private wishlists, saved product links, quantities, optional unit prices, and exact totals for known prices. Each wishlist uses one currency. Product-name lookup accepts supported IKEA links. You can enter details manually for any link or save a product without a link.
+Nanti is a wishlist and purchase-planning app. Save products with quantities and optional unit prices, track price changes, and set private in-app target alerts. Each wishlist uses one currency. Paste a Shopee, Tokopedia, IKEA, or other public retailer link and check it before entering the product details. You can also save a product without a link. [MVP setup, merchant limits, and release checks](docs/MVP.md)
 
 ## Purchase tools
 
@@ -39,7 +39,9 @@ Use Node.js 22.12+ and a MySQL-compatible database that supports foreign keys. C
 1. Run `npm ci` to install dependencies and generate the Prisma client.
 2. Copy `.env.example` to `.env`. Set `DATABASE_URL` using the form `mysql://USER:PASSWORD@HOST:3306/DATABASE` and URL-encode special characters in the credentials. Generate a stable session secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and set `SESSION_SECRET`.
 3. Run `npm run db:migrate` to apply the schema.
-4. Run `npm run dev:api` and `npm run dev` in separate terminals. Open the URL Vite prints. Its development proxy expects the API on port 3000.
+4. Run `npm run dev` and open `http://127.0.0.1:5173`. This starts the API, checks database readiness, and then starts Vite. Keep the terminal open. Set `PORT` and `NANTI_DEV_WEB_PORT` to two free ports if the defaults are occupied.
+
+For separate terminals with API watch mode, run `npm run dev:api` and `npm run dev:web`. Both read the local `.env` port. Check `http://127.0.0.1:3000/api/health` or the configured API port if the browser reports a connection problem. A database error calls for checking the MySQL service, `DATABASE_URL`, and `npm run db:migrate` against the intended local database.
 
 Guest wishlist ownership follows a signed, HttpOnly cookie. Use the same browser profile to reopen guest wishlists and assessments. Clearing site data or changing the session secret removes that browser’s access to unimported guest records. Sign in again with a connected provider to reopen account data.
 

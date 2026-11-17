@@ -4,6 +4,7 @@ import { currencies } from '../shared/wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
 import { getOrCreateProductIdentity } from './catalog-ingestion.js';
 import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
+import { lockPriceItem, recordObservation } from './prisma-prices.js';
 
 const summary = { id: true, name: true, currency: true } as const;
 const item = { id: true, name: true, url: true, priceMinor: true, quantity: true } as const;
@@ -47,11 +48,16 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
       try {
         return await db.$transaction(async (tx) => {
           const list = await tx.wishlist.findFirst({
-            where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) }, select: { ownerId: true },
+            where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) }, select: { ownerId: true, currency: true },
           });
           if (!list || !await lockOwner(tx, list.ownerId, ownerId)) return false;
           const productIdentityId = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
-          await tx.item.create({ data: { ownerId: list.ownerId, wishlistId, ...data, productIdentityId }, select: { id: true } });
+          const created = await tx.item.create({
+            data: { ownerId: list.ownerId, wishlistId, ...data, productIdentityId }, select: { id: true },
+          });
+          if (data.priceMinor !== null) {
+            await recordObservation(tx, { ownerId: list.ownerId, wishlistId, itemId: created.id }, data.priceMinor, list.currency, 'manual');
+          }
           return true;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
       } catch (error) {
@@ -61,13 +67,17 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
     },
     async updateItem(ownerId, wishlistId, id, data) {
       return db.$transaction(async (tx) => {
-        const where = { wishlistId, id, wishlist: { dataOwner: authorizedOwner(ownerId) } };
-        const updated = await tx.item.updateMany({ where, data: { ...data, productIdentityId: null } });
-        if (!updated.count) return false;
-        const productIdentityId = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
-        if (productIdentityId) await tx.item.updateMany({ where, data: { productIdentityId } });
+        const current = await lockPriceItem(tx, ownerId, wishlistId, id);
+        if (!current) return false;
+        const identity = data.url !== current.url
+          ? { productIdentityId: data.url ? await getOrCreateProductIdentity(tx, data.url) : null } : {};
+        await tx.item.update({ where: { id }, data: { ...data, ...identity } });
+        if (data.priceMinor !== null && data.priceMinor !== current.priceMinor) {
+          await recordObservation(tx, { ownerId: current.ownerId, wishlistId, itemId: id },
+            data.priceMinor, current.wishlist.currency, 'manual');
+        }
         return true;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
     },
     async removeItem(ownerId, wishlistId, id) {
       return (await db.item.deleteMany({ where: { wishlistId, id, wishlist: { dataOwner: authorizedOwner(ownerId) } } })).count > 0;

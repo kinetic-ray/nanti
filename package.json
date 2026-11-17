@@ -7,7 +7,8 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:web": "vite",
     "dev:api": "node --env-file-if-exists=.env --import tsx --watch server/index.ts",
     "start": "node --env-file-if-exists=.env dist/server/index.js",
     "postinstall": "prisma generate",
@@ -15,12 +16,13 @@
     "db:index-products": "node --env-file-if-exists=.env --import tsx server/backfill-identities.ts",
     "admin:hash": "node --import tsx scripts/hash-admin-password.mjs",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.server.json && vite build",
+    "build": "tsc -p tsconfig.server.json && node scripts/build-web.mjs",
     "test": "vitest run",
     "test:browser": "node tests/browser-smoke.mjs",
     "test:browser:affiliate": "node tests/browser-affiliate.mjs",
     "test:browser:accounts": "node --import tsx tests/browser-accounts.mjs",
-    "test:browser:visual": "node tests/browser-visual.mjs"
+    "test:browser:visual": "node tests/browser-visual.mjs",
+    "test:browser:mvp": "node tests/browser-mvp.mjs"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.10.1",

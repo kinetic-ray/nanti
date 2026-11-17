@@ -10,6 +10,7 @@ import { useLocale } from './locale.js';
 import { BuyLink } from './buy-link.js';
 import { Icon, ProductMedia } from './visual.js';
 import { safeProductUrl } from '../shared/wishlist.js';
+import { PriceDetails } from './price-tools.js';
 
 export type IntelligenceSelection =
   | { kind: 'product'; item: Item }
@@ -18,20 +19,22 @@ export type IntelligenceSelection =
 
 export type IntelligenceDrafts = { impulse: Map<string, ImpulseAnswers>; comparison: Map<string, ComparisonInput> };
 
-export function PurchaseTools({ list, selection, close, drafts }: {
-  list: Wishlist; selection: IntelligenceSelection; close: () => void; drafts: IntelligenceDrafts;
+export function PurchaseTools({ list, selection, close, drafts, onPriceUpdate }: {
+  list: Wishlist; selection: IntelligenceSelection; close: () => void; drafts: IntelligenceDrafts; onPriceUpdate: () => void;
 }) {
   const path = `/intelligence/wishlists/${list.id}`;
   if (selection.kind === 'comparison') return <ValueRanker list={list} path={path} close={close} drafts={drafts.comparison} />;
   if (selection.kind === 'timing') return <PurchaseTiming list={list} path={path} close={close} />;
-  return <ProductDetails list={list} item={selection.item} path={`${path}/items/${selection.item.id}`} close={close} drafts={drafts.impulse} />;
+  const item = list.items.find(entry => entry.id === selection.item.id) ?? selection.item;
+  return <ProductDetails list={list} item={item} path={`${path}/items/${item.id}`} close={close}
+    drafts={drafts.impulse} onPriceUpdate={onPriceUpdate} />;
 }
 
-function ProductDetails({ list, item, path, close, drafts }: {
-  list: Wishlist; item: Item; path: string; close: () => void; drafts: IntelligenceDrafts['impulse'];
+function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
+  list: Wishlist; item: Item; path: string; close: () => void; drafts: IntelligenceDrafts['impulse']; onPriceUpdate: () => void;
 }) {
   const { t, money, number } = useLocale();
-  const [tool, setTool] = useState<'impulse' | 'timing' | null>(null);
+  const [tool, setTool] = useState<'impulse' | 'timing' | 'prices' | null>(null);
   const merchant = item.url ? safeProductUrl(item.url) : null;
   return <Dialog title={item.name} busy={false} close={close} focusHeading className="decision product-dialog">
     <div className="product-overview">
@@ -54,8 +57,10 @@ function ProductDetails({ list, item, path, close, drafts }: {
     <div className="product-decision-tools">
       <button type="button" onClick={() => setTool('impulse')}><Icon name="bookmark" />{t('Check buying impulse')}<Icon name="arrow" /></button>
       <button type="button" onClick={() => setTool('timing')}><Icon name="clock" />{t('Check purchase timing')}<Icon name="arrow" /></button>
+      <button type="button" onClick={() => setTool('prices')}><Icon name="bell" />{t('Price history and alerts')}<Icon name="arrow" /></button>
     </div>
     <div className="form-actions detail-footer"><button type="button" onClick={close}>{t('Close')}</button></div>
+    {tool === 'prices' && <PriceDetails listId={list.id} item={item} close={() => setTool(null)} onUpdate={onPriceUpdate} />}
     {tool === 'impulse' && <ImpulseGuard path={path} name={item.name} currency={list.currency} close={() => setTool(null)} drafts={drafts} />}
     {tool === 'timing' && <PurchaseTiming list={list} item={item} path={path} close={() => setTool(null)} />}
   </Dialog>;

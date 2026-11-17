@@ -11,6 +11,7 @@ import { connectDatabase } from '../server/database.ts';
 import { configureOAuth } from '../server/oauth-providers.ts';
 import { prismaAccounts, tokenHash } from '../server/prisma-accounts.ts';
 import { prismaIntelligence } from '../server/prisma-intelligence.ts';
+import { prismaPrices } from '../server/prisma-prices.ts';
 import { prismaWishlists } from '../server/prisma-wishlists.ts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -40,7 +41,7 @@ const providers = await configureOAuth({
   return Response.json({ id_token: idToken, access_token: 'fixture', token_type: 'Bearer' });
 });
 server.on('request', createApp({
-  repository: prismaWishlists(db), intelligence: prismaIntelligence(db),
+  repository: prismaWishlists(db), intelligence: prismaIntelligence(db), prices: prismaPrices(db),
   consumer: { accounts: prismaAccounts(db), providers }, secret: randomBytes(32).toString('hex'),
   secureCookies: false, preview: async () => null, webRoot: fileURLToPath(new URL('../dist/web/', import.meta.url)),
 }));

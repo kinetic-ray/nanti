@@ -35,10 +35,57 @@ model Item {
   assessments  Assessment[]
   productIdentityId String? @db.Char(36)
   productIdentity   ProductIdentity? @relation(fields: [productIdentityId], references: [id], onDelete: SetNull)
+  priceObservations PriceObservation[]
+  priceTarget       PriceTarget?
 
   @@unique([ownerId, wishlistId, id])
   @@index([ownerId, wishlistId, createdAt])
   @@index([productIdentityId])
+}
+
+enum PriceSource {
+  existing
+  manual
+  imported_unverified
+  marketplace_verified
+}
+
+model PriceObservation {
+  id          BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  ownerId     String      @db.Char(36)
+  wishlistId  String      @db.Char(36)
+  itemId      String      @db.Char(36)
+  priceMinor  Int
+  currency    String      @db.Char(3)
+  source      PriceSource
+  observedAt  DateTime    @default(now())
+  item        Item        @relation(fields: [ownerId, wishlistId, itemId], references: [ownerId, wishlistId, id], onDelete: Cascade)
+  alert       PriceAlert?
+
+  @@index([ownerId, wishlistId, itemId, id])
+  @@index([itemId, source, id])
+}
+
+model PriceTarget {
+  itemId        String    @id @db.Char(36)
+  ownerId       String    @db.Char(36)
+  wishlistId    String    @db.Char(36)
+  priceMinor    Int
+  notify        Boolean   @default(true)
+  lastReachedAt DateTime?
+  item          Item      @relation(fields: [ownerId, wishlistId, itemId], references: [ownerId, wishlistId, id], onDelete: Cascade)
+
+  @@unique([ownerId, wishlistId, itemId])
+}
+
+model PriceAlert {
+  id            String           @id @default(uuid()) @db.Char(36)
+  observationId BigInt           @unique @db.UnsignedBigInt
+  targetMinor   Int
+  readAt        DateTime?
+  observation   PriceObservation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  @@index([readAt, observationId])
 }
 
 enum AssessmentKind {

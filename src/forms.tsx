@@ -1,7 +1,9 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { currencies, parsePrice, safeProductUrl } from '../shared/wishlist.js';
+import { currencies, parsePrice } from '../shared/wishlist.js';
 import type { Currency, Item, ItemInput, WishlistSummary } from '../shared/wishlist.js';
+import { safeImportUrl } from '../shared/product-import.js';
+import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 
@@ -90,23 +92,27 @@ export function ItemForm({ item, currency, close, save }: {
   const [price, setPrice] = useState(item?.priceMinor == null ? '' : (item.priceMinor / 100).toFixed(2));
   const [quantity, setQuantity] = useState(item?.quantity.toString() ?? '1');
   const [lookup, setLookup] = useState('');
+  const [merchant, setMerchant] = useState('');
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function findProduct() {
     setLookup('');
-    const parsed = safeProductUrl(url.trim());
+    setMerchant('');
+    const parsed = safeImportUrl(url.trim());
     if (!parsed) {
       setLookup('Enter a valid product link or fill in the details below.');
       return;
     }
     setLooking(true);
     try {
-      const result = await api<{ name: string | null }>('/products/preview', {
+      const result = await api<ProductImport>('/products/import', {
         method: 'POST', data: { url: parsed.href },
       });
-      if (result.name) {
+      const names = { shopee: 'Shopee', tokopedia: 'Tokopedia', ikea: 'IKEA', other: result.hostname };
+      setMerchant(names[result.merchant]);
+      if (result.status === 'name_available' && result.name) {
         setName((current) => current.trim() ? current : result.name ?? '');
         setLookup('Product name found. Review the details before saving.');
       } else {
@@ -131,7 +137,7 @@ export function ItemForm({ item, currency, close, save }: {
       setError('Enter a price up to 9,999,999.99 with at most two decimal places.');
       return;
     }
-    const parsed = url.trim() ? safeProductUrl(url.trim()) : null;
+    const parsed = url.trim() ? safeImportUrl(url.trim()) : null;
     if (url.trim() && !parsed) {
       setError('Enter a valid HTTP or HTTPS product link, or leave it blank.');
       return;
@@ -151,12 +157,15 @@ export function ItemForm({ item, currency, close, save }: {
       <form noValidate onSubmit={submit}>
         <label>{t('Product link')} <span className="optional">{t('(optional)')}</span>
           <input type="url" value={url} maxLength={2048} placeholder="https://"
-            disabled={looking} onChange={(event) => { setUrl(event.target.value); setLookup(''); }} />
+            disabled={looking} onChange={(event) => { setUrl(event.target.value); setLookup(''); setMerchant(''); }} />
         </label>
         <button type="button" className="lookup" disabled={looking || busy || !url.trim()} onClick={findProduct}>
-          {t(looking ? 'Looking up…' : 'Look up product name')}
+          {t(looking ? 'Looking up…' : 'Check product link')}
         </button>
-        <p className="hint lookup-status" role="status">{lookup && localError(lookup)}</p>
+        <div className="lookup-status" role="status">
+          {merchant && <p className="import-merchant">{t('Store detected: {merchant}', { merchant })}</p>}
+          {lookup && <p className="hint">{localError(lookup)}</p>}
+        </div>
         <label>{t('Product name')}<input required maxLength={160} value={name}
           onChange={(event) => setName(event.target.value)} /></label>
         <div className="fields">
