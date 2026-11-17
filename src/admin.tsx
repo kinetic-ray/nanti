@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { variantFields } from '../shared/affiliate.js';
 import type {
@@ -35,6 +35,12 @@ function recordedAt(value: string | null) {
 }
 
 function nextPath(path: string, after: string) { return `${path}?after=${encodeURIComponent(after)}`; }
+
+function opportunityHash(id: string) { return `#opportunity-${id}`; }
+
+function opportunityFromLocation() {
+  return /^#opportunity-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/iu.exec(location.hash)?.[1] ?? null;
+}
 
 function ExternalLink({ url, children }: { url: string; children: string }) {
   const parsed = safeProductUrl(url);
@@ -136,7 +142,7 @@ function SignIn({ error, onRetry, onSignIn }: {
 function Workspace({ username, onExpired }: { username: string; onExpired: () => void }) {
   const [opportunities, setOpportunities] = useState<AdminPage<Opportunity> | null>(null);
   const [inbox, setInbox] = useState<Inbox | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState(opportunityFromLocation);
   const [detail, setDetail] = useState<OpportunityDetail | null>(null);
   const [panel, setPanel] = useState<'opportunities' | 'inbox'>('opportunities');
   const [reload, setReload] = useState(0);
@@ -145,7 +151,9 @@ function Workspace({ username, onExpired }: { username: string; onExpired: () =>
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [review, setReview] = useState<Review | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const path = selected ? `${admin}/opportunities/${selected}` : null;
+  const identity = detail?.id === selected ? detail : null;
 
   function failure(value: unknown, sink = setError) {
     const message = errorMessage(value);
@@ -174,8 +182,25 @@ function Workspace({ username, onExpired }: { username: string; onExpired: () =>
     return () => controller.abort();
   }, [path, reload]);
 
+  useEffect(() => {
+    function syncSelection() {
+      setSelected(opportunityFromLocation());
+      setPanel('opportunities');
+      setDetailError('');
+      setFeedback('');
+    }
+    window.addEventListener('hashchange', syncSelection);
+    return () => window.removeEventListener('hashchange', syncSelection);
+  }, []);
+  useEffect(() => {
+    if (panel === 'opportunities' && identity) heading.current?.focus();
+  }, [panel, identity?.id]);
+
   function refresh() { setReload((value) => value + 1); }
-  function select(id: string) { setSelected(id); setPanel('opportunities'); setDetailError(''); setFeedback(''); }
+  function select(id: string) {
+    if (location.hash !== opportunityHash(id)) history.pushState(null, '', opportunityHash(id));
+    setSelected(id); setPanel('opportunities'); setDetailError(''); setFeedback('');
+  }
 
   async function run(work: () => Promise<unknown>, message?: string) {
     setError(''); setBusy(true); setFeedback('');
@@ -199,7 +224,6 @@ function Workspace({ username, onExpired }: { username: string; onExpired: () =>
     });
   }
 
-  const identity = detail?.id === selected ? detail : null;
   return <>
     <div className="actions admin-tabs" role="group" aria-label="Affiliate Center sections">
       <button type="button" aria-pressed={panel === 'opportunities'} onClick={() => setPanel('opportunities')}>Opportunities</button>
@@ -217,7 +241,11 @@ function Workspace({ username, onExpired }: { username: string; onExpired: () =>
             <p>{notice.title ?? notice.listingId}</p>
             <small>{notice.readAt ? 'Read' : 'Unread'} · {recordedAt(notice.createdAt)}</small></div>
           <div className="actions">
-            <button type="button" disabled={busy} onClick={() => select(notice.identityId)}>Open product</button>
+            <a className="buy-original" href={opportunityHash(notice.identityId)} onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              select(notice.identityId);
+            }}>Open product</a>
             <button type="button" disabled={busy} onClick={() => void updateNotice(notice, notice.readAt ? 'unread' : 'read')}>
               {notice.readAt ? 'Mark unread' : 'Mark read'}
             </button>
@@ -250,7 +278,7 @@ function Workspace({ username, onExpired }: { username: string; onExpired: () =>
           !selected ? <p>Choose a product to review its listing, evidence, and mappings.</p> :
           !identity ? <p role="status">Loading product…</p> :
           <>
-            <h2>{identity.title ?? `${identity.merchant} article ${identity.listingId}`}</h2>
+            <h2 ref={heading} tabIndex={-1}>{identity.title ?? `${identity.merchant} article ${identity.listingId}`}</h2>
             <dl className="admin-facts">
               <div><dt>Merchant</dt><dd>{identity.merchant}</dd></div>
               <div><dt>Market</dt><dd>{identity.market.toUpperCase()}</dd></div>

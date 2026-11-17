@@ -10,35 +10,36 @@ Save it now. Decide later.
 
 ## Visual language
 
-Use a soft lavender canvas, white product cards, an indigo action color, and mint highlights. Use a modern system sans-serif stack with Aptos, Segoe UI, and platform sans-serif fallbacks. Product badges use the first character of the product name as a quiet visual identifier. A product link or photograph must describe the actual saved product.
+Use a violet and mint palette anchored by a dark plum bookmark. The empty home uses an oversized bookmark composition to identify Nanti. Collections use white surfaces and light violet, leaving product photos, names and prices in the foreground. Reserve mint for the first action on the home screen, neutral result panels, and safe confirmations. Use amber and explicit wording when a saved result needs review.
 
 | Token | Value | Use |
 |---|---|---|
-| Canvas | `#f6f5fc` | App background |
+| Canvas | `#f8f6fc` | Public app background |
 | Surface | `#ffffff` | Cards, fields, dialogs |
-| Ink | `#211b37` | Primary text |
-| Muted | `#5b536e` | Secondary text and hints |
-| Primary | `#4834b9` | Main actions and selected controls |
-| Accent surface | `#eee9ff` | Current selection and wishlist totals |
-| Mint surface | `#dff6eb` | Helpful highlights |
-| Divider | `#ded9ed` | Surface boundaries |
-| Field border | `#958ba9` | Interactive boundaries |
-| Danger | `#a12945` | Destructive confirmation and errors |
-| Focus | `#2859a7` | Three-pixel visible focus ring |
+| Ink | `#241a3e` | Primary text |
+| Muted | `#615774` | Secondary text and hints |
+| Primary | `#5335aa` | Main actions and selected controls |
+| Plum | `#30214e` | Nanti mark, home feature panel, notices |
+| Accent surface | `#efe8fc` | Current selection and wishlist totals |
+| Mint surface | `#cef5e1` | Helpful highlights |
+| Divider | `#e6dff0` | Surface boundaries |
+| Field border | `#897d9d` | Interactive boundaries |
+| Danger | `#982440` | Destructive confirmation and errors |
+| Focus | `#275db4` | Three-pixel visible focus ring |
 | Spacing | `.25, .5, .75, 1, 1.5, 2, 3rem` | Rhythm and grouping |
-| Radii | `.625, .875, 1.25, 1.75rem` | Fields, cards, and dialogs |
-| Elevation | `0 8px 24px #30234e0d` | Surface shadow |
-| Motion | `140ms ease-out` | Color and border feedback |
+| Radii | `.75, 1, 1.25rem` | Controls, product cards, dialogs |
+| Elevation | `0 6px 24px #30214e0a` | Surface shadow |
+| Motion | `150ms ease-out` | Press feedback, photo reveal, notices |
 
-Use a 16px body size with 1.5 line height. Use semibold sans-serif headings and tabular numerals for money and comparisons. Keep form and result copy at a comfortable reading measure.
+Use Plus Jakarta Sans for the public interface with Aptos and system sans-serif fallbacks. The single local Latin variable font uses `font-display: swap`, and platform fonts supply other characters. Use 16px form input text and a 1.5 body line height. Headings use 750–800 weight. Use tabular numerals for money and evaluations. Public tokens live in the `.consumer` scope in `src/consumer.css`. Shared controls provide semantic primitives and admin compatibility.
 
 ## Public components and interaction
 
-- Put the wishlist switcher above the active collection on phones and to its left on wide screens. Keep **Tambah produk** easy to reach and show purchase tools in their product or wishlist context.
-- Use a compact product card with the product name, price, quantity, and real controls. Empty states should explain how to add the first product or recover a missing selection.
-- Use native dialogs with named headings. Focus the heading or the first field on entry, return focus to the trigger on exit, and explicitly place focus when replacing a section or opening inline confirmation.
-- Use labeled fields with a nearby optional hint or error. Keep touch targets at least 44 CSS pixels. Preserve semantic table headers, use a focusable horizontal scroll region for wide comparisons, and keep essential content available at narrow widths.
-- Verify text contrast at WCAG AA. Use visible focus, accessible names, and live status messages. Pair color with explicit text for statuses. Disable optional animation and transitions when reduced motion is requested.
+- Put a native wishlist selector above the collection below 960px and use a side rail on wider screens. The Add Product button sits near the thumb on phones with clearance for safe areas and focused elements. The shelf changes from compact horizontal cards on phones to two columns at 650px and three at 1160px.
+- Give each card a consistent 5:4 media frame, the actual product name and price, a quantity or unit price, one details action, and labeled edit and removal controls. Use verified retailer photos when the supported listing provides one. Show the first character of the saved name as a fallback. Reserve space before photos load and load them lazily.
+- Use native dialogs with named headings. On phones they appear as bottom sheets with safe-area padding. Focus the heading or first field on entry, return focus to the trigger on exit, and explicitly place focus after a step change or when opening inline confirmation.
+- Use primary buttons for the next action, secondary controls for navigation and alternatives, and danger buttons inside explicit confirmation. Keep practical touch targets at least 44 CSS pixels. Preserve semantic table headers and a named, focusable horizontal scroll region for wide comparisons.
+- Use skeletons for loading content, timed live notices for success, and inline live alerts with a recovery action for errors. Pair status colors with explicit text. Disable optional motion when reduced motion is requested.
 
 ## Language and UX writing
 
@@ -48,7 +49,7 @@ Use everyday Indonesian and address readers as **kamu**. Use short, practical se
 
 ## Purchase intelligence, privacy, and trust
 
-Offer assessments after saving. Show the recommendation and why it follows from the chosen inputs. Keep methodology, research, and algorithm versions one step away. Label incomplete quotes, estimates, and assumptions. Show relevant previous and current inputs during review, require current financial confirmation, and preserve each saved result.
+Offer assessments from a saved product or wishlist. Use a progress indicator where the tool has a defined sequence. Present the finding and its explanation before the detailed breakdown. Keep methodology, research, and algorithm versions one step away. Label incomplete quotes, estimates, and assumptions. Use a chronological history list with a labeled review state. Separate older snapshots from current checks, require current financial confirmation, and preserve each saved result.
 
 Treat financial information and assessment history as private. Explain the current browser’s access and retention. Provide a clear deletion path and protect financial details from public data boundaries. Keep commercial incentives outside calculations and explanations.
 

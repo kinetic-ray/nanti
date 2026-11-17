@@ -4,6 +4,10 @@ import type { DefaultTreeAdapterTypes } from 'parse5';
 const MAX_BYTES = 512 * 1024;
 
 export async function previewProduct(url: URL, request = fetch): Promise<string | null> {
+  return (await previewProductMetadata(url, request))?.title ?? null;
+}
+
+export async function previewProductMetadata(url: URL, request = fetch) {
   if (url.origin !== 'https://www.ikea.com' ||
       !/^\/[a-z]{2}\/[a-z]{2}\/p\/[a-z0-9-]+-\d{8}\/?$/i.test(url.pathname)) {
     return null;
@@ -43,14 +47,17 @@ export async function previewProduct(url: URL, request = fetch): Promise<string 
       'tagName' in node && node.tagName === 'html');
     const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
       'tagName' in node && node.tagName === 'head');
+    let title: string | null = null;
+    let image: string | null = null;
     for (const node of head?.childNodes ?? []) {
       if (!('tagName' in node) || node.tagName !== 'meta') continue;
       const property = node.attrs.find((attr) => attr.name === 'property')?.value;
-      if (property !== 'og:title') continue;
-      const title = node.attrs.find((attr) => attr.name === 'content')?.value.trim();
-      if (title) return title.slice(0, 160);
+      if (property !== 'og:title' && property !== 'og:image') continue;
+      const content = node.attrs.find((attr) => attr.name === 'content')?.value.trim();
+      if (content && property === 'og:title') title ??= content.slice(0, 160);
+      if (content && property === 'og:image') image ??= content.slice(0, 2048);
     }
-    return null;
+    return { title, image };
   } catch {
     return null;
   }

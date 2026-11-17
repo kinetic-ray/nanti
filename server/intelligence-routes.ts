@@ -6,16 +6,16 @@ import { evaluateTiming } from '../shared/purchase-timing.js';
 import { comparisonAlternatives, evaluateComparison } from '../shared/value-ranker.js';
 import type { AssessmentKind, SavedPayload, TimingPlanInput } from '../shared/intelligence.js';
 import { getPurchaseQuote, includedProducts } from '../shared/purchase-plan.js';
-import type { Item, WishlistSummary } from '../shared/wishlist.js';
+import type { Item } from '../shared/wishlist.js';
 import { SaveIntentConflict } from './intelligence.js';
 import type { AssessmentScope, FinancialFingerprints, IntelligenceRepository } from './intelligence.js';
 import { assessmentChanges, fingerprintFinances, productSnapshot, saveIntent, timingChanges, validatePlan } from './assessment-review.js';
 import {
   algorithmVersion, comparisonBody, historyQuery, id, impulseBody, methodologyModule, preferenceBody, timingBody,
 } from './intelligence-validation.js';
-import type { WishlistRepository } from './wishlist.js';
+import type { ScopedWishlist, WishlistRepository } from './wishlist.js';
 
-type Locals = { ownerId: string; list: WishlistSummary & { items: Item[] }; item?: Item };
+type Locals = { ownerId: string; list: ScopedWishlist; item?: Item };
 type ScopedResponse = Response<unknown, Locals>;
 
 function missing(res: Response) {
@@ -24,7 +24,8 @@ function missing(res: Response) {
 
 function scope(res: ScopedResponse, kind: AssessmentKind): AssessmentScope {
   const { ownerId, list, item } = res.locals;
-  return { ownerId, wishlistId: list.id, itemId: item?.id ?? null, kind };
+  return { ownerId: list.scopeId ?? ownerId, wishlistId: list.id, itemId: item?.id ?? null, kind,
+    ...(list.scopeId && { actor: ownerId }) };
 }
 
 export function intelligenceRoutes(wishlists: WishlistRepository, repository: IntelligenceRepository, secret: string) {
@@ -45,7 +46,7 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
     res.json(await repository.preferences(res.locals.ownerId));
   });
   api.put('/preferences', async (req, res) => {
-    await repository.setPreferences(res.locals.ownerId, preferenceBody.parse(req.body));
+    await repository.setPreferences(res.locals.ownerId, preferenceBody.parse(req.body), res.locals.guest);
     res.sendStatus(204);
   });
   api.delete('/data', async (_req, res) => {
@@ -82,7 +83,7 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
     const intent = key ? saveIntent(secret, key, req.body) : undefined;
     const target = scope(res, kind);
     if (intent) {
-      const prior = await repository.findRequest(target.ownerId, intent.key);
+      const prior = await repository.findRequest(target.ownerId, intent.key, target.actor);
       if (prior) {
         if (prior.requestHash !== intent.hash || prior.kind !== kind || prior.itemId !== target.itemId ||
           prior.wishlistId !== target.wishlistId) return conflict(res);
@@ -175,7 +176,7 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
       });
       return null;
     }
-    const financial = fingerprintFinances(secret, res.locals.ownerId, input);
+    const financial = fingerprintFinances(secret, list.scopeId ?? res.locals.ownerId, input);
     const stored = input.reviewId ? await repository.find(scope(res, 'timing'), input.reviewId) : null;
     if (input.reviewId && !stored) { missing(res); return null; }
     const result = evaluateTiming({ ...input, purchaseMinor: quote.source === 'saved' ? quote.subtotalMinor : input.purchaseMinor },

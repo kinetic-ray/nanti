@@ -151,7 +151,7 @@ export function PurchaseTiming({ list, item, path, close }: {
     ? t('{field} must be a nonnegative amount with up to two decimal places.', { field: t(financialLabels[invalidAmount]) }) : '';
   return <ToolDialog title={t('Purchase Timing')} context={item?.name ?? list.name} module="timing"
     version={viewed?.version ?? result?.version} close={close} busy={busy}>
-    {viewed ? <section className="decision-result">
+    {viewed ? <section className="decision-result decision-snapshot">
       <h3 ref={heading} tabIndex={-1}>{t('Previous result')}</h3>
       <p className="result-status">{t(viewed.result.status)}</p>
       <TimingHistorySummary record={viewed} currency={list.currency} />
@@ -226,7 +226,7 @@ export function PurchaseTiming({ list, item, path, close }: {
         </form>
         <p className="hint decision-privacy">{t('Saved timing checks keep the purchase details and outcome. Balances, bills, reserve and monthly savings amounts are not stored.')}</p>
       </div>
-      {result && <section className="decision-result">
+      {result && <section className="decision-result" data-outcome={result.status}>
         {outdated && <p className="review-badge" role="status">{t('Needs review')}</p>}
         <h3 ref={heading} tabIndex={-1}>{reviewing ? t('Current result') : t(result.status)}</h3>
         {reviewing && <strong>{t(result.status)}</strong>}
@@ -304,7 +304,9 @@ function TimingExplanation({ result, currency }: { result: TimingPreview; curren
     <h4>{t('Why this result?')}</h4>
     <p>{t(reason[result.status], { fields: result.missing.map((label) => t(label as Message)).join(', ') })}</p>
     <QuoteSummary quote={result.quote} total={result.totalMinor} currency={currency} />
-    <dl className="decision-metrics">
+    <details className="result-explanation">
+      <summary>{t('Budget breakdown')}</summary>
+      <dl className="decision-metrics">
       {([
         ['Total purchase cost', result.totalMinor], ['Available to spend', result.availableMinor],
         ['Funding gap', result.gapMinor], ['Essential obligations to protect', result.obligationsMinor],
@@ -313,7 +315,8 @@ function TimingExplanation({ result, currency }: { result: TimingPreview; curren
         <dd>{value === null ? t('Unknown') : value.startsWith('-') ? `−${money(value.slice(1), currency)}` : money(value, currency)}</dd></div>)}
       {result.months !== null && result.months !== '0' && <div><dt>{t('Estimated time to afford')}</dt>
         <dd>{t(result.months === '1' ? '{n} month' : '{n} months', { n: number(BigInt(result.months)) })}</dd></div>}
-    </dl>
+      </dl>
+    </details>
     {result.protectionShortfallMinor && result.protectionShortfallMinor !== '0' && <p>
       {t('Your obligations and reserve already exceed your liquid funds by {price} before this purchase.', {
         price: money(result.protectionShortfallMinor, currency),

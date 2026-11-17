@@ -1,0 +1,176 @@
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { Prisma } from './generated/prisma/client.js';
+import type { AuthProvider, OAuthAttempt, PrismaClient, UserSession } from './generated/prisma/client.js';
+
+export const sessionDuration = 30 * 86_400_000;
+const verificationDuration = 10 * 60_000;
+
+export const authToken = () => randomBytes(32).toString('base64url');
+export const tokenHash = (value: string) => createHash('sha256').update(value).digest('hex');
+export const recentSession = (session: UserSession) => Date.now() - session.verifiedAt.getTime() < verificationDuration;
+
+export function authorizedOwner(ownerId: string): Prisma.DataOwnerWhereInput {
+  return { OR: [{ id: ownerId, userId: null }, { userId: ownerId }] };
+}
+
+export async function lockOwner(tx: Prisma.TransactionClient, id: string, actor: string) {
+  const matches = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM DataOwner
+    WHERE id = ${id} AND (userId = ${actor} OR (userId IS NULL AND id = ${actor}))
+    FOR UPDATE
+  `;
+  return matches.length === 1;
+}
+
+export async function prepareOwner(tx: Prisma.TransactionClient, id: string, guest: boolean) {
+  if (guest) await tx.dataOwner.createMany({ data: { id }, skipDuplicates: true });
+  if (!await lockOwner(tx, id, id)) throw Object.assign(new Error('Session owner is unavailable'), { status: 401 });
+}
+
+function uniqueConflict(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+export function prismaAccounts(db: PrismaClient) {
+  const identityKey = (provider: AuthProvider, subject: string) => ({ provider, subjectHash: tokenHash(subject) });
+
+  async function newSession(tx: Prisma.TransactionClient, userId: string, guestOwnerId: string | null) {
+    const token = authToken();
+    await tx.userSession.create({
+      data: { tokenHash: tokenHash(token), userId, pendingGuestOwnerId: guestOwnerId,
+        verifiedAt: new Date(), expiresAt: new Date(Date.now() + sessionDuration) },
+    });
+    return token;
+  }
+
+  return {
+    async guest(id: string) {
+      const owner = await db.dataOwner.findUnique({ where: { id }, select: { userId: true } });
+      return !owner?.userId;
+    },
+    session(hash: string) {
+      return db.userSession.findFirst({ where: { tokenHash: hash, expiresAt: { gt: new Date() } } });
+    },
+    attempt(data: Prisma.OAuthAttemptUncheckedCreateInput) {
+      return db.oAuthAttempt.create({ data });
+    },
+    consumeAttempt(state: string, browser: string, provider: AuthProvider) {
+      const where = { stateHash: tokenHash(state), browserHash: tokenHash(browser), provider, expiresAt: { gt: new Date() } };
+      return db.$transaction(async (tx) => {
+        const attempt = await tx.oAuthAttempt.findFirst({ where });
+        if (!attempt || (await tx.oAuthAttempt.deleteMany({ where })).count !== 1) return null;
+        return attempt;
+      });
+    },
+    async signin(provider: AuthProvider, subject: string, displayName: string | null, guestOwnerId: string | null) {
+      const key = identityKey(provider, subject);
+      try {
+        return await db.$transaction(async (tx) => {
+          const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
+          if (identity) return newSession(tx, identity.userId, guestOwnerId);
+          const id = randomUUID();
+          await tx.user.create({ data: { id, displayName, dataOwners: { create: { id } },
+            identities: { create: key } } });
+          return newSession(tx, id, guestOwnerId);
+        });
+      } catch (error) {
+        if (!uniqueConflict(error)) throw error;
+        const identity = await db.authIdentity.findUnique({ where: { provider_subjectHash: key } });
+        if (!identity) throw error;
+        return newSession(db, identity.userId, guestOwnerId);
+      }
+    },
+    async confirmIdentity(attempt: OAuthAttempt, subject: string) {
+      if (!attempt.sessionHash) return false;
+      const key = identityKey(attempt.provider, subject);
+      try {
+        return await db.$transaction(async (tx) => {
+          // Serializes verification and linking with logout and deletion.
+          const rows = await tx.$queryRaw<UserSession[]>`
+            SELECT * FROM UserSession WHERE tokenHash = ${attempt.sessionHash} AND expiresAt > ${new Date()} FOR UPDATE
+          `;
+          const session = rows[0];
+          if (!session) return false;
+          if (attempt.purpose === 'verify') {
+            const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
+            if (identity?.userId !== session.userId) return false;
+            await tx.userSession.update({ where: { tokenHash: session.tokenHash }, data: { verifiedAt: new Date() } });
+          } else {
+            if (!recentSession(session)) return false;
+            await tx.authIdentity.create({ data: { ...key, userId: session.userId } });
+          }
+          return true;
+        });
+      } catch (error) {
+        if (uniqueConflict(error)) return false;
+        throw error;
+      }
+    },
+    logout(hash: string) {
+      return db.userSession.deleteMany({ where: { tokenHash: hash } });
+    },
+    account(id: string) {
+      return db.user.findUnique({ where: { id }, select: {
+        displayName: true, identities: { select: { provider: true }, orderBy: { provider: 'asc' } },
+      } });
+    },
+    async rename(id: string, displayName: string | null) {
+      await db.user.updateMany({ where: { id }, data: { displayName } });
+    },
+    async deleteAccount(session: UserSession) {
+      return db.$transaction(async (tx) => {
+        const active = await tx.userSession.findFirst({ where: {
+          tokenHash: session.tokenHash, userId: session.userId, expiresAt: { gt: new Date() },
+          verifiedAt: { gt: new Date(Date.now() - verificationDuration) },
+        } });
+        if (!active) return false;
+        return (await tx.user.deleteMany({ where: { id: active.userId } })).count === 1;
+      });
+    },
+    async importSummary(userId: string, guestId: string) {
+      const guest = await db.dataOwner.findFirst({ where: { id: guestId, userId: null },
+        select: { _count: { select: { wishlists: true } }, preference: { select: { ownerId: true } } } });
+      if (!guest || !guest._count.wishlists && !guest.preference) return null;
+      return { guestLists: guest._count.wishlists, accountLists: await db.wishlist.count({
+        where: { dataOwner: { userId } },
+      }), guestPreference: Boolean(guest.preference) };
+    },
+    importGuest(session: UserSession, guestId: string) {
+      return db.$transaction(async (tx) => {
+        const { userId } = session;
+        // The primary owner lock also serializes imports from different browsers.
+        if (!await lockOwner(tx, userId, userId)) return false;
+        const active = await tx.userSession.findFirst({ where: {
+          tokenHash: session.tokenHash, userId, pendingGuestOwnerId: guestId, expiresAt: { gt: new Date() },
+        }, select: { userId: true } });
+        if (!active) return false;
+        const claimed = await tx.dataOwner.updateMany({ where: { id: guestId, userId: null }, data: { userId } });
+        if (!claimed.count) return Boolean(await tx.dataOwner.findFirst({ where: { id: guestId, userId } }));
+        const guestPreference = await tx.intelligencePreference.findUnique({ where: { ownerId: guestId } });
+        if (guestPreference) {
+          await tx.intelligencePreference.createMany({
+            data: { ownerId: userId, coolingOffDays: guestPreference.coolingOffDays, updatedAt: guestPreference.updatedAt },
+            skipDuplicates: true,
+          });
+          await tx.intelligencePreference.delete({ where: { ownerId: guestId } });
+        }
+        return true;
+      });
+    },
+    async prune() {
+      const now = new Date();
+      await db.$transaction([
+        db.oAuthAttempt.deleteMany({ where: { expiresAt: { lte: now } } }),
+        db.userSession.deleteMany({ where: { expiresAt: { lte: now } } }),
+      ]);
+      // Old signed cookies may recreate empty guest namespaces on their next visit.
+      await db.$executeRaw`
+        DELETE FROM DataOwner WHERE userId IS NULL
+        AND NOT EXISTS (SELECT 1 FROM Wishlist WHERE Wishlist.ownerId = DataOwner.id)
+        AND NOT EXISTS (SELECT 1 FROM IntelligencePreference WHERE IntelligencePreference.ownerId = DataOwner.id)
+      `;
+    },
+  };
+}
+
+export type Accounts = ReturnType<typeof prismaAccounts>;

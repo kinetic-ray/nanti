@@ -1,0 +1,283 @@
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import request from 'supertest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { adminCredentialScope, digest, hashAdminPassword } from '../server/admin-credentials.js';
+import type { AdminCredentials } from '../server/admin-credentials.js';
+import { createApp } from '../server/app.js';
+import { indexExistingProducts } from '../server/catalog-ingestion.js';
+import { connectDatabase } from '../server/database.js';
+import { identifyProduct } from '../server/product-identity.js';
+import { prismaAffiliate } from '../server/prisma-affiliate.js';
+import { prismaIntelligence } from '../server/prisma-intelligence.js';
+import { prismaWishlists } from '../server/prisma-wishlists.js';
+import type { VerificationEvidence } from '../shared/affiliate.js';
+import type { Item } from '../shared/wishlist.js';
+
+const mutation = { 'X-Nanti-Request': '1', 'Content-Type': 'application/json' };
+const adminPath = '/api/admin';
+const credentials: AdminCredentials = { username: 'affiliate-reviewer', passwordHash: '' };
+const password = randomBytes(24).toString('base64url');
+const secret = randomBytes(32).toString('hex');
+const evidence: VerificationEvidence = {
+  title: '  QA Lamp White  ', brand: 'QA brand', model: 'QA-100', sellerId: 'verified retailer',
+  variants: { color: 'White', size: 'Small', configuration: 'Single unit' },
+  notes: 'Compared article number, store market, product options, and listing evidence.',
+  confirmedExact: true,
+};
+
+const url = process.env.TEST_DATABASE_URL;
+describe.skipIf(!url)('Affiliate Center with MySQL', () => {
+  const db = connectDatabase(url ?? 'mysql://127.0.0.1/nanti_test');
+  const repository = prismaWishlists(db);
+  const affiliate = prismaAffiliate(db);
+  const options = { repository, affiliate, intelligence: prismaIntelligence(db), admin: credentials, secret,
+    secureCookies: false, preview: async () => null };
+  const owners = new Set<string>();
+  const keys = new Set<string>();
+
+  beforeAll(async () => { credentials.passwordHash = await hashAdminPassword(password); });
+  // The router derives its session scope when created, after the asynchronous password bootstrap.
+  function app(secureCookies = false) { return createApp({ ...options, secureCookies }); }
+  async function administrator(application = app()) {
+    const agent = request.agent(application);
+    const login = await agent.post(`${adminPath}/login`).set(mutation).send({ username: credentials.username, password })
+      .expect(200, { username: credentials.username });
+    const cookie = String(login.headers['set-cookie']?.[0]).split(';')[0]!;
+    return { agent, cookie };
+  }
+  async function wishlist(application = app()) {
+    const agent = request.agent(application);
+    const session = await agent.post('/api/session').set(mutation).send({}).expect(200);
+    const signed = decodeURIComponent(String(session.headers['set-cookie']?.[0]).split(';')[0]!.slice('nanti='.length));
+    const ownerId = signed.slice(2).split('.')[0]!;
+    owners.add(ownerId);
+    const created = await agent.post('/api/wishlists').set(mutation).send({ name: 'Private wishlist fixture', currency: 'IDR' }).expect(201);
+    return { agent, ownerId, wishlistId: created.body.id as string, path: `/api/wishlists/${created.body.id}` };
+  }
+  function listing() {
+    const article = String(randomInt(10_000_000, 99_999_999));
+    const canonical = `https://www.ikea.com/us/en/p/local-qa-lamp-white-${article}/`;
+    const key = identifyProduct(canonical)!.lookupKey;
+    keys.add(key);
+    return { article, canonical, key };
+  }
+  async function add(fixture: Awaited<ReturnType<typeof wishlist>>, url: string | null, name = 'Private item label') {
+    await fixture.agent.post(`${fixture.path}/items`).set(mutation)
+      .send({ name, priceMinor: 5000, quantity: 2, url }).expect(201);
+    const detail = await fixture.agent.get(fixture.path).expect(200);
+    return (detail.body.items as Item[]).find((item) => item.name === name)!;
+  }
+
+  afterEach(async () => {
+    await db.wishlist.deleteMany({ where: { ownerId: { in: [...owners] } } });
+    const identities = await db.productIdentity.findMany({ where: { lookupKey: { in: [...keys] } }, select: { id: true } });
+    const identityIds = identities.map(({ id }) => id);
+    await db.affiliateAudit.deleteMany({ where: { identityId: { in: identityIds } } });
+    await db.adminNotification.deleteMany({ where: { identityId: { in: identityIds } } });
+    await db.affiliateMapping.deleteMany({ where: { identityId: { in: identityIds } } });
+    await db.productIdentity.deleteMany({ where: { id: { in: identityIds } } });
+    await db.adminSession.deleteMany({ where: { credentialScope: adminCredentialScope(credentials, secret) } });
+    owners.clear(); keys.clear();
+  });
+  afterAll(() => db.$disconnect());
+
+  it('separates admin authentication, validates mutations, and expires or revokes sessions', async () => {
+    const application = app();
+    const { agent: anonymous } = await wishlist(application);
+    await anonymous.get(`${adminPath}/opportunities`).expect(401);
+    await anonymous.post(`${adminPath}/opportunities/${randomUUID()}/mappings`).set(mutation).send({ url: 'https://example.test/' }).expect(401);
+    await anonymous.patch(`${adminPath}/notifications/${randomUUID()}`).set(mutation).send({ action: 'dismiss' }).expect(401);
+    await anonymous.post(`${adminPath}/login`).send({}).expect(403);
+    await anonymous.post(`${adminPath}/login`).set({ ...mutation, 'Sec-Fetch-Site': 'cross-site' })
+      .send({ username: credentials.username, password }).expect(403);
+    await anonymous.post(`${adminPath}/login`).set(mutation).send({ username: credentials.username, password, role: 'admin' }).expect(401);
+    await anonymous.post(`${adminPath}/login`).set(mutation).send({ username: credentials.username, password: 'wrong' }).expect(401);
+    const admin = await administrator(application);
+    await admin.agent.get(`${adminPath}/session`).expect('Cache-Control', 'no-store').expect(200, { username: credentials.username });
+    await admin.agent.get('/api/wishlists').expect(401);
+    await admin.agent.patch(`${adminPath}/notifications/${randomUUID()}`).send({ action: 'read' }).expect(403);
+    const tokenHash = digest(admin.cookie.slice('nanti-admin='.length));
+    const row = await db.adminSession.findUnique({ where: { tokenHash } });
+    expect(row?.tokenHash).toBe(tokenHash);
+    expect(admin.cookie).not.toContain(tokenHash);
+    await admin.agent.post(`${adminPath}/logout`).set(mutation).send({}).expect(204);
+    await request(application).get(`${adminPath}/session`).set('Cookie', admin.cookie).expect(401);
+    const next = await administrator(application);
+    await db.adminSession.update({ where: { tokenHash: digest(next.cookie.slice('nanti-admin='.length)) },
+      data: { expiresAt: new Date(0) } });
+    await next.agent.get(`${adminPath}/opportunities`).expect(401);
+    const secure = await request(app(true)).post(`${adminPath}/login`).set(mutation)
+      .send({ username: credentials.username, password }).expect(200);
+    const flags = String(secure.headers['set-cookie']?.[0]);
+    expect(flags).toMatch(/^__Host-nanti-admin=.*Path=\/.*HttpOnly.*Secure.*SameSite=Strict/u);
+    await request(createApp({ ...options, admin: undefined })).get(`${adminPath}/session`)
+      .expect(404, { error: 'Administrator sign-in is not configured.' });
+  });
+
+  it('rate-limits unsuccessful sign-in attempts', async () => {
+    const application = app();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await request(application).post(`${adminPath}/login`).set(mutation).send({}).expect(401);
+    }
+    await request(application).post(`${adminPath}/login`).set(mutation)
+      .send({ username: credentials.username, password }).expect(429);
+  });
+
+  it('deduplicates eligible listings, preserves saved URLs and withholds private wishlist details', async () => {
+    const application = app();
+    const first = await wishlist(application);
+    const second = await wishlist(application);
+    const sample = listing();
+    const variant = listing();
+    const raw = `${sample.canonical}?utm_content=owner_ref`;
+    const [item] = await Promise.all([add(first, raw), add(second, sample.canonical)]);
+    await add(first, variant.canonical, 'Another private label');
+    await add(first, `${sample.canonical}?size=XL`, 'Unknown option');
+    await add(second, 'https://example.test/private-path?token=private', 'Private domain');
+    expect(item.url).toBe(raw);
+    const { agent } = await administrator(application);
+    const list = await agent.get(`${adminPath}/opportunities`).expect(200);
+    const detail = list.body.records.find((entry: { listingId: string }) => entry.listingId === sample.article);
+    expect(detail).toMatchObject({
+      market: 'us/en', canonicalUrl: sample.canonical, savedCount: 2, coverage: false,
+      title: null, classification: 'insufficient', reviewedAt: null,
+    });
+    expect(list.body.records.find((entry: { listingId: string }) => entry.listingId === variant.article).savedCount).toBe(1);
+    const serialized = JSON.stringify(list.body);
+    for (const value of [first.ownerId, second.ownerId, first.wishlistId, second.wishlistId,
+      'Private item label', 'owner_ref', 'Private wishlist fixture', 'private-path', 'priceMinor', 'assessment']) {
+      expect(serialized).not.toContain(value);
+    }
+    const { body } = await agent.get(`${adminPath}/notifications`).expect(200);
+    expect(body.records.filter(({ identityId, kind }: { identityId: string; kind: string }) =>
+      identityId === detail.id && kind === 'new_opportunity')).toHaveLength(1);
+    const event = body.records.find(({ identityId }: { identityId: string }) => identityId === detail.id);
+    for (const action of ['read', 'unread', 'dismiss']) {
+      await agent.patch(`${adminPath}/notifications/${event.id}`).set(mutation).send({ action }).expect(204);
+      const current = await agent.get(`${adminPath}/notifications`).expect(200);
+      const notice = current.body.records.find(({ id }: { id: string }) => id === event.id);
+      if (action === 'dismiss') expect(notice).toBeUndefined();
+      else expect(Boolean(notice.readAt)).toBe(action === 'read');
+    }
+    const purchase = await first.agent.get(`${first.path}/items/${item.id}/purchase`).expect(200, { originalUrl: raw, affiliatePath: null });
+    expect(purchase.headers['cache-control']).toBe('no-store');
+    await second.agent.get(`${first.path}/items/${item.id}/purchase`).expect(404);
+  });
+
+  it('requires exact verification, protects the active slot, and falls back promptly after revocation', async () => {
+    const application = app();
+    const owner = await wishlist(application);
+    const other = await wishlist(application);
+    const sample = listing();
+    const variant = listing();
+    const item = await add(owner, sample.canonical);
+    const second = await add(owner, variant.canonical, 'Second item');
+    const empty = await add(owner, null, 'Unlinked item');
+    const productPath = `${owner.path}/items/${item.id}`;
+    const purchase = `${productPath}/purchase`;
+    await owner.agent.get(`${owner.path}/items/${empty.id}/purchase`).expect(200, { originalUrl: null, affiliatePath: null });
+
+    const wishlistIntelligence = owner.path.replace('/api/wishlists', '/api/intelligence/wishlists');
+    const criteria = [{ id: randomUUID(), name: 'Unit price', kind: 'price', weight: 1 }];
+    const alternatives = [item, second].map(({ id }) => ({ itemId: id, ratings: {} }));
+    const compare = () => owner.agent.post(`${wishlistIntelligence}/comparisons`).set(mutation).send({ criteria, alternatives }).expect(201);
+    const impulse = () => owner.agent.post(`${wishlistIntelligence}/items/${item.id}/impulse`).set(mutation).send({ need: true }).expect(201);
+    const timing = () => owner.agent.post(`${wishlistIntelligence}/items/${item.id}/timing`).set(mutation)
+      .send({ liquidMinor: '10000', reserveMinor: '0', obligationsMinor: '0' }).expect(200);
+    const before = [(await compare()).body.result, (await impulse()).body.result, (await timing()).body];
+    const { agent } = await administrator(application);
+    const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: sample.key } });
+    const path = `${adminPath}/opportunities/${identity.id}`;
+    const addCandidate = (url: string) => agent.post(`${path}/mappings`).set(mutation).send({ url });
+    const review = (mappingId: string, data: object) => agent.patch(`${path}/mappings/${mappingId}`).set(mutation).send(data);
+    const approve = { action: 'approve', revision: 0, evidence };
+
+    await addCandidate('http://example.test/').expect(400);
+    await addCandidate('javascript:void(0)').expect(400);
+    const opaque = await addCandidate('https://example.test/opaque-candidate').expect(201);
+    expect(opaque.body.classification).toBe('insufficient');
+    await review(opaque.body.id, approve).expect(400);
+    const mismatch = await addCandidate(`${variant.canonical}?utm_source=qa`).expect(201);
+    expect(mismatch.body.classification).toBe('mismatch');
+    await review(mismatch.body.id, approve).expect(400);
+    await review(mismatch.body.id, { action: 'reject', revision: 0, reason: 'Different article.' }).expect(200);
+
+    const direct = `${sample.canonical}?utm_source=qa&utm_medium=verification`;
+    const first = await addCandidate(direct).expect(201);
+    const duplicate = await addCandidate(`${sample.canonical}?utm_medium=verification&utm_source=qa`).expect(201);
+    expect(duplicate.body.id).toBe(first.body.id);
+    expect(first.body).toMatchObject({ active: false, classification: 'potential', eligible: true, status: 'pending' });
+    expect(await db.adminNotification.count({ where: { eventKey: `candidate:${first.body.id}` } })).toBe(1);
+    expect(await db.affiliateAudit.count({ where: { mappingId: first.body.id } })).toBe(1);
+    await owner.agent.patch(`${path}/mappings/${first.body.id}`).set(mutation).send(approve).expect(401);
+    await review(first.body.id, { ...approve, evidence: { ...evidence, confirmedExact: false } }).expect(400);
+    await owner.agent.get(purchase).expect(200, { originalUrl: sample.canonical, affiliatePath: null });
+
+    const active = await review(first.body.id, approve).expect(200);
+    expect(active.body).toMatchObject({ active: true, classification: 'verified_exact', status: 'approved',
+      approvedBy: credentials.username, approvedAt: expect.any(String), validatedAt: expect.any(String) });
+    const secondCandidate = await addCandidate(`${sample.canonical}?utm_source=second`).expect(201);
+    await review(secondCandidate.body.id, approve).expect(409);
+    await review(first.body.id, { action: 'revalidate', revision: 0, evidence }).expect(409);
+    await review(first.body.id, { action: 'revalidate', revision: 1, evidence: {
+      ...evidence, variants: { ...evidence.variants, color: 'Blue' },
+    } }).expect(409);
+    const validated = await review(first.body.id, { action: 'revalidate', revision: 1, evidence }).expect(200);
+    expect(validated.body.revision).toBe(2);
+    const destination = await owner.agent.get(purchase).expect(200);
+    const link = String(destination.body.affiliatePath);
+    expect(Object.keys(destination.body).sort()).toEqual(['affiliatePath', 'originalUrl']);
+    expect(link).toMatch(/^\/api\/wishlists\//u);
+    expect(link).not.toContain(first.body.id);
+    await owner.agent.get(link).expect('Location', direct).expect('Referrer-Policy', 'no-referrer').expect(302);
+    await other.agent.get(link).expect(409);
+    await owner.agent.get(link + '&destination=https%3A%2F%2Fexample.test').expect(409);
+    expect([(await compare()).body.result, (await impulse()).body.result, (await timing()).body]).toEqual(before);
+
+    const history = await agent.get(path).expect(200);
+    expect(history.body).toMatchObject({ coverage: true, title: 'QA Lamp White', normalizedTitle: 'qa lamp white',
+      brand: 'QA brand', model: 'QA-100', variants: evidence.variants, reviewedAt: expect.any(String) });
+    expect(history.body.audit.filter(({ mappingId }: { mappingId: string }) => mappingId === first.body.id)
+      .map(({ action }: { action: string }) => action)).toEqual(['revalidate', 'approve', 'candidate_added']);
+
+    await review(first.body.id, { action: 'revoke', revision: 2, reason: 'Tracking relationship ended.' }).expect(200);
+    await owner.agent.get(link).expect('Location', sample.canonical).expect(302);
+    await owner.agent.get(purchase).expect(200, { originalUrl: sample.canonical, affiliatePath: null });
+    const inbox = await agent.get(`${adminPath}/notifications`).expect(200);
+    expect(inbox.body.records.filter(({ identityId, kind }: { identityId: string; kind: string }) =>
+      identityId === identity.id && kind === 'mapping_revoked')).toHaveLength(1);
+
+    await review(secondCandidate.body.id, approve).expect(200);
+    const next = await owner.agent.get(purchase).expect(200);
+    await owner.agent.put(productPath).set(mutation).send({ name: item.name, priceMinor: item.priceMinor, quantity: item.quantity, url: variant.canonical }).expect(204);
+    await owner.agent.get(next.body.affiliatePath).expect(409);
+    await owner.agent.get(purchase).expect(200, { originalUrl: variant.canonical, affiliatePath: null });
+  });
+
+  it('indexes legacy rows without rewriting original links and invalidates unusable stored destinations', async () => {
+    const application = app();
+    const owner = await wishlist(application);
+    const sample = listing();
+    const variant = listing();
+    const original = `${sample.canonical}?utm_source=legacy`;
+    const item = await db.item.create({ data: { id: randomUUID(), ownerId: owner.ownerId, wishlistId: owner.wishlistId,
+      name: 'Legacy private name', url: original, quantity: 1, priceMinor: 50 } });
+    const count = await indexExistingProducts(db);
+    expect(count).toBeGreaterThanOrEqual(1);
+    expect(await indexExistingProducts(db)).toBe(0);
+    expect(await db.item.findUniqueOrThrow({ where: { id: item.id } })).toMatchObject({ url: original, productIdentityId: expect.any(String) });
+    const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: sample.key } });
+    const { agent } = await administrator(application);
+    const path = `${adminPath}/opportunities/${identity.id}/mappings`;
+    const candidate = await agent.post(path).set(mutation).send({ url: `${sample.canonical}?utm_source=qa` }).expect(201);
+    await agent.patch(`${path}/${candidate.body.id}`).set(mutation)
+      .send({ action: 'approve', revision: 0, evidence }).expect(200);
+    await db.affiliateMapping.update({ where: { id: candidate.body.id }, data: { affiliateUrl: variant.canonical } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await owner.agent.get(`${owner.path}/items/${item.id}/purchase`).expect(200, { originalUrl: original, affiliatePath: null });
+    }
+    expect(await db.affiliateMapping.findUnique({ where: { id: candidate.body.id } })).toMatchObject({ status: 'invalid', activeIdentityId: null });
+    expect(await db.adminNotification.count({ where: { identityId: identity.id, kind: 'mapping_invalid' } })).toBe(1);
+    expect(await db.affiliateAudit.count({ where: { mappingId: candidate.body.id, action: 'invalid', actor: 'system:resolver' } })).toBe(1);
+  });
+});

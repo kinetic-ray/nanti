@@ -14,6 +14,10 @@ import { adminRoutes } from './admin-routes.js';
 import type { AdminCredentials } from './admin-credentials.js';
 import type { AffiliateRepository } from './prisma-affiliate.js';
 import { purchaseDestinationRoutes } from './purchase-destinations.js';
+import { createProductMedia } from './product-media.js';
+import { accountRoutes } from './account-routes.js';
+import type { Accounts } from './prisma-accounts.js';
+import type { OAuthProviders } from './oauth-providers.js';
 
 const uuid = z.uuid();
 const listName = z.string().trim().min(1, 'Enter a wishlist name.').max(100);
@@ -37,9 +41,12 @@ type Options = {
   intelligence?: IntelligenceRepository;
   affiliate?: AffiliateRepository;
   admin?: AdminCredentials;
+  consumer?: { accounts: Accounts; providers: OAuthProviders };
   preview: (url: URL) => Promise<string | null>;
+  productMedia?: ReturnType<typeof createProductMedia>;
   secret: string;
   secureCookies: boolean;
+  trustedProxy?: string;
   webRoot?: string;
 };
 
@@ -47,11 +54,14 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, affiliate, admin, preview, secret, secureCookies, webRoot }: Options) {
+export function createApp({ repository, intelligence, affiliate, admin, consumer, preview, productMedia = createProductMedia(),
+  secret, secureCookies, trustedProxy, webRoot }: Options) {
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
+  const account = consumer && accountRoutes(consumer.accounts, consumer.providers, secureCookies, cookieName);
   app.disable('x-powered-by');
+  if (trustedProxy) app.set('trust proxy', trustedProxy);
   app.use(helmet(secureCookies ? {} : {
     strictTransportSecurity: false,
     contentSecurityPolicy: { directives: { upgradeInsecureRequests: null } },
@@ -64,6 +74,8 @@ export function createApp({ repository, intelligence, affiliate, admin, preview,
     windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many requests. Try again in a minute.' },
   }));
+  api.use(cookieParser(secret));
+  if (account) api.use('/account', account.callbacks);
   api.use((req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
         (req.get('X-Nanti-Request') === '1' && req.is('application/json'))) {
@@ -72,7 +84,9 @@ export function createApp({ repository, intelligence, affiliate, admin, preview,
     }
     res.status(403).json({ error: 'Request could not be verified.' });
   });
-  api.use(express.json({ limit: '12kb' }), cookieParser(secret));
+  api.use(express.json({ limit: '12kb' }));
+  if (account) api.use('/account', account.api);
+  else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
   if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
   api.use('/admin', (_req, res) => res.status(404).json({
     error: affiliate && admin ? 'This administrator endpoint could not be found.' : 'Administrator sign-in is not configured.',
@@ -80,32 +94,50 @@ export function createApp({ repository, intelligence, affiliate, admin, preview,
 
   api.post('/session', async (req, res) => {
     const session = uuid.safeParse(req.signedCookies[cookieName]);
-    const ownerId = session.success ? session.data : randomUUID();
-    const lists = session.success ? await repository.list(ownerId) : [];
-    res.cookie(cookieName, ownerId, {
+    const owner = account ? await account.resolveOwner(req, res, true) :
+      { id: session.success ? session.data : randomUUID(), guest: true };
+    if (!owner) return res.sendStatus(401);
+    const lists = await repository.list(owner.id);
+    if (owner.guest) res.cookie(cookieName, owner.id, {
       signed: true, httpOnly: true, secure: secureCookies, sameSite: 'strict',
       path: '/', maxAge: 365 * 24 * 60 * 60 * 1000,
     });
     res.json(lists);
   });
 
-  api.use((req, res, next) => {
+  api.use(async (req, res, next) => {
     const session = uuid.safeParse(req.signedCookies[cookieName]);
-    if (!session.success) {
+    const owner = account ? await account.resolveOwner(req, res, false) :
+      session.success ? { id: session.data, guest: true } : null;
+    if (!owner) {
       res.status(401).json({ error: 'Refresh to start a wishlist session.' });
       return;
     }
-    res.locals.ownerId = session.data;
+    res.locals.ownerId = owner.id;
+    res.locals.guest = owner.guest;
     next();
   });
   if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence, secret));
   api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
+  api.get('/wishlists/:listId/items/:itemId/image', rateLimit({
+    windowMs: 60_000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Too many product image requests.' },
+  }), async (req, res) => {
+    const listId = uuid.parse(req.params.listId);
+    const itemId = uuid.parse(req.params.itemId);
+    const list = await repository.find(res.locals.ownerId, listId);
+    const item = list?.items.find(entry => entry.id === itemId);
+    const media = item && await productMedia(item.url);
+    if (!media) return notFound(res);
+    res.set('Content-Type', media.type).send(media.bytes);
+  });
+
   api.get('/wishlists', async (_req, res) => {
     res.json(await repository.list(res.locals.ownerId));
   });
   api.post('/wishlists', async (req, res) => {
-    res.status(201).json(await repository.create(res.locals.ownerId, listInput.parse(req.body)));
+    res.status(201).json(await repository.create(res.locals.ownerId, listInput.parse(req.body), res.locals.guest));
   });
   api.get('/wishlists/:listId', async (req, res) => {
     const list = await readWishlist(repository, res.locals.ownerId, uuid.parse(req.params.listId));
@@ -155,7 +187,7 @@ export function createApp({ repository, intelligence, affiliate, admin, preview,
   app.use('/api', api);
 
   if (webRoot) {
-    app.get('/admin', (_req, res) => {
+    app.get(['/admin', '/account'], (_req, res) => {
       res.set('Cache-Control', 'no-store').sendFile('index.html', { root: webRoot });
     });
     app.use(express.static(webRoot, { dotfiles: 'deny' }));
@@ -172,6 +204,10 @@ const handleError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
     return;
   }
   const status = (error as { status?: unknown } | null)?.status;
+  if (status === 401) {
+    res.status(401).json({ error: 'Refresh to start a wishlist session.' });
+    return;
+  }
   if (status === 400 || status === 413 || status === 415) {
     res.status(status).json({ error: 'The request body is invalid or too large.' });
     return;

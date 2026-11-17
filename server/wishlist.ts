@@ -1,9 +1,11 @@
 import type { Currency, Item, ItemInput, WishlistSummary } from '../shared/wishlist.js';
 
+export type ScopedWishlist = WishlistSummary & { items: Item[]; scopeId?: string };
+
 export interface WishlistRepository {
   list(ownerId: string): Promise<WishlistSummary[]>;
-  find(ownerId: string, id: string): Promise<(WishlistSummary & { items: Item[] }) | null>;
-  create(ownerId: string, data: { name: string; currency: Currency }): Promise<WishlistSummary>;
+  find(ownerId: string, id: string): Promise<ScopedWishlist | null>;
+  create(ownerId: string, data: { name: string; currency: Currency }, guest?: boolean): Promise<WishlistSummary>;
   rename(ownerId: string, id: string, name: string): Promise<boolean>;
   remove(ownerId: string, id: string): Promise<boolean>;
   addItem(ownerId: string, listId: string, data: ItemInput): Promise<boolean>;
@@ -21,5 +23,6 @@ export async function readWishlist(repository: WishlistRepository, ownerId: stri
     if (item.priceMinor === null) unpriced++;
     else totalMinor += BigInt(item.priceMinor) * BigInt(item.quantity);
   }
-  return { ...list, totalMinor: totalMinor.toString(), unpriced };
+  const { id: listId, name, currency, items } = list;
+  return { id: listId, name, currency, items, totalMinor: totalMinor.toString(), unpriced };
 }

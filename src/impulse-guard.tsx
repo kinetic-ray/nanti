@@ -106,7 +106,7 @@ export function ImpulseGuard({ path, name, currency, close, drafts }: {
       <ReviewDetails changes={previous.review} currency={currency} />
       <p>{t('Your previous result stays in history. Confirm the details before checking again.')}</p>
     </div>}
-    {result ? <section className="decision-section">
+    {result ? <section className={viewed ? 'decision-result decision-snapshot' : 'decision-result'} data-outcome={result.concern}>
       <h3 ref={heading} tabIndex={-1}>{t(previous ? 'Current result' : concernLabels[result.concern])}</h3>
       {previous && <strong>{t(concernLabels[result.concern])}</strong>}
       <ReviewDetails changes={viewed?.review} currency={currency} />
@@ -127,7 +127,10 @@ export function ImpulseGuard({ path, name, currency, close, drafts }: {
         </>}
       </div>
     </section> : factor && <form className="decision-section" onSubmit={(event) => { event.preventDefault(); changeStep(step + 1); }}>
-      <p className="hint">{t('Question {n} of {total}', { n: number(step + 1), total: number(impulseFactors.length) })}</p>
+      <div className="decision-progress">
+        <p className="hint">{t('Question {n} of {total}', { n: number(step + 1), total: number(impulseFactors.length) })}</p>
+        <progress aria-label={t('Assessment progress')} value={step + 1} max={impulseFactors.length} />
+      </div>
       <h3 ref={heading} id={`${radioGroup}-question`} tabIndex={-1}>{impulseCopy(language, factor).question}</h3>
       <fieldset className="answer-options" aria-labelledby={`${radioGroup}-question`}>
         {(['Yes', 'No', 'Skip for now'] as const).map((label, index) => {

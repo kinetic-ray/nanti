@@ -2,11 +2,16 @@ import { Prisma } from './generated/prisma/client.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import type { SavedAssessment } from '../shared/intelligence.js';
 import { SaveIntentConflict } from './intelligence.js';
-import type { FinancialFingerprints, IntelligenceRepository } from './intelligence.js';
+import type { AssessmentScope, FinancialFingerprints, IntelligenceRepository } from './intelligence.js';
+import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
 
 const assessment = { id: true, kind: true, version: true, input: true, result: true, snapshot: true, createdAt: true } as const;
 const privateAssessment = { ...assessment, financial: true, requestHash: true } as const;
 const pageSize = 15;
+
+function assessmentWhere({ actor, ...scope }: AssessmentScope): Prisma.AssessmentWhereInput {
+  return { ...scope, wishlist: { dataOwner: authorizedOwner(actor ?? scope.ownerId) } };
+}
 
 function serialize(row: Prisma.AssessmentGetPayload<{ select: typeof assessment }>): SavedAssessment {
   // Only validated engine inputs and results are written through this adapter.
@@ -19,7 +24,7 @@ export function prismaIntelligence(db: PrismaClient): IntelligenceRepository {
     async history(scope, before) {
       const rows = await db.assessment.findMany({
         where: {
-          ...scope,
+          ...assessmentWhere(scope),
           ...(before && { OR: [
             { createdAt: { lt: before.createdAt } },
             { createdAt: before.createdAt, id: { lt: before.id } },
@@ -36,16 +41,20 @@ export function prismaIntelligence(db: PrismaClient): IntelligenceRepository {
     async save(scope, payload, snapshot, financial, intent) {
       try {
         const { input, result } = payload;
-        return serialize(await db.assessment.create({
-          data: { ...scope, input, result, version: result.version, snapshot, financial,
-            requestKey: intent?.key, requestHash: intent?.hash },
-          select: assessment,
-        }));
+        const { actor, ...target } = scope;
+        return await db.$transaction(async (tx) => {
+          if (!await lockOwner(tx, target.ownerId, actor ?? target.ownerId)) return null;
+          return serialize(await tx.assessment.create({
+            data: { ...target, input, result, version: result.version, snapshot, financial,
+              requestKey: intent?.key, requestHash: intent?.hash },
+            select: assessment,
+          }));
+        });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') return null;
         if (intent && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           const prior = await db.assessment.findFirst({
-            where: { ...scope, requestKey: intent.key, requestHash: intent.hash }, select: assessment,
+            where: { ...assessmentWhere(scope), requestKey: intent.key, requestHash: intent.hash }, select: assessment,
           });
           if (prior) return serialize(prior);
           throw new SaveIntentConflict();
@@ -54,39 +63,42 @@ export function prismaIntelligence(db: PrismaClient): IntelligenceRepository {
       }
     },
     async find(scope, id) {
-      const row = await db.assessment.findFirst({ where: { ...scope, id }, select: privateAssessment });
+      const row = await db.assessment.findFirst({ where: { ...assessmentWhere(scope), id }, select: privateAssessment });
       return row && { record: serialize(row), financial: row.financial as FinancialFingerprints | null, requestHash: row.requestHash };
     },
-    async findRequest(ownerId, key) {
-      const row = await db.assessment.findUnique({
-        where: { ownerId_requestKey: { ownerId, requestKey: key } },
+    async findRequest(ownerId, key, actor = ownerId) {
+      const row = await db.assessment.findFirst({
+        where: { ownerId, requestKey: key, wishlist: { dataOwner: authorizedOwner(actor) } },
         select: { ...privateAssessment, ownerId: true, wishlistId: true, itemId: true },
       });
       return row && { record: serialize(row), financial: null, requestHash: row.requestHash, ownerId,
         wishlistId: row.wishlistId, itemId: row.itemId, kind: row.kind };
     },
     async remove(scope, id) {
-      return (await db.assessment.deleteMany({ where: { ...scope, id } })).count > 0;
+      return (await db.assessment.deleteMany({ where: { ...assessmentWhere(scope), id } })).count > 0;
     },
     async preferences(ownerId) {
-      const row = await db.intelligencePreference.findUnique({ where: { ownerId }, select: { coolingOffDays: true } });
+      const row = await db.intelligencePreference.findFirst({
+        where: { ownerId, dataOwner: authorizedOwner(ownerId) }, select: { coolingOffDays: true },
+      });
       return row ?? { coolingOffDays: null };
     },
-    async setPreferences(ownerId, { coolingOffDays }) {
+    async setPreferences(ownerId, { coolingOffDays }, guest = true) {
       if (coolingOffDays === null) {
-        await db.intelligencePreference.deleteMany({ where: { ownerId } });
+        await db.intelligencePreference.deleteMany({ where: { ownerId, dataOwner: authorizedOwner(ownerId) } });
       } else {
-        await db.intelligencePreference.upsert({
-          where: { ownerId },
-          create: { ownerId, coolingOffDays },
-          update: { coolingOffDays },
+        await db.$transaction(async (tx) => {
+          await prepareOwner(tx, ownerId, guest);
+          await tx.intelligencePreference.upsert({
+            where: { ownerId }, create: { ownerId, coolingOffDays }, update: { coolingOffDays },
+          });
         });
       }
     },
     async clear(ownerId) {
       await db.$transaction([
-        db.assessment.deleteMany({ where: { ownerId } }),
-        db.intelligencePreference.deleteMany({ where: { ownerId } }),
+        db.assessment.deleteMany({ where: { wishlist: { dataOwner: authorizedOwner(ownerId) } } }),
+        db.intelligencePreference.deleteMany({ where: { dataOwner: authorizedOwner(ownerId) } }),
       ]);
     },
     async prune(before) {

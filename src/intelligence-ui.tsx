@@ -9,6 +9,7 @@ import { Dialog } from './forms.js';
 import { useLocale } from './locale.js';
 import { localizedMethodology } from './methodology-id.js';
 import type { Message } from './messages.js';
+import { Icon, Loading } from './visual.js';
 
 export const financialLabels = {
   purchaseMinor: 'Full purchase cost', liquidMinor: 'Liquid funds',
@@ -22,12 +23,15 @@ export function ToolDialog({ title, context, module, version, close, busy = fals
 }) {
   const { t } = useLocale();
   const [research, setResearch] = useState(false);
-  return <Dialog title={title} busy={busy} close={close} focusHeading className={wide ? 'decision decision-wide' : 'decision'}>
+  return <Dialog title={title} busy={busy} close={close} focusHeading
+    className={`decision tool-dialog${wide ? ' decision-wide' : ''}`}>
     <div className="decision-bar">
       <p className="hint">{context}</p>
       <div className="actions">
-        <button type="button" onClick={() => setResearch(true)}><span aria-hidden="true">ⓘ</span> {t('Research & Methodology')}</button>
-        <button type="button" disabled={busy} onClick={close}>{t('Close')}</button>
+        <button type="button" className="methodology-entry" onClick={() => setResearch(true)}>{t('Research & Methodology')}</button>
+        <button type="button" className="icon-button" aria-label={t('Close')} title={t('Close')} disabled={busy} onClick={close}>
+          <Icon name="close" />
+        </button>
       </div>
     </div>
     {children}
@@ -55,7 +59,7 @@ function MethodologyDialog({ module, version, close }: {
     <div className="form-actions"><button type="button" onClick={close}>{t('Close methodology')}</button></div>
     {error ? <div><p role="alert" className="error">{localError(error)}</p>
       <button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>{t('Try again')}</button></div>
-      : !copy ? <p role="status">{t('Loading methodology…')}</p> : <div className="methodology">
+      : !copy ? <Loading label={t('Loading methodology…')} /> : <div className="methodology">
         <h3>{copy.title}</h3><p className="hint">{t('Version {version} · Updated {date}', { version: copy.version, date: date(copy.updated) })}</p>
         <p>{copy.purpose}</p>
         <h4>{t('Research concepts')}</h4><p>{copy.concepts}</p>
@@ -178,10 +182,11 @@ export function History({ history, name, onSelect, onDelete, disabled, initialOp
       <summary ref={summary}>{t(name)}</summary>
       {open && <>
         {error && <p className="error" role="alert">{localError(error)}</p>}
-        {busy && <p role="status">{t('Working…')}</p>}
+        {busy && !page && <Loading label={t('Working…')} />}
+        {busy && page && <p role="status">{t('Working…')}</p>}
         {!busy && !page && error && <button type="button" onClick={() => void load()}>{t('Try again')}</button>}
         {page?.records.length === 0 && <p className="hint">{t('No saved results here yet.')}</p>}
-        {page && page.records.length > 0 && <ul className="history-list">
+        {page && page.records.length > 0 && <ol className="history-list">
           {page.records.map((record) => <li key={record.id}>
             <div>
               <strong>{record.kind === 'impulse' ? t(record.result.concern) :
@@ -211,7 +216,7 @@ export function History({ history, name, onSelect, onDelete, disabled, initialOp
               </>}
             </div>
           </li>)}
-        </ul>}
+        </ol>}
         {page?.next && <button type="button" disabled={busy || disabled} onClick={() => void load(page.next ?? undefined)}>{t('Load older results')}</button>}
       </>}
     </details>

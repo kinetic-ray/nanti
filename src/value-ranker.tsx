@@ -162,7 +162,7 @@ export function ValueRanker({ list, path, close, drafts }: {
         currency={list.currency} />
     </details>}
     {previous && !viewed && <p className="hint">{t('Your previous result stays in history. Confirm the details before checking again.')}</p>}
-    {viewed ? <div className="decision-section">
+    {viewed ? <div className="decision-section decision-snapshot">
       <h3 ref={focus} tabIndex={-1}>{t('Saved comparison')}</h3>
       <p className="hint">{t('Saved {date}', { date: date(viewed.createdAt) })}</p>
       <ReviewDetails changes={viewed.review} currency={list.currency} />
@@ -178,6 +178,10 @@ export function ValueRanker({ list, path, close, drafts }: {
       if (step === 2) setShowResult(true);
       go(Math.min(step + 1, 3));
     }}>
+      <div className="decision-progress">
+        <p className="hint">{t('Step {n} of {total}', { n: number(step + 1), total: number(4) })}</p>
+        <progress aria-label={t('Assessment progress')} value={step + 1} max={4} />
+      </div>
       {step === 0 ? <>
         <h3 ref={focus} tabIndex={-1}>{t('Choose products')}</h3>
         <p className="hint">{liveItems.length < 2 ? t('Add at least two products to start a comparison. You can still open saved results below.')
@@ -298,9 +302,9 @@ function ComparisonBreakdown({ result, input, products, currency, title = 'Compa
       const contribution = (id: string) => byId.get(id)?.criteria.find((entry) => entry.id === criterion.id)?.contribution ?? 0;
       return { criterion, difference: contribution(leader.id) - contribution(runnerUp.id) };
     }).sort((left, right) => right.difference - left.difference)[0] : undefined;
-  return <section className="decision-result">
+  return <section className="decision-result" data-outcome={result.status}>
     <h3>{t(title)}</h3>
-    <p role="status">{rank ? (rank.filter(({ rank }) => rank === 1).length > 1
+    <p role="status" className="result-lead">{rank ? (rank.filter(({ rank }) => rank === 1).length > 1
       ? t('Tied for first: {names}.', { names: rank.filter(({ rank }) => rank === 1).map(({ id }) => names.get(id)).join(', ') })
       : t('{name} ranks first at these weights.', { name: names.get(rank[0]!.id)! }))
       : t(result.status === 'no-weights' ? 'Give at least one criterion a positive weight to rank these products.'
@@ -348,7 +352,8 @@ function ComparisonBreakdown({ result, input, products, currency, title = 'Compa
     </div>
     <h4>{t('Why this result?')}</h4>
     <p>{t('The observed values set the scale for each criterion. Each product’s contribution depends on its position on that scale and the weight you chose. The table shows where the products trade off.')}</p>
-    <h4>{t('What happens if priorities change?')}</h4>
+    <details className="result-explanation">
+      <summary>{t('What happens if priorities change?')}</summary>
     {result.sensitivity.length > 0 ? <ul>{result.sensitivity.map(({ criterionId, weight, ranking }) => {
       const criterion = input.criteria.find(({ id }) => id === criterionId);
       return <li key={`${criterionId}-${weight}`}>{t('With {criterion} at weight {weight}, the order is {order}.', {
@@ -358,5 +363,6 @@ function ComparisonBreakdown({ result, input, products, currency, title = 'Compa
     })}</ul>
       : <p>{t(rank ? 'Changing one weight to 0 or 100 did not change the order in the scenarios with enough information.'
         : 'Sensitivity is shown once the products can be ranked.')}</p>}
+    </details>
   </section>;
 }

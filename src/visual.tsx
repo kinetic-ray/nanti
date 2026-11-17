@@ -1,0 +1,38 @@
+import { useState } from 'react';
+import { safeProductUrl } from '../shared/wishlist.js';
+import type { Item } from '../shared/wishlist.js';
+
+type Glyph = 'plus' | 'edit' | 'trash' | 'arrow' | 'person' | 'privacy' | 'compare' | 'clock' | 'check' | 'close' | 'bookmark';
+
+export function Icon({ name }: { name: Glyph }) {
+  return <span className={`icon icon-${name}`} aria-hidden="true" />;
+}
+
+export function BookmarkArt() {
+  return <div className="bookmark-art" aria-hidden="true"><span /><span /><span /></div>;
+}
+
+export function Loading({ label }: { label: string }) {
+  return <div role="status" className="loading-surface">
+    <span className="sr-only">{label}</span>
+    <div aria-hidden="true"><i /><i /><i /></div>
+  </div>;
+}
+
+function ProductPhoto({ src }: { src: string }) {
+  const [available, setAvailable] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return <img src={src} alt="" loading="lazy" decoding="async" className={available ? 'is-ready' : undefined}
+    onLoad={() => setAvailable(true)} onError={() => setFailed(true)} />;
+}
+
+export function ProductMedia({ item, listId }: { item: Item; listId: string }) {
+  const listing = item.url ? safeProductUrl(item.url) : null;
+  const supported = listing?.origin === 'https://www.ikea.com' &&
+    /^\/[a-z]{2}\/[a-z]{2}\/p\/[a-z0-9-]+-\d{8}\/?$/u.test(listing.pathname);
+  return <div aria-hidden="true" className="product-media">
+    <span>{Array.from(item.name)[0]?.toLocaleUpperCase()}</span>
+    {supported && <ProductPhoto key={listing.href} src={`/api/wishlists/${listId}/items/${item.id}/image`} />}
+  </div>;
+}
