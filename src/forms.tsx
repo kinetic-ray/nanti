@@ -135,8 +135,9 @@ export function ListForm({ list, close, save }: {
   );
 }
 
-export function ItemForm({ item, currency, close, save }: {
+export function ItemForm({ item, listId, currency, close, save }: {
   item?: Item;
+  listId: string;
   currency: Currency;
   close: () => void;
   save: (data: ItemWriteInput) => Promise<void>;
@@ -324,12 +325,12 @@ export function ItemForm({ item, currency, close, save }: {
             <button type="button" className="product-image-placeholder"
               aria-label="Tambah gambar (opsional), pilih dari galeri"
               disabled={busy || looking} onClick={() => uploadInput.current?.click()}>
-              {uploadedImage || (item?.imageKey && !imageFailed) || (preview?.imagePath && !imageFailed)
-                ? <img src={uploadedImage || (imageKey && item ? `/api/wishlists/${(item as Item & { wishlistId?: string }).wishlistId ?? ''}/items/${item.id}/uploaded-image` : '') || preview?.imagePath || ''}
+              {uploadedImage || (imageKey && item && !imageFailed) || (preview?.imagePath && !imageFailed)
+                ? <img src={uploadedImage || (imageKey && item ? `/api/wishlists/${listId}/items/${item.id}/uploaded-image` : '') || preview?.imagePath || ''}
                     alt="Product preview" onError={() => setImageFailed(true)} />
                 : <span aria-hidden="true">＋<small>Tambah gambar (opsional)</small></span>}
             </button>
-            {uploadedImage && <button type="button" className="product-image-remove"
+            {(uploadedImage || imageKey) && <button type="button" className="product-image-remove"
               onClick={() => { setUploadedImage(null); setImageKey(null); if (uploadInput.current) uploadInput.current.value = ''; }}>
               Hapus gambar
             </button>}
