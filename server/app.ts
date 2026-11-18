@@ -77,7 +77,8 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   // Public Shopee preview images are hosted on Shopee's image CDN.
   // Keep all other Helmet CSP protections and allow only the known CDN hosts.
   const imageSources = ["'self'", 'data:', 'https://*.susercontent.com',
-    'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id'];
+    'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id',
+    'https://*.tokopedia.net', 'https://tokopedia.net', 'https://*.tokopedia.com', 'https://tokopedia.com'];
   app.use(helmet(secureCookies ? {
     contentSecurityPolicy: { directives: { imgSrc: imageSources } },
   } : {
