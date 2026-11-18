@@ -1,6 +1,6 @@
 import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
-import { isIkeaMetadataLink } from '../shared/product-import.js';
+import { isIkeaMetadataLink, productMerchant } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import { currencies, parsePrice } from '../shared/wishlist.js';
 
@@ -13,7 +13,7 @@ export async function previewProduct(url: URL, request = fetch): Promise<string 
 export async function previewProductMetadata(url: URL, request = fetch) {
   // Shopee short links and product pages may expose public Open Graph metadata.
   // Only follow redirects within explicitly allowed Shopee domains; never fetch arbitrary destinations.
-  if (isShopeeHost(url.hostname)) return previewShopeeMetadata(url, request);
+  if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') return previewMarketplaceMetadata(url, request);
   if (!isIkeaMetadataLink(url)) return null;
 
   try {
@@ -112,16 +112,24 @@ function productOffers(data: unknown, url: URL): NonNullable<ProductImport['pric
 const shopeeHosts = new Set([
   's.shopee.co.id', 'shopee.co.id', 'shopee.com', 'shopee.sg',
   'shopee.com.my', 'shopee.co.th', 'shopee.vn', 'shopee.ph',
-  'shopee.com.br', 'shope.ee',
+  'shopee.com.br', 'shope.ee', 'www.shopee.co.id',
 ]);
 function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase()); }
 
-async function previewShopeeMetadata(initial: URL, request: typeof fetch) {
+function isMarketplaceHost(host: string, merchant: 'shopee' | 'tokopedia') {
+  return merchant === 'shopee' ? isShopeeHost(host) :
+    ['tokopedia.com', 'tokopedia.link', 'tk.tokopedia.com', 'vt.tokopedia.com', 'shop-id.tokopedia.com'].includes(host) ||
+    host.endsWith('.tokopedia.com');
+}
+
+async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
   try {
+    const merchant = productMerchant(initial.hostname);
+    if (merchant !== 'shopee' && merchant !== 'tokopedia') return null;
     let current = new URL(initial.href);
     current.hash = '';
     for (let hop = 0; hop < 4; hop++) {
-      if (current.protocol !== 'https:' || !isShopeeHost(current.hostname) ||
+      if (current.protocol !== 'https:' || !isMarketplaceHost(current.hostname, merchant) ||
           current.username || current.password || current.port) return null;
       const response = await request(current, {
         redirect: 'manual', signal: AbortSignal.timeout(3500),
@@ -200,7 +208,9 @@ async function previewShopeeMetadata(initial: URL, request: typeof fetch) {
           const host = parsed.hostname.toLowerCase();
           if (parsed.protocol === 'https:' && !parsed.username && !parsed.password &&
               (host === 'susercontent.com' || host.endsWith('.susercontent.com') ||
-               host === 'shopee.co.id' || host.endsWith('.shopee.co.id'))) {
+               host === 'shopee.co.id' || host.endsWith('.shopee.co.id') ||
+               (merchant === 'tokopedia' && (host === 'tokopedia.net' || host.endsWith('.tokopedia.net') ||
+                 host === 'tokopedia.com' || host.endsWith('.tokopedia.com'))))) {
             image = parsed.href.slice(0, 2048);
           }
         } catch { /* Invalid image URL. */ }
