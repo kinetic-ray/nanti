@@ -1,0 +1,34 @@
+name: Temporary Tokopedia shortlink diagnostic
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tokopedia-shortlink-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect redirect response without exposing tracking URLs
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          let url = new URL('https://tk.tokopedia.com/ZSp76BWQL/');
+          const allowed = host => host === 'tokopedia.com' || host.endsWith('.tokopedia.com') || host === 'tokopedia.link';
+          for (let i = 0; i < 5; i++) {
+            if (url.protocol !== 'https:' || !allowed(url.hostname)) {
+              console.log(JSON.stringify({hop:i,blockedHost:url.hostname,reason:'off-domain redirect'}));
+              break;
+            }
+            try {
+              const res = await fetch(url, {redirect:'manual',signal:AbortSignal.timeout(8000),headers:{accept:'text/html'}});
+              const location = res.headers.get('location');
+              const next = location ? new URL(location,url) : null;
+              console.log(JSON.stringify({hop:i,host:url.hostname,status:res.status,contentType:res.headers.get('content-type'),nextHost:next?.hostname ?? null}));
+              await res.body?.cancel();
+              if (!next || ![301,302,303,307,308].includes(res.status)) break;
+              url=next;
+            } catch (e) { console.log(JSON.stringify({hop:i,host:url.hostname,error:e?.name ?? 'error'}));break; }
+          }
+          NODE
