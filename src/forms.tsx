@@ -186,10 +186,28 @@ export function ItemForm({ item, listId, currency, close, save }: {
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Unable to process image.');
         context.drawImage(picture, 0, 0, canvas.width, canvas.height);
-        const compressed = canvas.toDataURL('image/jpeg', 0.68);
-        if (!compressed.startsWith('data:image/jpeg;base64,') || compressed.length > 250_000) {
-          throw new Error('Image is too large or could not be compressed.');
+        // Compress to the actual 195 KB upload limit rather than relying on
+        // a rough Base64 character threshold. Try smaller sizes for detailed photos.
+        let compressed = '';
+        let fits = false;
+        for (const edge of [640, 512, 400, 320]) {
+          const ratio = Math.min(1, edge / Math.max(picture.naturalWidth, picture.naturalHeight));
+          canvas.width = Math.max(1, Math.round(picture.naturalWidth * ratio));
+          canvas.height = Math.max(1, Math.round(picture.naturalHeight * ratio));
+          const resized = canvas.getContext('2d');
+          if (!resized) throw new Error('Unable to process image.');
+          resized.drawImage(picture, 0, 0, canvas.width, canvas.height);
+          for (const quality of [0.7, 0.55, 0.4]) {
+            compressed = canvas.toDataURL('image/jpeg', quality);
+            if (!compressed.startsWith('data:image/jpeg;base64,')) continue;
+            // Base64 represents three binary bytes per four encoded characters.
+            const encoded = compressed.slice('data:image/jpeg;base64,'.length);
+            const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+            if (Math.floor(encoded.length * 3 / 4) - padding <= 195_000) { fits = true; break; }
+          }
+          if (fits) break;
         }
+        if (!fits) throw new Error('Image is too large or could not be compressed.');
         setUploadedImage(compressed);
         setImageKey(null);
         setImageFailed(false);
