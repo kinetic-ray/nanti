@@ -178,7 +178,7 @@ export function ItemForm({ item, currency, close, save }: {
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
       const compressed = canvas.toDataURL('image/jpeg', 0.68);
-      if (compressed.length > 260_000) throw new Error('Image is too large after compression.');
+      if (compressed.length > 250_000) throw new Error('Image is too large after compression.');
       setUploadedImage(compressed);
       setImageKey(null);
       setError('');
@@ -253,6 +253,7 @@ export function ItemForm({ item, currency, close, save }: {
     try {
       if (uploadedImage) {
         const blob = await (await fetch(uploadedImage)).blob();
+        if (blob.size > 195_000) throw new Error('Image is too large after compression.');
         const { uploadUrl, key } = await api<{ uploadUrl: string; key: string }>('/uploads/product-image', { method: 'POST', data: { contentType: 'image/jpeg', size: blob.size } });
         const result = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
         if (!result.ok) throw new Error('Image upload failed. Try again.');
@@ -323,8 +324,8 @@ export function ItemForm({ item, currency, close, save }: {
             <button type="button" className="product-image-placeholder"
               aria-label="Tambah gambar (opsional), pilih dari galeri"
               disabled={busy || looking} onClick={() => uploadInput.current?.click()}>
-              {uploadedImage || (preview?.imagePath && !imageFailed)
-                ? <img src={uploadedImage || preview?.imagePath || ''}
+              {uploadedImage || (item?.imageKey && !imageFailed) || (preview?.imagePath && !imageFailed)
+                ? <img src={uploadedImage || (imageKey && item ? `/api/wishlists/${(item as Item & { wishlistId?: string }).wishlistId ?? ''}/items/${item.id}/uploaded-image` : '') || preview?.imagePath || ''}
                     alt="Product preview" onError={() => setImageFailed(true)} />
                 : <span aria-hidden="true">＋<small>Tambah gambar (opsional)</small></span>}
             </button>
