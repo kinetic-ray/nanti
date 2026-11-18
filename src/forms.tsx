@@ -152,7 +152,7 @@ export function ItemForm({ item, currency, close, save }: {
   const [importedName, setImportedName] = useState(false);
   const [importedPrice, setImportedPrice] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(item?.imageData ?? null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
@@ -160,15 +160,29 @@ export function ItemForm({ item, currency, close, save }: {
   const nameInput = useRef<HTMLInputElement>(null);
   const pastePending = useRef(false);
 
-  function chooseImage(file?: File) {
+  async function chooseImage(file?: File) {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
       setError('Choose a JPG, PNG or WebP image smaller than 2 MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === 'string') { setUploadedImage(reader.result); setError(''); } };
-    reader.readAsDataURL(file);
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Unable to process image.');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const compressed = canvas.toDataURL('image/jpeg', 0.68);
+      if (compressed.length > 260_000) throw new Error('Image is too large after compression.');
+      setUploadedImage(compressed);
+      setError('');
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
   }
 
   function setLink(value: string) {
@@ -235,7 +249,7 @@ export function ItemForm({ item, currency, close, save }: {
     }
     setBusy(true);
     try {
-      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity),
+      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageData: uploadedImage,
         ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
     } catch (failure) {
       setError(errorMessage(failure));
