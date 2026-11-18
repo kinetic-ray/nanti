@@ -152,7 +152,8 @@ export function ItemForm({ item, currency, close, save }: {
   const [importedName, setImportedName] = useState(false);
   const [importedPrice, setImportedPrice] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(item?.imageData ?? null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [imageKey, setImageKey] = useState<string | null>(item?.imageKey ?? null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
@@ -179,6 +180,7 @@ export function ItemForm({ item, currency, close, save }: {
       const compressed = canvas.toDataURL('image/jpeg', 0.68);
       if (compressed.length > 260_000) throw new Error('Image is too large after compression.');
       setUploadedImage(compressed);
+      setImageKey(null);
       setError('');
     } catch (failure) {
       setError(errorMessage(failure));
@@ -249,7 +251,17 @@ export function ItemForm({ item, currency, close, save }: {
     }
     setBusy(true);
     try {
-      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageData: uploadedImage,
+      if (uploadedImage) {
+        const blob = await (await fetch(uploadedImage)).blob();
+        const { uploadUrl, key } = await api<{ uploadUrl: string; key: string }>('/uploads/product-image', { method: 'POST', data: { contentType: 'image/jpeg', size: blob.size } });
+        const result = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        if (!result.ok) throw new Error('Image upload failed. Try again.');
+        setImageKey(key);
+        await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageKey: key,
+          ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
+        return;
+      }
+      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageKey,
         ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
     } catch (failure) {
       setError(errorMessage(failure));
@@ -317,7 +329,7 @@ export function ItemForm({ item, currency, close, save }: {
                 : <span aria-hidden="true">＋<small>Tambah gambar (opsional)</small></span>}
             </button>
             {uploadedImage && <button type="button" className="product-image-remove"
-              onClick={() => { setUploadedImage(null); if (uploadInput.current) uploadInput.current.value = ''; }}>
+              onClick={() => { setUploadedImage(null); setImageKey(null); if (uploadInput.current) uploadInput.current.value = ''; }}>
               Hapus gambar
             </button>}
           </div>
