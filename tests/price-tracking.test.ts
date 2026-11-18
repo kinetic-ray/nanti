@@ -45,7 +45,7 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
     'https://store.example.test/?redirect=https%3A%2F%2Fother.example.test']) {
     await guest.post('/api/products/import').set(mutation).send({ url }).expect(400);
   }
-  expect(preview).toHaveBeenCalledTimes(3);
+  expect(preview).toHaveBeenCalledTimes(4);
 });
 
 it('returns a reviewable authorized preview while keeping external image URLs out of the response', async () => {
