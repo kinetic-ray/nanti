@@ -30,7 +30,7 @@ model Item {
   url          String?  @db.VarChar(2048)
   priceMinor   Int?
   quantity     Int
-  imageData    String?  @db.MediumText
+  imageKey     String?  @db.VarChar(255)
   createdAt    DateTime @default(now())
   wishlist     Wishlist @relation(fields: [ownerId, wishlistId], references: [ownerId, id], onDelete: Cascade)
   assessments  Assessment[]
