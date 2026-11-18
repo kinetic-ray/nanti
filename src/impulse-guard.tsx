@@ -108,7 +108,7 @@ export function ImpulseGuard({ path, name, currency, close, drafts }: {
     {result ? <section className="screening-result">
       <div className="decision-result screening-summary" data-screening={screening?.outcome} data-outcome={result.concern}>
         {screeningCopy && <p className="screening-label">
-          <Icon name={screening.outcome === 'green' ? 'check' : screening.outcome === 'yellow' ? 'clock' : 'bookmark'} />
+          <Icon name={screeningCopy === screeningOutcomes.green ? 'check' : screeningCopy === screeningOutcomes.yellow ? 'clock' : 'bookmark'} />
           {t(screeningCopy![0])}
         </p>}
         <h3 ref={heading} tabIndex={-1}>{t(screeningCopy ? screeningCopy[1] : outcomes[result.concern][0])}</h3>
