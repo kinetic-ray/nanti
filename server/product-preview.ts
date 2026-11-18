@@ -162,8 +162,36 @@ async function previewShopeeMetadata(initial: URL, request: typeof fetch) {
         const content = node.attrs.find(a => a.name === 'content')?.value.trim();
         if (key && content && !tags.has(key)) tags.set(key, content);
       }
-      const title = (tags.get('og:title') ?? tags.get('twitter:title') ?? '').slice(0, 160) || null;
-      const candidate = tags.get('og:image') ?? tags.get('twitter:image');
+      // Prefer public social preview tags, then structured Product data if available.
+      let structuredTitle: string | null = null;
+      let structuredImage: string | null = null;
+      for (const node of head?.childNodes ?? []) {
+        if (!('tagName' in node) || node.tagName !== 'script' ||
+            !node.attrs.some(a => a.name === 'type' && a.value.toLowerCase() === 'application/ld+json')) continue;
+        const content = node.childNodes[0];
+        if (!content || !('value' in content)) continue;
+        try {
+          const parsed: unknown = JSON.parse(content.value);
+          const entries: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+          for (const entry of entries) {
+            if (!entry || typeof entry !== 'object') continue;
+            const graph = '@graph' in entry && Array.isArray(entry['@graph']) ? entry['@graph'] : [];
+            for (const value of [entry, ...graph]) {
+              if (!value || typeof value !== 'object' || !('@type' in value)) continue;
+              const kind = value['@type'];
+              if (kind !== 'Product' && !(Array.isArray(kind) && kind.includes('Product'))) continue;
+              if ('name' in value && typeof value.name === 'string') structuredTitle ??= value.name;
+              const photos = 'image' in value ? value.image : null;
+              const photo = Array.isArray(photos) ? photos[0] : photos;
+              if (typeof photo === 'string') structuredImage ??= photo;
+            }
+          }
+        } catch { /* Ignore malformed structured data. */ }
+      }
+      const title = (tags.get('og:title') ?? tags.get('twitter:title') ??
+        structuredTitle ?? '').slice(0, 160) || null;
+      const candidate = tags.get('og:image') ?? tags.get('twitter:image') ??
+        tags.get('twitter:image:src') ?? structuredImage;
       let image: string | null = null;
       if (candidate) {
         try {

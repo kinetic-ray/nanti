@@ -74,9 +74,15 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   const account = consumer && accountRoutes(consumer.accounts, consumer.providers, secureCookies, cookieName);
   app.disable('x-powered-by');
   if (trustedProxy) app.set('trust proxy', trustedProxy);
-  app.use(helmet(secureCookies ? {} : {
+  // Public Shopee preview images are hosted on Shopee's image CDN.
+  // Keep all other Helmet CSP protections and allow only the known CDN hosts.
+  const imageSources = ["'self'", 'data:', 'https://*.susercontent.com',
+    'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id'];
+  app.use(helmet(secureCookies ? {
+    contentSecurityPolicy: { directives: { imgSrc: imageSources } },
+  } : {
     strictTransportSecurity: false,
-    contentSecurityPolicy: { directives: { upgradeInsecureRequests: null } },
+    contentSecurityPolicy: { directives: { upgradeInsecureRequests: null, imgSrc: imageSources } },
   }));
   api.use((_req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -217,7 +223,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   api.post('/products/import', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const merchant = productMerchant(url.hostname);
-    const canLookUp = isIkeaMetadataLink(url);
+    const canLookUp = isIkeaMetadataLink(url) || merchant === 'shopee';
     const meta = canLookUp && lookupMetadata ? await lookupMetadata(url) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
     const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
