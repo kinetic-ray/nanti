@@ -14,6 +14,10 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const heading = useId();
+  const closeRef = useRef(close);
+  const busyRef = useRef(busy);
+  closeRef.current = close;
+  busyRef.current = busy;
   useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -33,8 +37,24 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
     viewport?.addEventListener('scroll', updateViewport);
     window.addEventListener('resize', updateViewport);
     dialog.showModal();
+    // Give each open dialog its own same-page history entry. Android Back
+    // closes the topmost dialog instead of leaving the application.
+    const marker = crypto.randomUUID();
+    const state = { ...((history.state && typeof history.state === 'object') ? history.state : {}), __nantiDialog: marker };
+    history.pushState(state, '', location.href);
+    let consumed = false;
+    const onPopState = () => {
+      if (consumed) return;
+      consumed = true;
+      if (!busyRef.current) closeRef.current();
+      else history.pushState(state, '', location.href);
+    };
+    window.addEventListener('popstate', onPopState);
     if (focusHeading) titleRef.current?.focus();
     return () => {
+      window.removeEventListener('popstate', onPopState);
+      // Explicit close (button/save) must also remove the synthetic entry.
+      if (!consumed && history.state?.__nantiDialog === marker) history.back();
       viewport?.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('scroll', updateViewport);
       window.removeEventListener('resize', updateViewport);
