@@ -205,7 +205,13 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
               // Only trust an explicit single Product Offer for the current listing.
               // Aggregate/variant price ranges must not become a fabricated exact price.
               const rawOffers = 'offers' in value ? value.offers : null;
-              if (rawOffers && !Array.isArray(rawOffers) && typeof rawOffers === 'object' &&
+              const listingMatches = !('url' in value) || (typeof value.url === 'string' && (() => {
+                try {
+                  const listed = new URL(value.url, current.origin);
+                  return listed.origin === current.origin && listed.pathname.replace(/\/$/u, '') === current.pathname.replace(/\/$/u, '');
+                } catch { return false; }
+              })());
+              if (listingMatches && rawOffers && !Array.isArray(rawOffers) && typeof rawOffers === 'object' &&
                   '@type' in rawOffers && rawOffers['@type'] === 'Offer' &&
                   'price' in rawOffers && 'priceCurrency' in rawOffers) {
                 const offer = parseOffer(rawOffers.price, rawOffers.priceCurrency);
