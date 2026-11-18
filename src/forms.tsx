@@ -7,6 +7,9 @@ import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 
+const dialogHistoryStack: string[] = [];
+let pendingDialogHistoryCleanup = 0;
+
 export function Dialog({ title, busy, close, children, className, focusHeading = false, headerAction, closeOnCancel = true }: {
   title: string; busy: boolean; close: () => void; children: ReactNode;
   className?: string; focusHeading?: boolean; headerAction?: ReactNode; closeOnCancel?: boolean;
@@ -14,6 +17,10 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const heading = useId();
+  const closeRef = useRef(close);
+  const busyRef = useRef(busy);
+  closeRef.current = close;
+  busyRef.current = busy;
   useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -33,8 +40,35 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
     viewport?.addEventListener('scroll', updateViewport);
     window.addEventListener('resize', updateViewport);
     dialog.showModal();
+    // Give each open dialog its own same-page history entry. Android Back
+    // closes the topmost dialog instead of leaving the application.
+    const marker = crypto.randomUUID();
+    const state = { ...((history.state && typeof history.state === 'object') ? history.state : {}), __nantiDialog: marker };
+    history.pushState(state, '', location.href);
+    dialogHistoryStack.push(marker);
+    let consumed = false;
+    const onPopState = () => {
+      if (pendingDialogHistoryCleanup > 0) {
+        pendingDialogHistoryCleanup--;
+        return;
+      }
+      if (consumed || dialogHistoryStack[dialogHistoryStack.length - 1] !== marker) return;
+      if (!busyRef.current) {
+        consumed = true;
+        closeRef.current();
+      } else history.pushState(state, '', location.href);
+    };
+    window.addEventListener('popstate', onPopState);
     if (focusHeading) titleRef.current?.focus();
     return () => {
+      window.removeEventListener('popstate', onPopState);
+      const index = dialogHistoryStack.lastIndexOf(marker);
+      if (index !== -1) dialogHistoryStack.splice(index, 1);
+      // Explicit close (button/save) must also remove the synthetic entry.
+      if (!consumed && history.state?.__nantiDialog === marker) {
+        if (dialogHistoryStack.length > 0) pendingDialogHistoryCleanup++;
+        history.back();
+      }
       viewport?.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('scroll', updateViewport);
       window.removeEventListener('resize', updateViewport);
