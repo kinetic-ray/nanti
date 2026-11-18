@@ -113,7 +113,7 @@ export function AccountDialog({ status, notice, close, update }: {
     </> :
       !account ? <section className="account-signin-shell">
         <div className="account-signin-emblem" aria-hidden="true">N</div>
-        <h3>{t('Your wishlist, wherever you go.')}</h3>
+        <h3>Your wishlist, wherever you go.</h3>
         <p>{t('Keep your wishlists and purchase decisions with you across devices.')}</p>
         <div className="account-providers">{signInShell}</div>
         {!status.available.length && <p className="account-signin-note" role="status">
