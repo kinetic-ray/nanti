@@ -33,7 +33,7 @@ export function ProductMedia({ item, listId }: { item: Item; listId: string }) {
   const supported = listing && isIkeaMetadataLink(listing);
   return <div aria-hidden="true" className="product-media">
     <span>{Array.from(item.name)[0]?.toLocaleUpperCase()}</span>
-    {item.imageData && <ProductPhoto key={item.id} src={item.imageData} />}
+    {item.imageKey && <ProductPhoto key={item.id} src={item.imageData} />}
     {!item.imageData && supported && <ProductPhoto key={listing.href} src={`/api/wishlists/${listId}/items/${item.id}/image`} />}
   </div>;
 }
