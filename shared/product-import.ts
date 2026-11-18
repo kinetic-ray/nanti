@@ -19,7 +19,7 @@ export function isIkeaMetadataLink(url: URL) {
 
 const shopee = new Set(['shopee.co.id', 'shopee.com', 'shopee.sg', 'shopee.com.my', 'shopee.co.th',
   'shopee.vn', 'shopee.ph', 'shopee.com.br', 'shope.ee', 's.shopee.co.id']);
-const tokopedia = new Set(['tokopedia.com', 'tokopedia.link']);
+const tokopedia = new Set(['tokopedia.com', 'tokopedia.link', 'tk.tokopedia.com', 'vt.tokopedia.com', 'shop-id.tokopedia.com']);
 const redirect = /^(?:url|next|redirect|redirect_url|redirect_uri|continue|target|to|dest|destination|return_to)$/iu;
 const destination = /^\s*(?:[a-z][a-z0-9+.-]*:|[/\\]{2})/iu;
 
@@ -36,7 +36,7 @@ export function safeImportUrl(value: string) {
 export function productMerchant(host: string): Merchant {
   const hostname = host.replace(/^www\./u, '').replace(/\.+$/u, '');
   if (shopee.has(hostname)) return 'shopee';
-  if (tokopedia.has(hostname)) return 'tokopedia';
+  if (tokopedia.has(hostname) || hostname.endsWith('.tokopedia.com')) return 'tokopedia';
   if (hostname === 'ikea.com' || hostname === 'ikea.co.id') return 'ikea';
   return 'other';
 }
