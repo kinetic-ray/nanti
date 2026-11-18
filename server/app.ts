@@ -41,7 +41,7 @@ const itemInput = z.strictObject({
   url: productUrl.transform((url) => url.href).nullable(),
   priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
   quantity: z.number().int().min(1).max(999),
-  imageData: z.union([z.null(), z.string().max(260_000).regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/)]).optional(),
+  imageKey: z.string().max(255).nullable().optional(),
   priceSource: z.literal('imported_unverified').optional(),
 });
 
@@ -122,7 +122,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
     }
     res.status(403).json({ error: 'Request could not be verified.' });
   });
-  api.use(express.json({ limit: '300kb' }));
+  api.use(express.json({ limit: '12kb' }));
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
   if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
