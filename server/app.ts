@@ -223,12 +223,12 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   api.post('/products/import', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const merchant = productMerchant(url.hostname);
-    const canLookUp = isIkeaMetadataLink(url) || merchant === 'shopee';
+    const canLookUp = isIkeaMetadataLink(url) || merchant === 'shopee' || merchant === 'tokopedia';
     const meta = canLookUp && lookupMetadata ? await lookupMetadata(url) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
     const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
     const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
-      merchant === 'shopee' ? meta?.image ?? null : null;
+      (merchant === 'shopee' || merchant === 'tokopedia') ? meta?.image ?? null : null;
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: url.href, name,
       ...(imagePath && { imagePath }),
