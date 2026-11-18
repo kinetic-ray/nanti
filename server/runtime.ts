@@ -13,6 +13,7 @@ import { prismaWishlists } from './prisma-wishlists.js';
 import { createProductMedia } from './product-media.js';
 import { createImageStorage } from './image-storage.js';
 import { previewProduct, previewProductMetadata } from './product-preview.js';
+import { productMerchant } from '../shared/product-import.js';
 
 const runtimeConfig = z.object({
   DATABASE_URL: z.string().startsWith('mysql://'),
@@ -83,11 +84,16 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     admin: env.NANTI_ADMIN_USERNAME && env.NANTI_ADMIN_PASSWORD_HASH ? {
       username: env.NANTI_ADMIN_USERNAME, passwordHash: env.NANTI_ADMIN_PASSWORD_HASH,
     } : undefined,
-    preview: ikeaMetadataAllowed ? previewProduct : async () => null,
-    lookupMetadata: ikeaMetadataAllowed ? async (url) => {
+    // Marketplace previews use their own strict domain allowlist; IKEA remains opt-in.
+    preview: async (url) => (ikeaMetadataAllowed || ['shopee', 'tokopedia'].includes(productMerchant(url.hostname)))
+      ? previewProduct(url) : null,
+    lookupMetadata: async (url) => {
+      const merchant = productMerchant(url.hostname);
+      if (!ikeaMetadataAllowed && merchant !== 'shopee' && merchant !== 'tokopedia') return null;
       const metadata = await previewProductMetadata(url);
-      return metadata && { ...metadata, price: env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted' ? metadata.price : null };
-    } : undefined,
+      return metadata && { ...metadata, price: merchant === 'ikea' &&
+        env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted' ? metadata.price : null };
+    },
     productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
     imageStorage: createImageStorage(environment),
     secret: env.SESSION_SECRET,
