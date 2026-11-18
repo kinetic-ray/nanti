@@ -22,7 +22,7 @@ jobs:
               break;
             }
             try {
-              const res = await fetch(url, {redirect:'manual',signal:AbortSignal.timeout(8000),headers:{accept:'text/html'}});
+              const res = await fetch(url, {redirect:'manual',signal:AbortSignal.timeout(15000),headers:{accept:'text/html', 'user-agent':'Mozilla/5.0 (compatible; NantiLinkPreview/1.0)'}});
               const location = res.headers.get('location');
               const next = location ? new URL(location,url) : null;
               console.log(JSON.stringify({hop:i,host:url.hostname,status:res.status,contentType:res.headers.get('content-type'),nextHost:next?.hostname ?? null}));
