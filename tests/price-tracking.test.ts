@@ -20,7 +20,6 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
   const guest = request.agent(app);
   await guest.post('/api/session').set(mutation).send({}).expect(200);
   for (const [url, merchant] of [
-    ['https://shopee.co.id/item-i.12.34?sp_atk=keep', 'shopee'],
     ['https://tokopedia.link/fixture', 'tokopedia'],
     ['https://www.ikea.co.id/en/products/fixture', 'ikea'],
     [link, 'other'],
@@ -29,7 +28,12 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
       merchant, hostname: new URL(url).hostname, originalUrl: url, name: null, status: 'manual_required',
     });
   }
-  expect(preview).not.toHaveBeenCalled();
+  expect(preview).toHaveBeenCalledTimes(1);
+  const shopee = 'https://shopee.co.id/item-i.12.34?sp_atk=keep';
+  await guest.post('/api/products/import').set(mutation).send({ url: shopee }).expect(200, {
+    merchant: 'shopee', hostname: 'shopee.co.id', originalUrl: shopee,
+    name: 'Fixture retailer title', status: 'name_available',
+  });
   const ikea = 'https://www.ikea.com/us/en/p/fixture-12345678/?utm_source=user';
   await guest.post('/api/products/import').set(mutation).send({ url: ikea }).expect(200, {
     merchant: 'ikea', hostname: 'www.ikea.com', originalUrl: ikea, name: 'Fixture retailer title', status: 'name_available',
