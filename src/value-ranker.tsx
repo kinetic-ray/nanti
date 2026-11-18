@@ -1,288 +1,217 @@
-import { useEffect, useRef, useState } from 'react';
-import { comparisonAlternatives, comparisonLimits, evaluateComparison } from '../shared/value-ranker.js';
-import type { ComparisonInput, ComparisonResult, Criterion, Rating } from '../shared/value-ranker.js';
+import { useEffect, useId, useRef, useState } from 'react';
+import { isPriority } from '../shared/intelligence.js';
 import type { SavedAssessment } from '../shared/intelligence.js';
-import type { Wishlist } from '../shared/wishlist.js';
+import { priorityFactors, priorityLimit, rankPriorities } from '../shared/priorities.js';
+import type { PriorityFactor, PriorityInput, PriorityRatings, PriorityResult } from '../shared/priorities.js';
+import type { ComparisonInput, ComparisonResult, Criterion } from '../shared/value-ranker.js';
+import type { Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { History, ReviewDetails, ToolDialog, useAssessmentHistory } from './intelligence-ui.js';
 import { useLocale } from './locale.js';
 import type { Message } from './messages.js';
 
-const presets = [
-  { name: 'Unit price', kind: 'price' },
-  { name: 'Durability', kind: 'benefit' },
-  { name: 'Features', kind: 'benefit' },
-  { name: 'Performance', kind: 'benefit' },
-  { name: 'Maintenance cost', kind: 'cost' },
-  { name: 'Warranty', kind: 'benefit' },
-  { name: 'Personal preference', kind: 'benefit' },
-  { name: 'Long-term usefulness', kind: 'benefit' },
-] as const;
+const labels = {
+  usefulness: 'Usefulness',
+  urgency: 'Urgency',
+  affordability: 'Fits your budget',
+  preference: 'How much you want it',
+} as const;
+const options = {
+  usefulness: ['Rarely useful', 'Useful sometimes', 'Useful often'],
+  urgency: ['Can wait', 'Useful soon', 'Needed soon'],
+  affordability: ['Too tight', 'Not sure yet', 'Fits my budget'],
+  preference: ['Nice to have', 'I like it', 'I really want it'],
+} as const;
+
+type ComparisonRecord = Extract<SavedAssessment, { kind: 'comparison' }>;
+type Choice = Wishlist['items'][number] & { wishlist: WishlistSummary; ratings: Partial<PriorityRatings> };
 
 function criterionName(criterion: Criterion, t: (key: Message) => string) {
   const preset = criterion.preset ?? (criterion.kind === 'price' && criterion.name === 'Unit price' ? 'Unit price' : undefined);
   return preset ? t(preset) : criterion.name;
 }
 
-export function ValueRanker({ list, path, close, drafts }: {
-  list: Wishlist; path: string; close: () => void; drafts: Map<string, ComparisonInput>;
+export function ValueRanker({ list, lists, path, close }: {
+  list: Wishlist; lists: WishlistSummary[]; path: string; close: () => void;
 }) {
-  const { t, date, number, language, error: localError } = useLocale();
-  const [input, setInput] = useState<ComparisonInput>(() => {
-    const draft = drafts.get(path);
-    if (draft) {
-      const available = new Set(list.items.map(({ id }) => id));
-      return { ...draft, alternatives: draft.alternatives.filter(({ itemId }) => available.has(itemId)) };
-    }
-    return { alternatives: [], criteria: [{ id: crypto.randomUUID(), weight: 1, ...presets[0], preset: 'Unit price' }] };
-  });
-  const [step, setStep] = useState(0);
-  const [showResult, setShowResult] = useState(false);
-  const [preset, setPreset] = useState('');
-  const [viewed, setViewed] = useState<Extract<SavedAssessment, { kind: 'comparison' }> | null>(null);
-  const [previous, setPrevious] = useState<Extract<SavedAssessment, { kind: 'comparison' }> | null>(null);
-  const [liveItems, setLiveItems] = useState(list.items);
+  const { t, money, date, number, error: localError } = useLocale();
+  const [source, setSource] = useState(list.id);
+  const [loaded, setLoaded] = useState<Wishlist | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [sourceError, setSourceError] = useState('');
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const [emphasis, setEmphasis] = useState<PriorityFactor | null>(null);
+  const [step, setStep] = useState<'choose' | 'rate' | 'result'>('choose');
+  const [viewed, setViewed] = useState<ComparisonRecord | null>(null);
   const [busy, setBusy] = useState(false);
+  const [outdated, setOutdated] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState<Message | ''>('');
-  const focus = useRef<HTMLHeadingElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const wishlistLabel = useId();
   const history = useAssessmentHistory(`${path}/comparisons`);
-  const result = viewed?.result ?? (showResult ? evaluateComparison(input.criteria, comparisonAlternatives(input, liveItems)) : null);
-  const products = new Map(liveItems.map(({ id, name }) => [id, name]));
-  const selected = new Set(input.alternatives.map(({ itemId }) => itemId));
+  const current = loaded?.id === source ? loaded : source === list.id ? list : null;
+  const complete = choices.length > 0 && choices.every(({ ratings }) => priorityFactors.every((key) => ratings[key] !== undefined));
+  const input: PriorityInput | null = complete ? { mode: 'priorities', emphasis,
+    alternatives: choices.map(({ wishlist, id, ratings }) => ({ wishlistId: wishlist.id, itemId: id, ratings: ratings as PriorityRatings })),
+  } : null;
+  const names = new Map((viewed ? viewed.snapshot?.products ?? list.items : choices).map(({ id, name }) => [id, name]));
 
-  useEffect(() => { drafts.set(path, input); }, [drafts, path, input]);
+  useEffect(() => {
+    if (!source || source === list.id) return;
+    const controller = new AbortController();
+    api<Wishlist>(`/wishlists/${source}`, { signal: controller.signal }).then(setLoaded, (failure) => {
+      if (!controller.signal.aborted) setSourceError(errorMessage(failure));
+    });
+    return () => controller.abort();
+  }, [source, list.id, attempt]);
 
-  function edit(update: (current: ComparisonInput) => ComparisonInput) {
-    setInput(update);
-    setStatus('');
-    setError('');
+  function focusStep() {
+    requestAnimationFrame(() => heading.current?.focus());
   }
 
-  function selectProduct(itemId: string, checked: boolean) {
-    edit((current) => ({ ...current, alternatives: checked ? [...current.alternatives, { itemId, ratings: {} }]
-      : current.alternatives.filter((entry) => entry.itemId !== itemId) }));
-  }
-
-  function changeCriterion(id: string, update: Partial<Pick<Criterion, 'name' | 'weight' | 'kind'>>) {
-    edit((current) => ({ ...current, criteria: current.criteria.map((entry) => entry.id === id
-      ? { ...entry, ...update, ...(update.name !== undefined && { preset: undefined }) } : entry) }));
-  }
-
-  function weightInput(criterion: Criterion, index: number) {
-    return <label key={criterion.id}>{t('Weight for {name}', {
-      name: criterionName(criterion, t).trim() || t('criterion {n}', { n: number(index + 1) }),
-    })}
-      <input type="number" min={0} max={comparisonLimits.weight} step={1} value={criterion.weight} onChange={(event) => {
-        const weight = event.target.valueAsNumber;
-        if (Number.isInteger(weight) && weight >= 0 && weight <= comparisonLimits.weight) changeCriterion(criterion.id, { weight });
-        if (event.target.value === '') changeCriterion(criterion.id, { weight: 0 });
-      }} />
-    </label>;
-  }
-
-  function removeCriterion(criterionId: string) {
-    edit((current) => ({
-      criteria: current.criteria.filter(({ id }) => id !== criterionId),
-      alternatives: current.alternatives.map(({ itemId, ratings }) => ({
-        itemId, ratings: Object.fromEntries(Object.entries(ratings).filter(([id]) => id !== criterionId)),
-      })),
-    }));
-  }
-
-  function addCriterion() {
-    const template = presets.find(({ name }) => name === preset);
-    const criterion: Criterion = { id: crypto.randomUUID(), weight: 1, preset: template?.name, ...(template ?? { name: '', kind: 'benefit' }) };
-    edit((current) => ({ ...current, criteria: [...current.criteria, criterion] }));
-    setPreset('');
-  }
-
-  function changeRating(itemId: string, criterionId: string, rating: Rating) {
-    edit((current) => ({ ...current, alternatives: current.alternatives.map((entry) => entry.itemId === itemId
-      ? { ...entry, ratings: { ...entry.ratings, [criterionId]: rating } } : entry) }));
-  }
-
-  function go(next: number) {
+  function go(next: typeof step) {
     setStep(next);
+    setViewed(null);
     setError('');
-    requestAnimationFrame(() => focus.current?.focus());
+    setStatus('');
+    focusStep();
   }
 
   async function save() {
-    setError('');
+    if (!input) return;
     setBusy(true);
+    setError('');
     try {
-      const expectedProducts = liveItems.filter(({ id }) => selected.has(id))
-        .map(({ id, priceMinor, quantity }) => ({ id, priceMinor, quantity }));
-      const saved = await history.save({ ...input, expectedProducts });
+      const saved = await history.save({ ...input, expectedProducts: choices.map(({ id, priceMinor, quantity }) => ({ id, priceMinor, quantity })) });
       if (saved.kind === 'comparison') setViewed(saved);
-      setStatus('Comparison saved.');
-      requestAnimationFrame(() => focus.current?.focus());
+      setStatus('Decision saved.');
+      focusStep();
     } catch (failure) {
       const message = errorMessage(failure);
       setError(message);
-      if (message === 'The saved products changed. Check again before saving.') {
-        try {
-          const current = await api<Wishlist>(`/wishlists/${list.id}`);
-          const available = new Set(current.items.map(({ id }) => id));
-          setLiveItems(current.items);
-          setInput((value) => ({ ...value, alternatives: value.alternatives.filter(({ itemId }) => available.has(itemId)) }));
-          setShowResult(false);
-          setStep(0);
-          requestAnimationFrame(() => focus.current?.focus());
-        } catch (refreshFailure) { setError(errorMessage(refreshFailure)); }
-      }
+      if (message === 'The saved products changed. Check again before saving.' ||
+          message === 'This wishlist, product, or assessment could not be found.') setOutdated(true);
     } finally {
       setBusy(false);
     }
   }
 
-  async function beginReview() {
-    if (!viewed) return;
+  async function reselect() {
     setBusy(true);
-    setError('');
     try {
-      const current = await api<Wishlist>(`/wishlists/${list.id}`);
-      const available = new Set(current.items.map(({ id }) => id));
-      setLiveItems(current.items);
-      setInput({ ...viewed.input, alternatives: viewed.input.alternatives.filter(({ itemId }) => available.has(itemId)) });
-      setPrevious(viewed); setViewed(null); setShowResult(false); setStatus(''); go(0);
-    } catch (failure) { setError(errorMessage(failure)); }
-    finally { setBusy(false); }
+      const ids = [...new Set([...choices.map(({ wishlist }) => wishlist.id), source])];
+      const fresh = await Promise.all(ids.map(async (id) => {
+        return api<Wishlist>(`/wishlists/${id}`).catch(() => null);
+      }));
+      setChoices(choices.flatMap(({ wishlist, id, ratings }) => {
+        const currentList = fresh.find((entry) => entry?.id === wishlist.id);
+        const entry = currentList?.items.find((item) => item.id === id);
+        return currentList && entry ? [{ ...entry, wishlist: currentList, ratings }] : [];
+      }));
+      setLoaded(fresh.find((entry) => entry?.id === source) ?? null);
+      setOutdated(false);
+      go('choose');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return <ToolDialog title={t('Value Ranker')} context={list.name} module="comparison" version={result?.version} close={close} busy={busy} wide>
-    {previous && <details className="review-details">
-      <summary>{t('Previous result')}</summary>
-      <ReviewDetails changes={[...(previous.review ?? []), ...(previous.input.alternatives.length !== selected.size ||
-        previous.input.alternatives.some(({ itemId }) => !selected.has(itemId)) ? [{ kind: 'selection' as const }] : [])]}
-        currency={list.currency} />
-      <ComparisonBreakdown result={previous.result} input={previous.input}
-        products={new Map(previous.snapshot?.products.map(({ id, name }) => [id, name]) ?? products)}
-        currency={list.currency} />
-    </details>}
-    {previous && !viewed && <p className="hint">{t('Your previous result stays in history. Confirm the details before checking again.')}</p>}
-    {viewed ? <div className="decision-section decision-snapshot">
-      <h3 ref={focus} tabIndex={-1}>{t('Saved comparison')}</h3>
-      <p className="hint">{t('Saved {date}', { date: date(viewed.createdAt) })}</p>
+  const result = !viewed && step === 'result' && input ? rankPriorities(input) : null;
+  return <ToolDialog title={t('Compare priorities')} context={viewed ? list.name : t('Your wishlists')} module="comparison"
+    version={viewed?.version} close={close} busy={busy}>
+    {viewed ? <section className="decision-section">
+      <h3 ref={heading} tabIndex={-1}>{t('Previous decision')}</h3>
+      <p className="hint">{t('Last checked {date}', { date: date(viewed.createdAt) })}</p>
+      {isPriority(viewed) ? <PriorityOutcome result={viewed.result} names={names} /> :
+        <ComparisonBreakdown result={viewed.result} input={viewed.input} products={names} currency={list.currency} />}
       <ReviewDetails changes={viewed.review} currency={list.currency} />
-      {viewed.input.alternatives.some(({ itemId }) => !products.has(itemId)) &&
-        <p>{t('Some products have been removed. Their saved values are still shown below.')}</p>}
+      <button type="button" className="primary" onClick={() => go('choose')}>{t('Check again')}</button>
+    </section> : step === 'choose' ? <section className="decision-section">
+      <h3 ref={heading} tabIndex={-1}>{t('What are you deciding between?')}</h3>
+      <p className="hint">{t('Choose up to {n} items from your wishlists. One item is fine, too.', { n: number(priorityLimit) })}</p>
+      {lists.length > 1 && <label><span id={wishlistLabel}>{t('Wishlist')}</span><select
+        aria-labelledby={wishlistLabel} value={source} onChange={(event) => {
+        setSource(event.target.value); setSourceError(''); setLoaded(null);
+      }}>
+        {lists.map((wishlist) => <option key={wishlist.id} value={wishlist.id}>{wishlist.name}</option>)}
+      </select></label>}
+      {sourceError && <div><p role="alert" className="error">{localError(sourceError)}</p>
+        <button type="button" onClick={() => { setSourceError(''); setAttempt((value) => value + 1); }}>{t('Try again')}</button></div>}
+      {!current && !sourceError && <p role="status">{t('Working…')}</p>}
+      {current?.items.length === 0 && <p className="hint">{t('No products yet')}</p>}
+      <div className="product-options">
+        {current?.items.map((item) => {
+          const chosen = choices.some(({ id }) => id === item.id);
+          return <label key={item.id} className="check-label">
+            <input type="checkbox" checked={chosen} disabled={!chosen && choices.length >= priorityLimit}
+              onChange={() => setChoices((previous) => chosen ? previous.filter(({ id }) => id !== item.id) :
+                [...previous, { ...item, wishlist: current, ratings: {} }])} />
+            <span>{item.name}</span>
+          </label>;
+        })}
+      </div>
+      {choices.length > 0 && <p className="hint">{t('Selected: {items}', { items: choices.map(({ name }) => name).join(', ') })}</p>}
+      <button type="button" className="primary" disabled={!choices.length} onClick={() => go('rate')}>{t('Set priorities')}</button>
+    </section> : step === 'rate' ? <form className="decision-section" onSubmit={(event) => { event.preventDefault(); go('result'); }}>
+      <h3 ref={heading} tabIndex={-1}>{t('How does each item fit?')}</h3>
+      {choices.map((item) => <fieldset className="priority-item" key={item.id}>
+        <legend>{item.name}</legend>
+        <p className="hint">{item.wishlist.name} · {item.priceMinor === null ? t('Price unknown')
+          : money((BigInt(item.priceMinor) * BigInt(item.quantity)).toString(), item.wishlist.currency)}</p>
+        <div className="priority-ratings">{priorityFactors.map((factor) => <label key={factor}>{t(labels[factor])}
+          <select required value={item.ratings[factor] ?? ''} onChange={(event) => {
+            const rating = event.target.value === '' ? undefined : Number(event.target.value);
+            setChoices((previous) => previous.map((choice) => choice.id === item.id
+              ? { ...choice, ratings: { ...choice.ratings, [factor]: rating } } : choice));
+          }}>
+            <option value="">{t('Choose an answer')}</option>
+            {options[factor].map((option, index) => <option key={option} value={index}>{t(option)}</option>)}
+          </select>
+        </label>)}</div>
+      </fieldset>)}
+      <label>{t('What matters most?')}<select value={emphasis ?? ''} onChange={(event) =>
+        setEmphasis((event.target.value || null) as PriorityFactor | null)}>
+        <option value="">{t('Everything equally')}</option>
+        {priorityFactors.map((factor) => <option key={factor} value={factor}>{t(labels[factor])}</option>)}
+      </select></label>
       <div className="actions">
-        <button type="button" disabled={busy} onClick={() => { setViewed(null); setPrevious(null); setStatus(''); go(step); }}>{t('Back to my comparison')}</button>
-        <button type="button" disabled={busy || liveItems.length < 2} onClick={() => void beginReview()}>{t('Recheck with current data')}</button>
+        <button type="button" onClick={() => go('choose')}>{t('Back')}</button>
+        <button className="primary" disabled={!complete}>{t('See priorities')}</button>
       </div>
-    </div> : <form className="decision-section" noValidate onSubmit={(event) => {
-      event.preventDefault();
-      if (selected.size < 2 || (step > 0 && (!input.criteria.length || input.criteria.some(({ name }) => !name.trim())))) return;
-      if (step === 2) setShowResult(true);
-      go(Math.min(step + 1, 3));
-    }}>
-      <div className="decision-progress">
-        <p className="hint">{t('Step {n} of {total}', { n: number(step + 1), total: number(4) })}</p>
-        <progress aria-label={t('Assessment progress')} value={step + 1} max={4} />
-      </div>
-      {step === 0 ? <>
-        <h3 ref={focus} tabIndex={-1}>{t('Choose products')}</h3>
-        <p className="hint">{liveItems.length < 2 ? t('Add at least two products to start a comparison. You can still open saved results below.')
-          : t('Select two to {max} from this wishlist.', { max: number(comparisonLimits.alternatives) })}</p>
-        <fieldset className="product-options" aria-label={t('Products to compare')} disabled={busy || liveItems.length < 2}>
-          {liveItems.map(({ id, name }) => <label key={id} className="check-label">
-            <input type="checkbox" checked={selected.has(id)} disabled={!selected.has(id) && selected.size >= comparisonLimits.alternatives}
-              onChange={(event) => selectProduct(id, event.target.checked)} />{name}
-          </label>)}
-        </fieldset>
-      </> : step === 3 ? <>
-        <h3 ref={focus} tabIndex={-1}>{t('Adjust your priorities')}</h3>
-        <fieldset className="weight-list" aria-label={t('Comparison weights')} disabled={busy}>
-          {input.criteria.map(weightInput)}
-        </fieldset>
-      </> : step === 1 ? <>
-        <h3 ref={focus} tabIndex={-1}>{t('Choose criteria and weights')}</h3>
-        <p className="hint">{t('A larger weight gives a criterion more influence. Use 0 to leave it out of the ranking.')}</p>
-        <fieldset className="criterion-list" disabled={busy}>
-          {input.criteria.map((criterion, index) => <fieldset key={criterion.id} className="criterion">
-            <legend>{criterionName(criterion, t) || t('Custom criterion')}</legend>
-            {criterion.kind === 'price' ? <p className="hint">{t('Uses the saved unit prices in {currency}.', { currency: list.currency })}</p> : <>
-              <label>{t('Name')}<input required maxLength={comparisonLimits.name} value={criterionName(criterion, t)}
-                onChange={(event) => changeCriterion(criterion.id, { name: event.target.value })} /></label>
-              <label>{t('Direction')}<select value={criterion.kind} onChange={(event) => changeCriterion(criterion.id,
-                { kind: event.target.value === 'cost' ? 'cost' : 'benefit' })}>
-                <option value="benefit">{t('Benefit · higher is better')}</option><option value="cost">{t('Cost · lower is better')}</option>
-              </select></label>
-            </>}
-            {weightInput(criterion, index)}
-            <button type="button" onClick={() => removeCriterion(criterion.id)}
-              aria-label={t('Remove criterion {name}', { name: criterionName(criterion, t) || number(index + 1) })}>{t('Remove')}</button>
-          </fieldset>)}
-          {input.criteria.length < comparisonLimits.criteria && <div className="actions add-criterion">
-            <label>{t('Add a criterion')}
-              <select value={preset} onChange={(event) => setPreset(event.target.value)}>
-                <option value="">{t('Choose a criterion')}</option>
-                {presets.filter((entry) => !input.criteria.some(({ name, kind }) => name === entry.name || (kind === 'price' && entry.kind === 'price')))
-                  .map(({ name }) => <option key={name} value={name}>{t(name)}</option>)}
-                <option value="custom">{t('Custom criterion')}</option>
-              </select>
-            </label>
-            <button type="button" disabled={!preset} onClick={addCriterion}>{t('Add criterion')}</button>
-          </div>}
-        </fieldset>
-      </> : <>
-        <h3 ref={focus} tabIndex={-1}>{t('Enter ratings and evidence')}</h3>
-        <p className="hint">{t('Use the same 0–{max} scale for each product on a criterion. Leave a rating blank if it’s unknown.', { max: number(comparisonLimits.rating) })}</p>
-        {input.criteria.every(({ kind }) => kind === 'price') ? <p>{t('Saved unit prices are used automatically.')}</p> :
-          <fieldset className="criterion-list" disabled={busy}>
-            {input.alternatives.map(({ itemId, ratings }) => <fieldset key={itemId} className="criterion">
-              <legend>{products.get(itemId)}</legend>
-              {input.criteria.filter(({ kind }) => kind !== 'price').map((criterion) => {
-                const { id, kind } = criterion;
-                const name = criterionName(criterion, t);
-                const rating = ratings[id] ?? { note: '', value: null };
-                return <div key={id} className="rating-fields">
-                  <label>{name} <span className="optional">{t(kind === 'cost' ? '(lower is better)' : '(higher is better)')}</span>
-                    <input lang={language} type="number" min={0} max={comparisonLimits.rating} step="any" value={rating.value ?? ''}
-                      onChange={(event) => {
-                        const value = event.target.valueAsNumber;
-                        if (Number.isFinite(value) && value >= 0 && value <= comparisonLimits.rating) changeRating(itemId, id, { ...rating, value });
-                        if (!event.target.value) changeRating(itemId, id, { ...rating, value: null });
-                      }} />
-                  </label>
-                  <label>{t('Evidence for {name}', { name })} <span className="optional">{t('(optional)')}</span>
-                    <input maxLength={comparisonLimits.note} value={rating.note}
-                      onChange={(event) => changeRating(itemId, id, { ...rating, note: event.target.value })} />
-                  </label>
-                </div>;
-              })}
-            </fieldset>)}
-          </fieldset>}
-      </>}
+    </form> : result && <section className="decision-result">
+      <h3 ref={heading} tabIndex={-1}>{t(choices.length === 1 ? 'Your priority check' : 'What could come first')}</h3>
+      <PriorityOutcome result={result} names={names} />
       <div className="actions">
-        {step === 3 && <button type="button" disabled={busy} onClick={() => go(1)}>{t('Edit criteria')}</button>}
-        {step > 0 && <button type="button" disabled={busy} onClick={() => go(step - 1)}>{t(step === 3 ? 'Edit ratings' : 'Back')}</button>}
-        {step < 3 && <button className="primary" disabled={busy || selected.size < 2 ||
-          (step > 0 && (!input.criteria.length || input.criteria.some(({ name }) => !name.trim())))}>
-          {t(step === 0 ? 'Choose criteria' : step === 1 ? 'Enter ratings' : 'See comparison')}
-        </button>}
-        {step === 3 && <button type="button" className="primary" disabled={busy || history.busy || selected.size < 2 ||
-          !input.criteria.length || input.criteria.some(({ name }) => !name.trim())} onClick={() => void save()}>{t('Save comparison')}</button>}
+        <button type="button" disabled={busy} onClick={() => outdated ? void reselect() : go('rate')}>
+          {t(outdated ? 'Check again' : 'Edit answers')}
+        </button>
+        {!outdated && <button type="button" className="primary" disabled={busy || history.busy} onClick={() => void save()}>{t('Save decision')}</button>}
       </div>
-    </form>}
-    {result && <ComparisonBreakdown result={result} input={viewed?.input ?? input}
-      products={viewed?.snapshot ? new Map(viewed.snapshot.products.map(({ id, name }) => [id, name])) : products}
-      currency={list.currency} title={previous ? 'Current result' : 'Comparison'} />}
+    </section>}
     {error && <p role="alert" className="error">{localError(error)}</p>}
-    <p className="decision-status" role="status">{status && t(status)}</p>
-    <History history={history} name="Saved comparisons" initialOpen={liveItems.length < 2} disabled={busy} onDelete={(id) => {
-      if (viewed?.id === id) setViewed(null);
-      if (previous?.id === id) setPrevious(null);
-      setStatus('Comparison deleted.');
-    }} onSelect={(record) => {
-      if (record.kind === 'comparison') {
-        setViewed(record); setPrevious(null); setStatus(''); setError('');
-        requestAnimationFrame(() => focus.current?.focus());
-      }
-    }} />
+    <p role="status" className="decision-status">{status && t(status)}</p>
+    <History history={history} name="Previous decisions" disabled={busy}
+      onSelect={(record) => { if (record.kind === 'comparison') { setViewed(record); setStatus(''); setError(''); focusStep(); } }}
+      onDelete={(id) => { if (viewed?.id === id) go('choose'); setStatus('Assessment deleted.'); }} />
   </ToolDialog>;
+}
+
+function PriorityOutcome({ result, names }: { result: PriorityResult; names: Map<string, string> }) {
+  const { t } = useLocale();
+  return <>
+    {result.ranking.length > 1 && result.ranking[0]?.score === result.ranking[1]?.score &&
+      <p>{t('Your top choices are tied. Look at what matters most to you before deciding.')}</p>}
+    <ul className="priority-results">{result.ranking.map((entry) => <li key={entry.id}>
+      <strong>{result.ranking.length > 1 && <>{entry.rank}. </>}{names.get(entry.id) ?? t('Product')}</strong>
+      {entry.strengths.length > 0 && <p>{t('What stands out: {factors}', {
+        factors: entry.strengths.map((key) => t(labels[key])).join(', '),
+      })}</p>}
+      <p>{t(entry.needsTime ? 'Give your budget a closer look before buying.' : entry.score === 0 || entry.strengths.length <= 1
+        ? 'It can stay on your wishlist until it feels like a priority.' : 'Keep it in mind when you’re ready to buy.')}</p>
+    </li>)}</ul>
+    <p className="hint">{t('Based on your answers and what matters to you. You can change your mind.')}</p>
+  </>;
 }
 
 function ComparisonBreakdown({ result, input, products, currency, title = 'Comparison' }: {

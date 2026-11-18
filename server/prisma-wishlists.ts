@@ -44,7 +44,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
     async remove(ownerId, id) {
       return (await db.wishlist.deleteMany({ where: { id, dataOwner: authorizedOwner(ownerId) } })).count > 0;
     },
-    async addItem(ownerId, wishlistId, data) {
+    async addItem(ownerId, wishlistId, { priceSource, ...data }) {
       try {
         return await db.$transaction(async (tx) => {
           const list = await tx.wishlist.findFirst({
@@ -56,7 +56,8 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
             data: { ownerId: list.ownerId, wishlistId, ...data, productIdentityId }, select: { id: true },
           });
           if (data.priceMinor !== null) {
-            await recordObservation(tx, { ownerId: list.ownerId, wishlistId, itemId: created.id }, data.priceMinor, list.currency, 'manual');
+            await recordObservation(tx, { ownerId: list.ownerId, wishlistId, itemId: created.id }, data.priceMinor, list.currency,
+              priceSource ?? 'manual');
           }
           return true;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
@@ -65,7 +66,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
         throw error;
       }
     },
-    async updateItem(ownerId, wishlistId, id, data) {
+    async updateItem(ownerId, wishlistId, id, { priceSource, ...data }) {
       return db.$transaction(async (tx) => {
         const current = await lockPriceItem(tx, ownerId, wishlistId, id);
         if (!current) return false;
@@ -74,7 +75,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
         await tx.item.update({ where: { id }, data: { ...data, ...identity } });
         if (data.priceMinor !== null && data.priceMinor !== current.priceMinor) {
           await recordObservation(tx, { ownerId: current.ownerId, wishlistId, itemId: id },
-            data.priceMinor, current.wishlist.currency, 'manual');
+            data.priceMinor, current.wishlist.currency, priceSource ?? 'manual');
         }
         return true;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });

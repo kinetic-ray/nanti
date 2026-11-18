@@ -1,27 +1,45 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { currencies, parsePrice } from '../shared/wishlist.js';
-import type { Currency, Item, ItemInput, WishlistSummary } from '../shared/wishlist.js';
+import type { Currency, Item, ItemWriteInput, WishlistSummary } from '../shared/wishlist.js';
 import { safeImportUrl } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 
-export function Dialog({ title, busy, close, children, className, focusHeading = false }: {
+export function Dialog({ title, busy, close, children, className, focusHeading = false, headerAction }: {
   title: string; busy: boolean; close: () => void; children: ReactNode;
-  className?: string; focusHeading?: boolean;
+  className?: string; focusHeading?: boolean; headerAction?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const heading = useId();
   useLayoutEffect(() => {
     const dialog = ref.current;
+    if (!dialog) return;
     const trigger = document.activeElement;
-    dialog?.showModal();
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      if (!viewport || viewport.scale !== 1) {
+        dialog.style.removeProperty('--dialog-view-height');
+        dialog.style.removeProperty('--dialog-keyboard-inset');
+        return;
+      }
+      dialog.style.setProperty('--dialog-view-height', `${viewport.height}px`);
+      dialog.style.setProperty('--dialog-keyboard-inset', `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`);
+    };
+    updateViewport();
+    viewport?.addEventListener('resize', updateViewport);
+    viewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+    dialog.showModal();
     if (focusHeading) titleRef.current?.focus();
     return () => {
-      dialog?.close();
-      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+      viewport?.removeEventListener('resize', updateViewport);
+      viewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+      dialog.close();
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
     };
   }, [focusHeading]);
   return (
@@ -30,8 +48,11 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
       event.preventDefault();
       if (!busy) close();
     }}>
-      <h2 ref={titleRef} id={heading} tabIndex={focusHeading ? -1 : undefined}>{title}</h2>
-      {children}
+      <div className="dialog-header">
+        <h2 ref={titleRef} id={heading} tabIndex={focusHeading ? -1 : undefined}>{title}</h2>
+        {headerAction}
+      </div>
+      <div className="dialog-content">{children}</div>
     </dialog>
   );
 }
@@ -84,23 +105,38 @@ export function ItemForm({ item, currency, close, save }: {
   item?: Item;
   currency: Currency;
   close: () => void;
-  save: (data: ItemInput) => Promise<void>;
+  save: (data: ItemWriteInput) => Promise<void>;
 }) {
-  const { t, decimal, error: localError } = useLocale();
+  const { t, decimal, money, language, error: localError } = useLocale();
   const [url, setUrl] = useState(item?.url ?? '');
   const [name, setName] = useState(item?.name ?? '');
   const [price, setPrice] = useState(item?.priceMinor == null ? '' : (item.priceMinor / 100).toFixed(2));
   const [quantity, setQuantity] = useState(item?.quantity.toString() ?? '1');
   const [lookup, setLookup] = useState('');
-  const [merchant, setMerchant] = useState('');
+  const [preview, setPreview] = useState<ProductImport | null>(null);
+  const [showDetails, setShowDetails] = useState(Boolean(item));
+  const [importedName, setImportedName] = useState(false);
+  const [importedPrice, setImportedPrice] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const pastePending = useRef(false);
 
-  async function findProduct() {
+  function setLink(value: string) {
+    setUrl(value);
     setLookup('');
-    setMerchant('');
-    const parsed = safeImportUrl(url.trim());
+    setPreview(null);
+    if (importedPrice) { setImportedPrice(false); setPrice(''); }
+    if (importedName) { setImportedName(false); setName(''); }
+  }
+
+  async function findProduct(value: string, replaced = false) {
+    setLookup('');
+    setPreview(null);
+    setImageFailed(false);
+    const parsed = safeImportUrl(value.trim());
     if (!parsed) {
       setLookup('Enter a valid product link or fill in the details below.');
       return;
@@ -110,23 +146,31 @@ export function ItemForm({ item, currency, close, save }: {
       const result = await api<ProductImport>('/products/import', {
         method: 'POST', data: { url: parsed.href },
       });
-      const names = { shopee: 'Shopee', tokopedia: 'Tokopedia', ikea: 'IKEA', other: result.hostname };
-      setMerchant(names[result.merchant]);
-      if (result.status === 'name_available' && result.name) {
-        setName((current) => current.trim() ? current : result.name ?? '');
-        setLookup('Product name found. Review the details before saving.');
-      } else {
-        setLookup('Details are unavailable for this link. Enter them below.');
+      setPreview(result);
+      if (result.name && (!name.trim() || (replaced && importedName))) {
+        setName(result.name);
+        setImportedName(true);
       }
+      if (result.price?.currency === currency && (!price.trim() || (replaced && importedPrice))) {
+        const value = (result.price.priceMinor / 100).toFixed(2);
+        setPrice(language === 'id' ? value.replace('.', ',') : value);
+        setImportedPrice(true);
+      }
+      setLookup(result.status === 'manual_required' ? 'The link is ready to save. Add a name to finish.'
+        : 'Review the product details before saving.');
     } catch (failure) {
       setLookup(errorMessage(failure));
     } finally {
+      setShowDetails(true);
       setLooking(false);
+      if (!item) requestAnimationFrame(() => nameInput.current?.focus());
     }
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (looking || busy) return;
+    if (!showDetails && url.trim()) { await findProduct(url); return; }
     setError('');
     if (!name.trim()) { setError('Enter a product name.'); return; }
     if (!/^\d+$/.test(quantity) || Number(quantity) < 1 || Number(quantity) > 999) {
@@ -144,7 +188,8 @@ export function ItemForm({ item, currency, close, save }: {
     }
     setBusy(true);
     try {
-      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity) });
+      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity),
+        ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -153,33 +198,66 @@ export function ItemForm({ item, currency, close, save }: {
   }
 
   return (
-    <Dialog title={t(item ? 'Edit product' : 'Add product')} busy={busy} close={close}>
-      <form noValidate onSubmit={submit}>
-        <label>{t('Product link')} <span className="optional">{t('(optional)')}</span>
-          <input type="url" value={url} maxLength={2048} placeholder="https://"
-            disabled={looking} onChange={(event) => { setUrl(event.target.value); setLookup(''); setMerchant(''); }} />
+    <Dialog title={t(item ? 'Edit product' : 'Add product')} busy={busy} close={close} className="import-dialog">
+      <form noValidate autoComplete="off" onSubmit={submit}>
+        <label>{t(item ? 'Product link' : 'Paste a product link')}
+          <input type="url" name="product-url" value={url} maxLength={2048} placeholder="https://…" spellCheck={false}
+            disabled={looking || busy} onChange={(event) => {
+              const value = event.target.value;
+              const pasted = pastePending.current;
+              pastePending.current = false;
+              setLink(value);
+              if (pasted && safeImportUrl(value.trim())) void findProduct(value, true);
+            }} onPaste={() => {
+              if (item) return;
+              pastePending.current = true;
+              // If the browser made no change, do not treat the next keystroke as paste.
+              setTimeout(() => { pastePending.current = false; }, 0);
+            }} />
         </label>
-        <button type="button" className="lookup" disabled={looking || busy || !url.trim()} onClick={findProduct}>
-          {t(looking ? 'Looking up…' : 'Check product link')}
-        </button>
-        <div className="lookup-status" role="status">
-          {merchant && <p className="import-merchant">{t('Store detected: {merchant}', { merchant })}</p>}
-          {lookup && <p className="hint">{localError(lookup)}</p>}
-        </div>
-        <label>{t('Product name')}<input required maxLength={160} value={name}
-          onChange={(event) => setName(event.target.value)} /></label>
-        <div className="fields">
+        {!showDetails && <p className="hint">{t('Use a link from Shopee, Tokopedia, IKEA, or another store.')}</p>}
+        {(!preview || preview.originalUrl !== url) && <div className="actions">
+          <button type="button" className={showDetails ? 'lookup' : 'primary'} disabled={looking || busy || !url.trim()}
+            onClick={() => void findProduct(url)}>{t(looking ? 'Looking up…' : 'Check product link')}</button>
+          {!showDetails && <button type="button" onClick={() => {
+            setShowDetails(true);
+            requestAnimationFrame(() => nameInput.current?.focus());
+          }} disabled={looking}>
+            {t('Enter details myself')}
+          </button>}
+        </div>}
+        {(lookup || looking) && <p className="hint" role="status">{looking ? t('Looking up…') : localError(lookup)}</p>}
+        {preview && <div className={preview.status === 'manual_required' ? 'import-fallback' : 'import-preview'}>
+          {preview.imagePath && !imageFailed && <img src={preview.imagePath} alt="" width="80" height="64"
+            decoding="async" onError={() => setImageFailed(true)} />}
+          <div>
+            <p className="hint">{t('Store detected: {merchant}', { merchant: {
+              shopee: 'Shopee', tokopedia: 'Tokopedia', ikea: 'IKEA', other: preview.hostname,
+            }[preview.merchant] })}</p>
+            {preview.name && <strong>{preview.name}</strong>}
+            {preview.price && <p>{money(preview.price.priceMinor, preview.price.currency)}</p>}
+            {preview.status !== 'manual_required' && <p className="hint">{t('From the store page · unverified')}</p>}
+            {preview.price && preview.price.currency !== currency &&
+              <p className="hint">{t('The store uses {currency}. Enter a price in your wishlist’s currency if you want to save one.',
+                { currency: preview.price.currency })}</p>}
+          </div>
+        </div>}
+        {showDetails && <>
+          <label>{t('Product name')}<input ref={nameInput} name="product-name" required maxLength={160} value={name} disabled={looking || busy}
+            onChange={(event) => { setName(event.target.value); setImportedName(false); }} /></label>
+          <div className="fields">
           <label>{t('Unit price ({currency})', { currency })} <span className="optional">{t('(optional)')}</span>
-            <input inputMode="decimal" maxLength={10} value={price}
-              onChange={(event) => setPrice(event.target.value)} />
+            <input name="unit-price" inputMode="decimal" maxLength={10} value={price} disabled={looking || busy}
+              onChange={(event) => { setPrice(event.target.value); setImportedPrice(false); }} />
           </label>
-          <label>{t('Quantity')}<input type="number" min={1} max={999} step={1} required value={quantity}
+          <label>{t('Quantity')}<input name="quantity" type="number" min={1} max={999} step={1} required value={quantity} disabled={looking || busy}
             onChange={(event) => setQuantity(event.target.value)} /></label>
-        </div>
+          </div>
+        </>}
         {error && <p role="alert" className="error">{localError(error)}</p>}
         <div className="form-actions">
           <button type="button" disabled={busy} onClick={close}>{t('Cancel')}</button>
-          <button className="primary" disabled={busy || looking}>{t(busy ? 'Saving…' : 'Save product')}</button>
+          {showDetails && <button className="primary" disabled={busy || looking}>{t(busy ? 'Saving…' : 'Save product')}</button>}
         </div>
       </form>
     </Dialog>

@@ -3,6 +3,7 @@ export type Currency = typeof currencies[number];
 
 export type WishlistSummary = { id: string; name: string; currency: Currency };
 export type ItemInput = { name: string; url: string | null; priceMinor: number | null; quantity: number };
+export type ItemWriteInput = ItemInput & { priceSource?: 'imported_unverified' };
 export type Item = ItemInput & { id: string };
 export type Wishlist = WishlistSummary & {
   items: Item[];

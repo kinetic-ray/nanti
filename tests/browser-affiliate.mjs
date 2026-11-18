@@ -52,8 +52,9 @@ let activeHref;
 async function addProduct(name, url) {
   await button(shopper, 'Tambah produk').click();
   const form = modal(shopper, 'Tambah produk');
+  await button(form, 'Isi sendiri').click();
   await form.getByLabel('Nama produk', { exact: true }).fill(name);
-  if (url) await form.getByLabel(/^Link produk/u).fill(url);
+  if (url) await form.getByLabel('Tempel tautan produk').fill(url);
   await button(form, 'Simpan produk').click();
   await show(shopper.getByRole('heading', { name, exact: true }));
 }

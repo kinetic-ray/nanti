@@ -45,10 +45,16 @@ async function add(name, price, url) {
   await button(page, 'Tambah produk').click();
   const form = modal('Tambah produk');
   if (url) {
-    await form.getByLabel(/Link produk/).fill(url);
-    await button(form, 'Cek link produk').click();
+    const field = form.getByLabel('Tempel tautan produk');
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL });
+    await page.evaluate(value => navigator.clipboard.writeText(value), url);
+    await field.focus();
+    await page.keyboard.press('Control+V');
     await visible(form.getByText('Toko terdeteksi: Shopee', { exact: true }));
     assert.equal(await form.getByLabel('Nama produk').inputValue(), '');
+    assert.equal(await field.inputValue(), url);
+  } else {
+    await button(form, 'Isi sendiri').click();
   }
   await form.getByLabel('Nama produk').fill(name);
   await form.getByLabel(/Harga satuan/).fill(price);
@@ -69,6 +75,32 @@ try {
   list = (await (await page.request.get('/api/wishlists')).json()).find(entry => entry.name === 'MVP browser fixture');
   await add('Lampu manual', '60000,50');
   await add('Lampu dari Shopee', '100000,25', listing);
+  const ikea = 'https://www.ikea.com/us/en/p/fixture-light-12345678/';
+  const imagePath = '/api/products/import/image?url=' + encodeURIComponent(ikea);
+  await page.route('**/api/products/import', route => route.fulfill({ json: {
+    merchant: 'ikea', hostname: 'www.ikea.com', originalUrl: ikea, name: 'Lampu fixture IKEA',
+    status: 'details_available', price: { priceMinor: 1500050, currency: 'IDR' }, imagePath,
+  } }), { times: 1 });
+  await page.route('**/api/products/import/image?*', route => route.fulfill({
+    contentType: 'image/png',
+    body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF1sAAAAASUVORK5CYII=', 'base64'),
+  }), { times: 1 });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await button(page, 'Tambah produk').click();
+  const imported = modal('Tambah produk');
+  await imported.getByLabel('Tempel tautan produk').fill(ikea);
+  await button(imported, 'Cek link produk').click();
+  await visible(imported.getByText('Lampu fixture IKEA', { exact: true }));
+  const photo = imported.locator('.import-preview img');
+  await photo.evaluate(image => image.decode());
+  assert.equal(await imported.getByLabel('Nama produk').inputValue(), 'Lampu fixture IKEA');
+  assert.equal(await imported.getByLabel(/Harga satuan/).inputValue(), '15000,50');
+  await visible(imported.getByText('Dari halaman toko · belum terverifikasi', { exact: true }).first());
+  await axis(390);
+  if (artifacts) await page.screenshot({ path: join(artifacts, 'import-review-390.png') });
+  await button(imported, 'Simpan produk').click();
+  await visible(page.getByRole('heading', { name: 'Lampu fixture IKEA', exact: true }));
+  await page.setViewportSize({ width: 1280, height: 900 });
   await button(page, 'Edit Lampu manual').click();
   const edit = modal('Edit produk');
   await edit.getByLabel('Jumlah', { exact: true }).fill('2');
@@ -80,14 +112,13 @@ try {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await button(page, 'Cek kesiapan beli wishlist').click();
-  const timing = modal('Cek kesiapan keuangan');
-  for (const [label, value] of [['Dana yang tersedia', '300000'], ['Tagihan dan kebutuhan wajib', '0'], ['Dana cadangan', '0']]) {
-    await timing.getByLabel(label, { exact: true }).fill(value);
-  }
-  await button(timing, 'Cek kesiapan beli').click();
-  await visible(timing.getByRole('heading', { name: 'Dana cukup', exact: true }));
-  await button(timing, 'Simpan cek kesiapan').click();
-  await visible(timing.getByText('Cek kesiapan sudah disimpan.', { exact: true }));
+  const timing = modal('Cek kesiapan beli');
+  assert.equal(await timing.getByLabel('Dana yang tersedia', { exact: true }).isVisible(), false);
+  await button(timing, 'Aman').click();
+  await visible(timing.getByRole('heading', { name: 'Kebutuhan penting masih aman', exact: true }));
+  await visible(timing.getByText('Hasil ini mengikuti jawabanmu. Nanti belum menghitung anggaranmu.', { exact: true }));
+  await button(timing, 'Simpan keputusan').click();
+  await visible(timing.getByText('Keputusan sudah disimpan.', { exact: true }));
   await escape();
 
   await button(page, 'Bantu putuskan untuk Lampu dari Shopee').click();
@@ -138,7 +169,7 @@ try {
   await alerts.getByText('Belum dibaca', { exact: true }).waitFor({ state: 'hidden' });
   await escape();
   await button(page, 'Cek kesiapan beli wishlist').click();
-  await timing.getByText('Cek kesiapan tersimpan', { exact: true }).click();
+  await timing.locator('summary').filter({ hasText: /^Keputusan sebelumnya$/u }).click();
   await visible(timing.getByText('Perlu dicek ulang', { exact: true }));
   await escape();
   console.log('PASS mobile price entry, truthful provenance, target alert, original link fallback and assessment freshness');

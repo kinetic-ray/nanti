@@ -1,4 +1,6 @@
-import { factorsForImpulseVersion, impulseFactors, impulseRules, impulseVersion } from './impulse.js';
+import { buyingReasonsVersion, factorsForImpulseVersion, impulseFactors, impulseRules, impulseVersion } from './impulse.js';
+import { priorityVersion } from './priorities.js';
+import { quickTimingVersion } from './quick-timing.js';
 import { timingVersion } from './purchase-timing.js';
 
 export const intelligenceModules = ['impulse', 'comparison', 'timing'] as const;
@@ -72,6 +74,15 @@ const original = {
 // Keep released entries here when documenting a new engine version.
 const versions: Record<IntelligenceModule, readonly Methodology[]> = {
   impulse: [{
+    ...original.impulse, title: 'Check buying reasons', version: buyingReasonsVersion,
+    inputs: 'Four answers about the discount, what you own, how often you expect to use it, and whether it can wait.',
+    rules: [
+      'Each answer that suggests pausing counts as one point. Zero or one point suggests fewer reasons to pause, two suggests giving it some thought, and three or four suggests giving it time.',
+      'With fewer than three answers or enough uncertainty to change the result, the check says that a few things are still unclear.',
+      'A saved pause records the selected period and review date. A month means the same calendar day next month, or its last day if shorter. Dates use UTC.',
+    ],
+    limitations: 'Nanti chose these questions, points, and waiting options as a reflection aid. No fixed waiting period can determine whether you need a product.',
+  }, {
     ...original.impulse, version: impulseVersion,
     inputs: 'Your answers about a specific need, existing alternatives, offers, social pressure, research, waiting, and planning. You can also pick a waiting period.',
     rules: [
@@ -79,8 +90,25 @@ const versions: Record<IntelligenceModule, readonly Methodology[]> = {
       `Low is below ${impulseRules.moderateAt}, Moderate starts at ${impulseRules.moderateAt}, and High starts at ${impulseRules.highAt} points. At least ${impulseRules.minimumAnswered} answers are required. If unanswered questions could change the band, the result is Insufficient information.`,
     ],
   }, original.impulse],
-  comparison: [original.comparison],
+  comparison: [{
+    ...original.comparison, title: 'Compare priorities', version: priorityVersion,
+    inputs: 'Your ratings for usefulness, urgency, budget fit, and preference across up to six items from your wishlists.',
+    rules: [
+      'Answers count for zero, one, or two points. If you choose one priority that matters most, its points count twice.',
+      'Items with higher totals come first. Equal totals tie. With one item, Nanti shows its strengths and a next step.',
+      'Budget fit uses your answer. Prices are shown in their original currencies. Nanti does not convert or directly compare prices across currencies.',
+    ],
+    limitations: 'This reflects your answers and Nanti’s scoring choices. It doesn’t measure objective value. Commissions and sponsorships are excluded.',
+  }, original.comparison],
   timing: [{
+    ...original.timing, title: 'Check purchase readiness', version: quickTimingVersion,
+    inputs: 'Your answer about covering essentials and the saved prices and quantities for the product or wishlist.',
+    rules: [
+      'Safe, a bit tight, and unsure each suggest a different next step. No balances or expenses are required or inferred.',
+      'Known prices are multiplied by quantities. If a price is missing, the amount shown is a known subtotal, and the total remains incomplete.',
+    ],
+    limitations: 'This is a self-reported check. The detailed check uses a separate budgeting method when you choose to enter figures.',
+  }, {
     ...original.timing, version: timingVersion,
     inputs: original.timing.inputs + ' A wishlist check also uses your included products, quantities, and alternative groups.',
     rules: [

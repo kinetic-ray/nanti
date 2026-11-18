@@ -1,14 +1,17 @@
 import { createHmac } from 'node:crypto';
-import { impulseVersion } from '../shared/impulse.js';
+import { buyingReasonsVersion } from '../shared/impulse.js';
+import { isPriority, isQuickTiming } from '../shared/intelligence.js';
 import type { AssessmentSnapshot, ReviewChange, SavedAssessment, TimingPlanInput } from '../shared/intelligence.js';
 import { includedProducts } from '../shared/purchase-plan.js';
 import type { PurchasePlan } from '../shared/purchase-plan.js';
 import { timingVersion } from '../shared/purchase-timing.js';
 import { comparisonVersion } from '../shared/value-ranker.js';
-import type { Item } from '../shared/wishlist.js';
+import { priorityVersion } from '../shared/priorities.js';
+import { quickTimingVersion } from '../shared/quick-timing.js';
+import type { Currency, Item } from '../shared/wishlist.js';
 import type { FinancialFingerprints, SaveIntent, StoredAssessment } from './intelligence.js';
 
-const versions = { impulse: impulseVersion, comparison: comparisonVersion, timing: timingVersion };
+const versions = { impulse: buyingReasonsVersion, comparison: comparisonVersion, timing: timingVersion };
 const moneyFields = ['liquidMinor', 'obligationsMinor', 'reserveMinor', 'monthlyMinor'] as const;
 const planningFields = ['purchaseMinor', 'extraMinor', 'targetDate'] as const;
 
@@ -25,8 +28,9 @@ export function fingerprintFinances(secret: string, ownerId: string, input: Timi
     [field, digest(secret, 'assessment-financial-field', [ownerId, field, input[field] ?? null])]));
 }
 
-export function productSnapshot(items: Item[]): AssessmentSnapshot {
-  return { version: 1, products: items.map(({ id, name, priceMinor, quantity }) => ({ id, name, priceMinor, quantity })) };
+export function productSnapshot(items: (Item & { currency?: Currency })[]): AssessmentSnapshot {
+  return { version: 1, products: items.map(({ id, name, priceMinor, quantity, currency }) =>
+    ({ id, name, priceMinor, quantity, ...(currency && { currency }) })) };
 }
 
 export function validatePlan(items: Item[], plan: PurchasePlan) {
@@ -65,25 +69,30 @@ function plannedIds(plan: PurchasePlan) {
 export function assessmentChanges(record: SavedAssessment, items: Item[], coolingOffDays?: number | null,
   proposedPlan?: PurchasePlan): ReviewChange[] {
   const changes: ReviewChange[] = [];
-  if (record.version !== versions[record.kind]) changes.push({ kind: 'methodology' });
-  if (record.kind === 'impulse' && coolingOffDays !== undefined && coolingOffDays !== record.result.coolingOffDays) {
+  const currentVersion = isPriority(record) ? priorityVersion : isQuickTiming(record) ? quickTimingVersion : versions[record.kind];
+  if (record.version !== currentVersion) changes.push({ kind: 'methodology' });
+  if (record.kind === 'impulse' && !('period' in record.result) &&
+      coolingOffDays !== undefined && coolingOffDays !== record.result.coolingOffDays) {
     changes.push({ kind: 'preference' });
   }
   if (!record.snapshot) return [...changes, { kind: 'legacy' }];
   const historical = record.snapshot.products;
-  const chosen = record.kind === 'timing' ? includedProducts(items, proposedPlan ?? record.input.plan ?? []) :
+  const chosen = record.kind === 'timing' && !isQuickTiming(record) ? includedProducts(items, proposedPlan ?? record.input.plan ?? []) :
+    isQuickTiming(record) ? items :
     items.filter(({ id }) => historical.some((entry) => entry.id === id));
   const current = new Map(chosen.map((entry) => [entry.id, entry]));
   if (current.size !== historical.length || historical.some(({ id }) => !current.has(id)) ||
-    (record.kind === 'timing' && proposedPlan !== undefined && plannedIds(proposedPlan) !== plannedIds(record.input.plan ?? []))) {
+    (record.kind === 'timing' && !isQuickTiming(record) && proposedPlan !== undefined &&
+      plannedIds(proposedPlan) !== plannedIds(record.input.plan ?? []))) {
     changes.push({ kind: 'selection' });
   }
-  const comparePrice = record.kind !== 'comparison' || record.input.criteria.some(({ kind }) => kind === 'price');
+  const comparePrice = record.kind !== 'comparison' || isPriority(record) || record.input.criteria.some(({ kind }) => kind === 'price');
   for (const previous of historical) {
     const present = current.get(previous.id);
     if (!present) continue;
     if (comparePrice && present.priceMinor !== previous.priceMinor) {
-      changes.push({ kind: 'price', id: previous.id, name: present.name, before: previous.priceMinor, after: present.priceMinor });
+      changes.push({ kind: 'price', id: previous.id, name: present.name, before: previous.priceMinor, after: present.priceMinor,
+        ...(previous.currency && { currency: previous.currency }) });
     }
     if (present.quantity !== previous.quantity) {
       changes.push({ kind: 'quantity', id: previous.id, name: present.name, before: previous.quantity, after: present.quantity });
@@ -95,7 +104,7 @@ export function assessmentChanges(record: SavedAssessment, items: Item[], coolin
 export function timingChanges(stored: StoredAssessment, items: Item[], input: TimingPlanInput,
   financial: FinancialFingerprints): ReviewChange[] {
   const { record } = stored;
-  if (record.kind !== 'timing') return [];
+  if (record.kind !== 'timing' || isQuickTiming(record)) return [];
   const changes = assessmentChanges(record, items, undefined, input.plan ?? []);
   for (const field of moneyFields) {
     if (input[field] !== undefined && stored.financial && financial[field] !== stored.financial[field]) {

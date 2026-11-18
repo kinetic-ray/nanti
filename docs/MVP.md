@@ -15,6 +15,7 @@
 | `NANTI_DEV_WEB_PORT` | Vite port for `npm run dev`. Defaults to `5173`. |
 | `NODE_ENV`, `NANTI_TRUST_PROXY` | Public environment mode and optional trusted reverse proxy IP. |
 | `NANTI_IKEA_METADATA_PERMISSION` | Leave blank for manual entry. Set `granted` only with explicit permission covering automated retrieval and reuse of titles and photos from the supported `www.ikea.com` listings. |
+| `NANTI_IKEA_PRICE_METADATA_PERMISSION` | Set `granted` only when that permission also covers price and currency. The title and photo permission must also be enabled. Imported prices are unverified and the wishlist currency must match. |
 | `AUTH_PUBLIC_ORIGIN`, `AUTH_GOOGLE_*`, `AUTH_APPLE_*` | Optional consumer OAuth. See [authentication setup](AUTHENTICATION.md). |
 | `NANTI_ADMIN_USERNAME`, `NANTI_ADMIN_PASSWORD_HASH` | Optional separate affiliate administration. See [Affiliate Center setup](AFFILIATE_CENTER.md). |
 | `TEST_DATABASE_URL` | Disposable migrated MySQL schema for tests. |

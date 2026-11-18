@@ -1,4 +1,4 @@
-import type { Currency, Item, ItemInput, WishlistSummary } from '../shared/wishlist.js';
+import type { Currency, Item, ItemWriteInput, WishlistSummary } from '../shared/wishlist.js';
 
 export type ScopedWishlist = WishlistSummary & { items: Item[]; scopeId?: string };
 
@@ -8,8 +8,8 @@ export interface WishlistRepository {
   create(ownerId: string, data: { name: string; currency: Currency }, guest?: boolean): Promise<WishlistSummary>;
   rename(ownerId: string, id: string, name: string): Promise<boolean>;
   remove(ownerId: string, id: string): Promise<boolean>;
-  addItem(ownerId: string, listId: string, data: ItemInput): Promise<boolean>;
-  updateItem(ownerId: string, listId: string, id: string, data: ItemInput): Promise<boolean>;
+  addItem(ownerId: string, listId: string, data: ItemWriteInput): Promise<boolean>;
+  updateItem(ownerId: string, listId: string, id: string, data: ItemWriteInput): Promise<boolean>;
   removeItem(ownerId: string, listId: string, id: string): Promise<boolean>;
 }
 

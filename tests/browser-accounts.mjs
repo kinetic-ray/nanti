@@ -145,7 +145,11 @@ try {
   await profile.getByLabel('Display name').fill('Shared profile');
   await button(profile, 'Save name').click();
   await visible(profile.getByText('Display name saved.', { exact: true }));
-  await audit(english, '390px English account');
+  for (const width of [320, 360, 390, 430, 768, 1280, 1440]) {
+    await english.setViewportSize({ width, height: 800 });
+    await audit(english, `${width}px English account`);
+  }
+  await english.setViewportSize({ width: 390, height: 800 });
   const sibling = await open(second);
   await visible(sibling.getByRole('heading', { name: 'Wishlist tamu', exact: true }));
   await button(profile, 'Sign out on this device').click();

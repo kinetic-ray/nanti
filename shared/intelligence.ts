@@ -1,13 +1,16 @@
-import type { ImpulseAnswers, ImpulseResult } from './impulse.js';
+import type { BuyingAnswers, ImpulseAnswers, ImpulseResult } from './impulse.js';
 import type { ComparisonInput, ComparisonResult } from './value-ranker.js';
+import type { PriorityInput, PriorityResult } from './priorities.js';
+import type { QuickTimingInput, QuickTimingResult } from './quick-timing.js';
 import type { PurchasePlan, PurchaseQuote } from './purchase-plan.js';
 import type { TimingInput, TimingResult } from './purchase-timing.js';
+import type { Currency } from './wishlist.js';
 
-export type ProductSnapshot = { id: string; name: string; priceMinor: number | null; quantity: number };
+export type ProductSnapshot = { id: string; name: string; priceMinor: number | null; quantity: number; currency?: Currency };
 export type AssessmentSnapshot = { version: 1; products: ProductSnapshot[] };
 export type ReviewChange =
   | { kind: 'legacy' | 'methodology' | 'selection' | 'preference' }
-  | { kind: 'price' | 'quantity'; id: string; name: string; before: number | null; after: number | null }
+  | { kind: 'price' | 'quantity'; id: string; name: string; before: number | null; after: number | null; currency?: Currency }
   | { kind: 'financial'; field: keyof TimingInput }
   | { kind: 'planning'; field: 'purchaseMinor' | 'extraMinor' | 'targetDate'; before: string | null; after: string | null };
 
@@ -18,10 +21,13 @@ export type TimingSummary = Pick<TimingResult, 'version' | 'asOf' | 'status' | '
 };
 export type TimingPreview = TimingResult & { quote: PurchaseQuote; review?: ReviewChange[]; snapshot: AssessmentSnapshot; previewToken: string };
 
+export type PriorityAssessment = { kind: 'comparison'; input: PriorityInput; result: PriorityResult };
+export type LegacyComparison = { kind: 'comparison'; input: ComparisonInput; result: ComparisonResult };
+export type QuickTimingAssessment = { kind: 'timing'; input: QuickTimingInput; result: QuickTimingResult };
+export type DetailedTimingAssessment = { kind: 'timing'; input: SavedTimingInput; result: TimingSummary };
 export type SavedPayload =
-  | { kind: 'impulse'; input: ImpulseAnswers; result: ImpulseResult }
-  | { kind: 'comparison'; input: ComparisonInput; result: ComparisonResult }
-  | { kind: 'timing'; input: SavedTimingInput; result: TimingSummary };
+  | { kind: 'impulse'; input: ImpulseAnswers | BuyingAnswers; result: ImpulseResult }
+  | LegacyComparison | PriorityAssessment | DetailedTimingAssessment | QuickTimingAssessment;
 
 export type SavedAssessment = SavedPayload & {
   id: string; createdAt: string; version: string; snapshot?: AssessmentSnapshot | null; review?: ReviewChange[];
@@ -29,3 +35,11 @@ export type SavedAssessment = SavedPayload & {
 export type AssessmentKind = SavedPayload['kind'];
 export type AssessmentPage = { records: SavedAssessment[]; next: string | null };
 export type Preferences = { coolingOffDays: number | null };
+
+export function isPriority<T extends SavedPayload>(record: T): record is T & PriorityAssessment {
+  return record.kind === 'comparison' && 'mode' in record.input;
+}
+
+export function isQuickTiming<T extends SavedPayload>(record: T): record is T & QuickTimingAssessment {
+  return record.kind === 'timing' && 'mode' in record.input;
+}

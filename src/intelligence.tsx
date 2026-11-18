@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import type { ImpulseAnswers } from '../shared/impulse.js';
-import type { ComparisonInput } from '../shared/value-ranker.js';
-import type { Item, Wishlist } from '../shared/wishlist.js';
+import type { BuyingAnswers } from '../shared/impulse.js';
+import type { Item, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { Dialog } from './forms.js';
 import { ImpulseGuard } from './impulse-guard.js';
 import { PurchaseTiming } from './purchase-timing.js';
@@ -17,13 +16,13 @@ export type IntelligenceSelection =
   | { kind: 'comparison' }
   | { kind: 'timing' };
 
-export type IntelligenceDrafts = { impulse: Map<string, ImpulseAnswers>; comparison: Map<string, ComparisonInput> };
+export type IntelligenceDrafts = { impulse: Map<string, BuyingAnswers> };
 
-export function PurchaseTools({ list, selection, close, drafts, onPriceUpdate }: {
-  list: Wishlist; selection: IntelligenceSelection; close: () => void; drafts: IntelligenceDrafts; onPriceUpdate: () => void;
+export function PurchaseTools({ list, lists, selection, close, drafts, onPriceUpdate }: {
+  list: Wishlist; lists: WishlistSummary[]; selection: IntelligenceSelection; close: () => void; drafts: IntelligenceDrafts; onPriceUpdate: () => void;
 }) {
   const path = `/intelligence/wishlists/${list.id}`;
-  if (selection.kind === 'comparison') return <ValueRanker list={list} path={path} close={close} drafts={drafts.comparison} />;
+  if (selection.kind === 'comparison') return <ValueRanker list={list} lists={lists} path={path} close={close} />;
   if (selection.kind === 'timing') return <PurchaseTiming list={list} path={path} close={close} />;
   const item = list.items.find(entry => entry.id === selection.item.id) ?? selection.item;
   return <ProductDetails list={list} item={item} path={`${path}/items/${item.id}`} close={close}
@@ -55,8 +54,8 @@ function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
     <BuyLink key={item.url ?? item.id} listId={list.id} item={item} />
     <h3 className="product-decision-title">{t('Purchase decisions')}</h3>
     <div className="product-decision-tools">
-      <button type="button" onClick={() => setTool('impulse')}><Icon name="bookmark" />{t('Check buying impulse')}<Icon name="arrow" /></button>
-      <button type="button" onClick={() => setTool('timing')}><Icon name="clock" />{t('Check purchase timing')}<Icon name="arrow" /></button>
+      <button type="button" onClick={() => setTool('impulse')}><Icon name="bookmark" />{t('Check buying reasons')}<Icon name="arrow" /></button>
+      <button type="button" onClick={() => setTool('timing')}><Icon name="clock" />{t('Check purchase readiness')}<Icon name="arrow" /></button>
       <button type="button" onClick={() => setTool('prices')}><Icon name="bell" />{t('Price history and alerts')}<Icon name="arrow" /></button>
     </div>
     <div className="form-actions detail-footer"><button type="button" onClick={close}>{t('Close')}</button></div>

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../server/app.js';
@@ -8,6 +8,7 @@ import { prismaIntelligence } from '../server/prisma-intelligence.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
 import type { WishlistRepository } from '../server/wishlist.js';
 import { intelligenceModules } from '../shared/methodology.js';
+import { readinessSelection } from '../shared/quick-timing.js';
 import type { Item } from '../shared/wishlist.js';
 
 const mutation = { 'X-Nanti-Request': '1', 'Content-Type': 'application/json' };
@@ -122,6 +123,66 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
     owners.clear();
   });
   afterAll(() => db.$disconnect());
+
+  it('reopens saved waiting dates and reads both old and new private records without a migration', async () => {
+    const { agent } = await session();
+    const other = await session();
+    const { path, item } = await fixture(agent);
+    const endpoint = `${path}/items/${item.id}/impulse`;
+    const prior = await agent.post(endpoint).set(mutation).send({ need: false }).expect(201);
+    const input = { answers: { withoutDiscount: true, alreadyHave: false, useOften: true, canWait: false }, period: '3-days' };
+    await agent.post(endpoint).set(mutation).send({ ...input, period: '4-days' }).expect(400);
+    const saved = await agent.post(endpoint).set(mutation).send(input).expect(201);
+    expect(saved.body).toMatchObject({ version: '2.0.0', input: input.answers,
+      result: { period: '3-days', reviewOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/u) } });
+    const history = await agent.get(endpoint).expect(200);
+    expect(history.body.records).toEqual(expect.arrayContaining([
+      saved.body, { ...prior.body, review: [{ kind: 'methodology' }] },
+    ]));
+    await other.agent.get(endpoint).expect(404);
+  });
+
+  it('saves quick readiness without financial inputs and preserves the old result when a price changes', async () => {
+    const { agent } = await session();
+    const { phaseOne, path, item } = await fixture(agent);
+    const endpoint = `${path}/items/${item.id}/timing/history`;
+    const input = { mode: 'quick', answer: 'tight',
+      expectedSelection: createHash('sha256').update(readinessSelection([item])).digest('hex') };
+    await agent.post(endpoint).set(mutation).send({ ...input, liquidMinor: '10' }).expect(400);
+    const saved = await agent.post(endpoint).set(mutation).send(input).expect(201);
+    expect(saved.body).toMatchObject({ input: { mode: 'quick', answer: 'tight' },
+      result: { version: '2.0.0', quote: { source: 'saved', subtotalMinor: '5000' } } });
+    const row = await db.assessment.findUniqueOrThrow({ where: { id: saved.body.id } });
+    expect(row.financial).toBeNull();
+    await agent.put(`${phaseOne}/items/${item.id}`).set(mutation).send({ ...product, priceMinor: 5000 }).expect(204);
+    await agent.post(endpoint).set(mutation).send(input).expect(409);
+    const history = await agent.get(endpoint).expect(200);
+    expect(history.body.records[0]).toMatchObject({ ...saved.body, review: [{ kind: 'price', before: 2500, after: 5000 }] });
+  });
+
+  it('compares products across owned wishlists and blocks foreign products', async () => {
+    const { agent } = await session();
+    const stranger = await session();
+    const [first, second, foreign] = await Promise.all([fixture(agent), fixture(agent), fixture(stranger.agent)]);
+    const endpoint = `${first.path}/comparisons`;
+    const ratings = { usefulness: 2, urgency: 0, affordability: 1, preference: 1 };
+    const input = {
+      mode: 'priorities', emphasis: 'usefulness',
+      alternatives: [{ wishlistId: first.id, itemId: first.item.id, ratings },
+        { wishlistId: second.id, itemId: second.second.id, ratings }],
+      expectedProducts: [first.item, second.second].map(({ id, priceMinor, quantity }) => ({ id, priceMinor, quantity })),
+    };
+    await agent.post(endpoint).set(mutation).send({ ...input, alternatives: [input.alternatives[0],
+      { wishlistId: foreign.id, itemId: foreign.item.id, ratings }] }).expect(404);
+    const saved = await agent.post(endpoint).set(mutation).send(input).expect(201);
+    expect(saved.body.snapshot.products).toMatchObject([
+      { id: first.item.id, currency: 'THB' }, { id: second.second.id, currency: 'THB' },
+    ]);
+    await stranger.agent.get(endpoint).expect(404);
+    await agent.delete(second.phaseOne).set(mutation).send({}).expect(204);
+    const history = await agent.get(endpoint).expect(200);
+    expect(history.body.records[0]).toEqual({ ...saved.body, review: [{ kind: 'selection' }] });
+  });
 
   it('persists private preferences and historical impulse retakes across connections', async () => {
     const { agent, cookie } = await session();

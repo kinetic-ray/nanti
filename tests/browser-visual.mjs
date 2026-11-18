@@ -10,7 +10,7 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(baseURL).hostname)) {
 }
 const artifacts = process.env.NANTI_BROWSER_ARTIFACTS;
 const reference = process.env.NANTI_VISUAL_REFERENCE === '1';
-const sizes = [360, 390, 430, 768, 1280, 1440];
+const sizes = [320, 360, 390, 430, 768, 1280, 1440];
 const axe = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
 const products = [
   { name: 'TERTIAL', priceMinor: 1999, slug: 'tertial-work-lamp-dark-gray-20355434' },
@@ -53,9 +53,11 @@ async function inspect(label, full = true) {
     viewport: document.documentElement.clientWidth,
     document: document.documentElement.scrollWidth,
     dialogs: [...document.querySelectorAll('dialog[open]')].every(element => element.scrollWidth <= element.clientWidth + 1),
+    bodies: [...document.querySelectorAll('dialog[open] > .dialog-content')].every(element => element.scrollWidth <= element.clientWidth + 1),
   }));
   assert.equal(layout.document, layout.viewport, label);
   assert.equal(layout.dialogs, true, label);
+  assert.equal(layout.bodies, true, label);
   if (!full) return;
   const failures = await page.evaluate(async () => (await window.axe.run(document, {
     runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] },
@@ -67,10 +69,19 @@ try {
   await page.goto('/');
   const create = button('Buat wishlist');
   await visible(create);
-  await capture('home-390');
-  if (!reference) await inspect('390px Indonesian home');
-  await page.setViewportSize({ width: 1440, height: 960 });
-  await capture('home-1440');
+  for (const width of sizes) {
+    await page.setViewportSize({ width, height: width < 769 ? 850 : 960 });
+    await capture(`home-${width}`);
+    if (!reference) await inspect(`${width}px Indonesian home`);
+    if (!reference && width === 320) {
+      const compact = await page.locator('.masthead').evaluate(header => {
+        const brand = header.querySelector('.brand-group').getBoundingClientRect();
+        const controls = header.querySelector('.masthead-controls').getBoundingClientRect();
+        return Math.abs((brand.top + brand.height / 2) - (controls.top + controls.height / 2)) < 1;
+      });
+      assert.equal(compact, true, '320px navigation fits in one row at default text size');
+    }
+  }
   await page.setViewportSize({ width: 390, height: 850 });
   await page.route('**/api/account', async route => {
     const response = await route.fetch();
@@ -136,25 +147,23 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await product.evaluate(active => active === document.activeElement), true);
 
-  await button('Bandingkan produk').click();
-  const comparison = dialog('Bandingkan pilihanmu');
+  await button('Bandingkan prioritas').click();
+  const comparison = dialog('Bandingkan prioritas');
   await visible(comparison);
   if (!reference) await inspect('390px comparison');
   await capture('comparison-390');
   await page.keyboard.press('Escape');
 
   await button('Cek kesiapan beli wishlist').click();
-  const timing = dialog('Cek kesiapan keuangan');
+  const timing = dialog('Cek kesiapan beli');
   await visible(timing);
-  await timing.getByLabel('Dana yang tersedia', { exact: true }).fill('200');
-  await timing.getByLabel('Tagihan dan kebutuhan wajib', { exact: true }).fill('10');
-  await timing.getByLabel('Dana cadangan', { exact: true }).fill('30');
-  await button('Cek kesiapan beli', timing).click();
-  await visible(timing.getByRole('heading', { name: 'Dana cukup', exact: true }));
+  assert.equal(await timing.getByLabel('Dana yang tersedia', { exact: true }).isVisible(), false);
+  await button('Agak mepet', timing).click();
+  await visible(timing.getByRole('heading', { name: 'Anggarannya agak mepet', exact: true }));
   if (!reference) await inspect('390px timing result');
   await capture('timing-390');
-  await button('Simpan cek kesiapan', timing).click();
-  await visible(timing.getByText('Cek kesiapan sudah disimpan.', { exact: true }));
+  await button('Simpan keputusan', timing).click();
+  await visible(timing.getByText('Keputusan sudah disimpan.', { exact: true }));
   await page.keyboard.press('Escape');
 
   const { items } = await (await api(`/wishlists/${first.id}`, 'GET')).json();
@@ -162,7 +171,7 @@ try {
   await api(`/wishlists/${first.id}/items/${itemId}`, 'PUT', { ...changed, quantity: 2 });
   await page.reload();
   await button('Cek kesiapan beli wishlist').click();
-  await timing.getByText('Cek kesiapan tersimpan', { exact: true }).click();
+  await timing.locator('summary').filter({ hasText: /^Keputusan sebelumnya$/u }).click();
   const reviewBadge = timing.getByText('Perlu dicek ulang', { exact: true });
   await visible(reviewBadge);
   await reviewBadge.scrollIntoViewIfNeeded();
@@ -171,6 +180,59 @@ try {
   await page.keyboard.press('Escape');
 
   if (!reference) {
+    for (const width of sizes) {
+      await page.setViewportSize({ width, height: width < 769 ? 800 : 960 });
+      await button('Tambah produk').click();
+      const add = dialog('Tambah produk');
+      await visible(add);
+      await inspect(`${width}px URL import`);
+      if (width === 320) await capture('import-320');
+      await button('Isi sendiri', add).click();
+      await visible(add.getByLabel('Nama produk'));
+      await inspect(`${width}px manual entry`, false);
+      await page.keyboard.press('Escape');
+
+      await button('Bandingkan prioritas').click();
+      await comparison.getByRole('checkbox', { name: 'TERTIAL' }).check();
+      await button('Tentukan prioritas', comparison).click();
+      const ratings = comparison.getByRole('group', { name: 'TERTIAL' }).getByRole('combobox');
+      for (let index = 0; index < 4; index++) await ratings.nth(index).selectOption('2');
+      await button('Lihat prioritas', comparison).click();
+      await visible(comparison.getByRole('heading', { name: 'Pertimbanganmu' }));
+      await inspect(`${width}px one-item priority result`);
+      await page.keyboard.press('Escape');
+
+      await product.click();
+      await inspect(`${width}px product detail`, false);
+      await button('Cek alasan beli', detail).click();
+      await visible(impulse.getByRole('progressbar'));
+      await inspect(`${width}px buying reasons`, false);
+      await page.keyboard.press('Escape');
+      await button('Riwayat dan notifikasi harga', detail).click();
+      await visible(dialog('Riwayat dan notifikasi harga'));
+      await inspect(`${width}px price history`, false);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+
+      await button('Notifikasi harga').click();
+      await visible(dialog('Notifikasi harga'));
+      await inspect(`${width}px target alerts`, false);
+      await page.keyboard.press('Escape');
+
+      await button('Cek kesiapan beli wishlist').click();
+      await visible(button('Belum yakin', timing));
+      await inspect(`${width}px readiness question`, false);
+      await timing.locator('summary').filter({ hasText: /^Keputusan sebelumnya$/u }).click();
+      await visible(timing.getByText('Perlu dicek ulang', { exact: true }));
+      await inspect(`${width}px decision history`, false);
+      await page.keyboard.press('Escape');
+
+      await button('Masuk').click();
+      await visible(account);
+      await inspect(`${width}px sign in`, false);
+      await page.keyboard.press('Escape');
+    }
+    await page.setViewportSize({ width: 390, height: 850 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const reduce = await product.evaluate(element => ({
       requested: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -184,6 +246,25 @@ try {
 
     await page.setViewportSize({ width: 320, height: 850 });
     await inspect('320px WCAG reflow', false);
+    await page.setViewportSize({ width: 320, height: 380 });
+    await button('Tambah produk').click();
+    const smallImport = dialog('Tambah produk');
+    await button('Isi sendiri', smallImport).click();
+    const smallBody = smallImport.locator('.dialog-content');
+    assert.equal(await page.locator('html').evaluate(html => getComputedStyle(html).overflowY), 'hidden');
+    assert.equal(await smallBody.evaluate(body => body.scrollHeight > body.clientHeight), true);
+    const save = button('Simpan produk', smallImport);
+    await save.focus();
+    const focused = await save.boundingBox();
+    assert.ok(focused && focused.y >= 0 && focused.y + focused.height <= 380);
+    for (let index = 0; index < 7; index++) {
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement === document.body ||
+        Boolean(document.activeElement.closest('dialog[open]'))), true);
+    }
+    await capture('import-short-viewport');
+    await page.keyboard.press('Escape');
+    assert.equal(await button('Tambah produk').evaluate(trigger => trigger === document.activeElement), true);
     await page.setViewportSize({ width: 390, height: 850 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     await inspect('200% text resizing', false);

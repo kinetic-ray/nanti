@@ -63,10 +63,48 @@ small { color: var(--muted); font-size: .78rem; }
 .buy-action { color: var(--paper); background: var(--accent); border-radius: var(--radius); text-decoration: none; }
 .buy-action:hover { background: var(--accent-strong); }
 .actions, .form-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
-dialog { color: inherit; border: 1px solid var(--line); border-radius: 1.75rem; width: min(31rem, calc(100% - 1.25rem)); max-height: calc(100% - 1.25rem); overflow: auto; padding: clamp(1rem, 5vw, 1.75rem); box-shadow: var(--shadow); }
+html:has(dialog[open]) { overflow: hidden; }
+dialog {
+  --dialog-padding: clamp(1rem, 5vw, 1.75rem);
+  --dialog-gutter: .45rem;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 1.75rem;
+  width: min(31rem, calc(100% - 1.25rem));
+  max-height: calc(var(--dialog-view-height, 100dvh) - 1.25rem);
+  inset-block-end: var(--dialog-keyboard-inset, 0px);
+  overflow: hidden;
+  padding: 0;
+  box-shadow: var(--shadow);
+}
+dialog[open] { display: flex; flex-direction: column; }
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .5rem;
+  flex: none;
+  padding: var(--dialog-padding) var(--dialog-padding) .65rem;
+}
+.dialog-header > h2 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.dialog-header > button { flex: none; }
+.dialog-content {
+  min-height: 0;
+  margin: 0 var(--dialog-gutter) var(--dialog-gutter);
+  padding: .25rem calc(var(--dialog-padding) - var(--dialog-gutter)) calc(var(--dialog-padding) - var(--dialog-gutter));
+  padding-inline-start: max(calc(var(--dialog-padding) - var(--dialog-gutter)), env(safe-area-inset-left, 0px));
+  padding-inline-end: max(calc(var(--dialog-padding) - var(--dialog-gutter)), env(safe-area-inset-right, 0px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding: .75rem;
+  overflow-wrap: anywhere;
+}
 dialog::backdrop { background: rgb(33 27 55 / 56%); }
-dialog h2 { font-size: clamp(1.45rem, 4vw, 1.85rem); letter-spacing: -.035em; margin-bottom: 1rem; }
-.account-dialog { max-height: calc(100dvh - 1.25rem); }
+dialog h2 { font-size: clamp(1.45rem, 4vw, 1.85rem); letter-spacing: -.035em; }
 .account-dialog p { line-height: 1.55; overflow-wrap: anywhere; }
 .account-dialog form, .account-providers, .account-section { display: grid; gap: .65rem; }
 .account-providers { margin-block: 1rem; }

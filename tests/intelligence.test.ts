@@ -1,17 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateImpulse, impulseRules } from '../shared/impulse.js';
+import { evaluateBuyingReasons, evaluateImpulse, impulseRules, waitingReviewDate } from '../shared/impulse.js';
 import type { ImpulseAnswers } from '../shared/impulse.js';
 import { getMethodology, intelligenceModules } from '../shared/methodology.js';
 import { evaluateTiming, parsePlanningAmount } from '../shared/purchase-timing.js';
 import type { TimingInput } from '../shared/purchase-timing.js';
 import { comparisonAlternatives, evaluateComparison } from '../shared/value-ranker.js';
 import type { ComparisonInput, Criterion } from '../shared/value-ranker.js';
+import { rankPriorities } from '../shared/priorities.js';
+import type { PriorityInput } from '../shared/priorities.js';
+import { checkReadiness } from '../shared/quick-timing.js';
 
 const reflective: ImpulseAnswers = {
   temporary: false, alternative: false, promotion: false, pressure: false, research: true, waiting: true, planned: true,
 };
 
 describe('Impulse Guard', () => {
+  it('separates four conversational questions from the two released impulse methods', () => {
+    const answers = { withoutDiscount: false, alreadyHave: true, useOften: true, canWait: true };
+    expect(evaluateBuyingReasons(answers, '1-week', '2026-11-18')).toMatchObject({
+      version: '2.0.0', concern: 'High', period: '1-week', reviewOn: '2026-11-25',
+      contributing: ['withoutDiscount', 'alreadyHave', 'canWait'],
+    });
+    expect(evaluateBuyingReasons({ ...answers, canWait: undefined }, null, '2026-11-18')).toMatchObject({
+      concern: 'Insufficient information', points: 2, possiblePoints: 3, reviewOn: null,
+    });
+    expect(getMethodology('impulse', '1.1.0')?.rules[0]).toContain('specific need');
+    expect(getMethodology('impulse')?.version).toBe('2.0.0');
+  });
+
+  it('calculates exact review dates across month ends and leap years', () => {
+    expect(waitingReviewDate('2026-12-30', '3-days')).toBe('2027-01-02');
+    expect(waitingReviewDate('2026-12-29', '1-week')).toBe('2027-01-05');
+    expect(waitingReviewDate('2028-01-31', '1-month')).toBe('2028-02-29');
+    expect(waitingReviewDate('2026-12-31', '1-month')).toBe('2027-01-31');
+    expect(waitingReviewDate('2026-01-31', '1-month')).toBe('2026-02-28');
+  });
   it('scores the need question and preserves the original factor in version 1.0.0', () => {
     expect(evaluateImpulse({ need: false }, null)).toMatchObject({ version: '1.1.0', contributing: ['need'], points: 2 });
     expect(evaluateImpulse({ temporary: true }, null)).toMatchObject({ version: '1.0.0', contributing: ['temporary'], points: 2 });
@@ -48,6 +71,33 @@ describe('Impulse Guard', () => {
     expect(evaluateImpulse(high, 1)).toMatchObject({ points: impulseRules.highAt, concern: 'High' });
     expect(evaluateImpulse(high, 1)).toEqual(evaluateImpulse({ ...high }, 1));
     expect(evaluateImpulse(high, null).concern).toBe(evaluateImpulse(high, 90).concern);
+  });
+});
+
+describe('Priority comparison', () => {
+  const alternatives: PriorityInput['alternatives'] = [
+    { wishlistId: 'home', itemId: 'rug', ratings: { usefulness: 2, urgency: 0, affordability: 2, preference: 0 } },
+    { wishlistId: 'work', itemId: 'chair', ratings: { usefulness: 1, urgency: 2, affordability: 0, preference: 1 } },
+  ];
+  it('shows one item, ties equal preferences and honors the user’s main priority', () => {
+    const input: PriorityInput = { mode: 'priorities', alternatives, emphasis: null };
+    expect(rankPriorities({ ...input, alternatives: alternatives.slice(0, 1) }).ranking).toEqual([
+      { id: 'rug', score: 4, rank: 1, needsTime: false, strengths: ['usefulness', 'affordability'] },
+    ]);
+    expect(rankPriorities(input).ranking.map(({ rank }) => rank)).toEqual([1, 1]);
+    expect(rankPriorities({ ...input, emphasis: 'urgency' }).ranking[0]).toMatchObject({ id: 'chair', needsTime: true, rank: 1 });
+  });
+});
+
+describe('Quick readiness', () => {
+  const item = { id: 'lamp', name: 'Lamp', url: null, priceMinor: 1001, quantity: 3 };
+  it('keeps the user’s answer distinct from a budget calculation and preserves missing prices', () => {
+    expect(checkReadiness('safe', [item])).toEqual({
+      version: '2.0.0', answer: 'safe', quote: expect.objectContaining({ source: 'saved', subtotalMinor: '3003' }),
+    });
+    expect(checkReadiness('unsure', [item, { ...item, id: 'chair', priceMinor: null }])).toMatchObject({
+      answer: 'unsure', quote: { source: 'incomplete', subtotalMinor: '3003', missingPrices: 1 },
+    });
   });
 });
 

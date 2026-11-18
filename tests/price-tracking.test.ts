@@ -43,6 +43,27 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
   expect(preview).toHaveBeenCalledTimes(2);
 });
 
+it('returns a reviewable authorized preview while keeping external image URLs out of the response', async () => {
+  const listing = 'https://www.ikea.com/us/en/p/fixture-12345678/';
+  const productMedia = vi.fn().mockResolvedValue({ type: 'image/jpeg', bytes: Buffer.from([255, 216, 255, 217]) });
+  const lookupMetadata = vi.fn().mockResolvedValue({ title: 'Fixture lamp',
+    image: 'https://www.ikea.com/us/en/images/products/lamp.jpg', price: { priceMinor: 1234, currency: 'USD' } });
+  const app = createApp({ preview: async () => null, lookupMetadata, productMedia, secureCookies: false, secret: randomUUID(),
+    repository: { list: vi.fn().mockResolvedValue([]), find: vi.fn(), create: vi.fn(), rename: vi.fn(),
+      remove: vi.fn(), addItem: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn() } });
+  const guest = request.agent(app);
+  await guest.post('/api/session').set(mutation).send({}).expect(200);
+  const { body } = await guest.post('/api/products/import').set(mutation).send({ url: listing + '?utm_source=fixture' }).expect(200);
+  expect(body).toEqual({ originalUrl: listing + '?utm_source=fixture', merchant: 'ikea', hostname: 'www.ikea.com',
+    status: 'details_available', name: 'Fixture lamp', price: { priceMinor: 1234, currency: 'USD' },
+    imagePath: `/api/products/import/image?url=${encodeURIComponent(listing)}` });
+  await request(app).get(body.imagePath).expect(401);
+  await guest.get('/api/products/import/image').query({ url: 'https://retailer.example.test/image.jpg' }).expect(404);
+  expect(productMedia).not.toHaveBeenCalled();
+  await guest.get(body.imagePath).expect('Content-Type', 'image/jpeg').expect(200);
+  expect(productMedia).toHaveBeenCalledExactlyOnceWith(listing);
+});
+
 describe.skipIf(!testDatabase)('Prices through MySQL and the consumer HTTP API', () => {
   const db = connectDatabase(testDatabase ?? 'mysql://127.0.0.1/nanti_test');
   const accounts = prismaAccounts(db);
@@ -90,6 +111,27 @@ describe.skipIf(!testDatabase)('Prices through MySQL and the consumer HTTP API',
     guestOwners.clear();
   });
   afterAll(() => db.$disconnect());
+
+  it('keeps an imported price unverified when saving a product and records a manual change separately', async () => {
+    const { cookie } = await guest();
+    const { body: list } = await http.post('/api/wishlists').set(mutation).set('Cookie', cookie)
+      .send({ currency: 'IDR', name: 'Import fixture' }).expect(201);
+    const path = `/api/wishlists/${list.id}`;
+    const data = { name: 'Lamp', quantity: 1, priceMinor: 12_345, url: link };
+    await http.post(`${path}/items`).set(mutation).set('Cookie', cookie)
+      .send({ ...data, priceSource: 'imported_unverified' }).expect(201);
+    const { body: detail } = await http.get(path).set('Cookie', cookie).expect(200);
+    const item = `${path}/items/${detail.items[0].id}`;
+    await http.get(`${item}/prices`).set('Cookie', cookie).expect(200).expect(({ body }) => {
+      expect(body.observations).toHaveLength(1);
+      expect(body.observations[0]).toMatchObject({ source: 'imported_unverified', priceMinor: 12_345 });
+      expect(body.lastVerifiedAt).toBeNull();
+    });
+    await http.put(item).set(mutation).set('Cookie', cookie).send({ ...data, priceMinor: 22_345 }).expect(204);
+    await http.get(`${item}/prices`).set('Cookie', cookie).expect(200).expect(({ body }) => {
+      expect(body.observations.map((entry: { source: string }) => entry.source)).toEqual(['manual', 'imported_unverified']);
+    });
+  });
 
   it('records exact changes, deduplicates parallel writes, and refreshes saved assessments', async () => {
     const { cookie } = await guest();

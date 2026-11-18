@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { SavedAssessment, TimingPlanInput, TimingPreview } from '../shared/intelligence.js';
+import { isQuickTiming } from '../shared/intelligence.js';
+import type { DetailedTimingAssessment, SavedAssessment, TimingPlanInput, TimingPreview } from '../shared/intelligence.js';
+import { checkReadiness, readinessAnswers, readinessSelection } from '../shared/quick-timing.js';
+import type { QuickTimingInput, QuickTimingResult, ReadinessAnswer } from '../shared/quick-timing.js';
 import { getPurchaseQuote, includedProducts } from '../shared/purchase-plan.js';
 import type { PlanLine, PurchasePlan, PurchaseQuote } from '../shared/purchase-plan.js';
-import { parsePlanningAmount } from '../shared/purchase-timing.js';
+import { parsePlanningAmount, timingVersion } from '../shared/purchase-timing.js';
 import type { TimingInput } from '../shared/purchase-timing.js';
 import type { Currency, Item, Wishlist } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
@@ -13,18 +16,29 @@ import type { Message } from './messages.js';
 const amounts = ['purchaseMinor', 'liquidMinor', 'obligationsMinor', 'reserveMinor', 'extraMinor', 'monthlyMinor'] as const;
 type AmountKey = typeof amounts[number];
 type TimingRecord = Extract<SavedAssessment, { kind: 'timing' }>;
+type DetailedRecord = TimingRecord & DetailedTimingAssessment;
 const quoteNames = { saved: 'Saved prices', estimate: 'User-supplied estimate', incomplete: 'Incomplete total' } as const;
+const answerLabels = { safe: 'Safe', tight: 'A bit tight', unsure: 'Not sure yet' } as const;
+const readinessLabels = { safe: 'Essentials are covered', tight: 'It would be tight', unsure: 'Not sure yet' } as const;
+const readinessAdvice = {
+  safe: 'If essentials are covered and the price still works for you, decide when you’re ready.',
+  tight: 'Consider waiting until you have more room after essentials.',
+  unsure: 'Check your upcoming essentials or open the detailed check before deciding.',
+} as const;
 
 export function PurchaseTiming({ list, item, path, close }: {
   list: Wishlist; item?: Item; path: string; close: () => void;
 }) {
-  const { t, number, money, decimal, language, error: localError } = useLocale();
+  const { t, number, money, decimal, date, language, error: localError } = useLocale();
   const [values, setValues] = useState<Partial<Record<keyof TimingInput, string>>>({});
   const [plan, setPlan] = useState<PurchasePlan>([]);
   const [result, setResult] = useState<TimingPreview | null>(null);
   const [submitted, setSubmitted] = useState<TimingPlanInput | null>(null);
   const [viewed, setViewed] = useState<TimingRecord | null>(null);
-  const [reviewing, setReviewing] = useState<TimingRecord | null>(null);
+  const [reviewing, setReviewing] = useState<DetailedRecord | null>(null);
+  const [quick, setQuick] = useState<ReadinessAnswer | null>(null);
+  const [advanced, setAdvanced] = useState(false);
+  const [fresh, setFresh] = useState<Wishlist | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -35,13 +49,14 @@ export function PurchaseTiming({ list, item, path, close }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const formHeading = useRef<HTMLHeadingElement>(null);
   const firstHint = useId();
-  const items = item ? [item] : list.items;
+  const items = item ? (fresh ?? list).items.filter(({ id }) => id === item.id) : (fresh ?? list).items;
   const selected = includedProducts(items, plan);
   const quote = getPurchaseQuote(selected);
+  const quickQuote = getPurchaseQuote(items);
   const groups = [...new Set(plan.flatMap((line) => line.group === undefined ? [] : [line.group]))].sort((a, b) => a - b);
   const nextGroup = Array.from({ length: 100 }, (_, index) => index + 1).find((group) => !groups.includes(group));
 
-  useEffect(() => { if (result || viewed) heading.current?.focus(); }, [result, viewed]);
+  useEffect(() => { if (result || viewed || quick) heading.current?.focus(); }, [result, viewed, quick]);
   useEffect(() => { if (reviewing) formHeading.current?.focus(); }, [reviewing]);
 
   function invalidate() {
@@ -74,6 +89,15 @@ export function PurchaseTiming({ list, item, path, close }: {
 
   function beginReview() {
     if (!viewed) return;
+    if (isQuickTiming(viewed)) {
+      setViewed(null);
+      setQuick(null);
+      setAdvanced(false);
+      setError('');
+      setStatus('');
+      requestAnimationFrame(() => formHeading.current?.focus());
+      return;
+    }
     const adjusted = (viewed.input.plan ?? []).filter((line) => items.some(({ id }) => id === line.id));
     setPlan(adjusted.map((line) => line.group !== undefined && adjusted.filter((entry) => entry.group === line.group).length < 2
       ? { ...line, group: undefined } : line));
@@ -84,7 +108,35 @@ export function PurchaseTiming({ list, item, path, close }: {
     setOutdated(false);
     setConfirmed(false);
     setReviewing(viewed);
+    setAdvanced(true);
     setViewed(null);
+  }
+
+  async function saveQuick() {
+    if (!quick) return;
+    setBusy(true);
+    setError('');
+    const input: QuickTimingInput = { mode: 'quick', answer: quick };
+    try {
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(readinessSelection(items)));
+      const expectedSelection = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const saved = await history.save({ ...input, expectedSelection });
+      if (saved.kind === 'timing') setViewed(saved);
+      setQuick(null);
+      setStatus('Decision saved.');
+    } catch (failure) {
+      const message = errorMessage(failure);
+      setError(message);
+      if (message === 'The saved products changed. Check again before saving.') {
+        setQuick(null);
+        try {
+          setFresh(await api<Wishlist>(`/wishlists/${list.id}`));
+          requestAnimationFrame(() => formHeading.current?.focus());
+        } catch (reloadFailure) {
+          setError(errorMessage(reloadFailure));
+        }
+      }
+    } finally { setBusy(false); }
   }
 
   async function calculate() {
@@ -149,21 +201,43 @@ export function PurchaseTiming({ list, item, path, close }: {
 
   const alert = error ? localError(error) : invalidAmount
     ? t('{field} must be a nonnegative amount with up to two decimal places.', { field: t(financialLabels[invalidAmount]) }) : '';
-  return <ToolDialog title={t('Purchase Timing')} context={item?.name ?? list.name} module="timing"
-    version={viewed?.version ?? result?.version} close={close} busy={busy}>
-    {viewed ? <section className="decision-result decision-snapshot">
-      <h3 ref={heading} tabIndex={-1}>{t('Previous result')}</h3>
-      <p className="result-status">{t(viewed.result.status)}</p>
-      <TimingHistorySummary record={viewed} currency={list.currency} />
-      <SelectionDetails title="Previous selection" products={viewed.snapshot?.products ?? []} currency={list.currency} />
+  return <ToolDialog title={t('Check purchase readiness')} context={item?.name ?? list.name} module="timing"
+    version={viewed?.version ?? (advanced ? result?.version ?? timingVersion : undefined)} close={close} busy={busy}>
+    {viewed ? <section className="decision-result">
+      <h3 ref={heading} tabIndex={-1}>{t('Previous decision')}</h3>
+      {isQuickTiming(viewed) ? <>
+        <p className="hint">{t('Last checked {date}', { date: date(viewed.createdAt) })}</p>
+        <QuickOutcome result={viewed.result} currency={list.currency} />
+      </> : <>
+        <p className="result-status">{t(viewed.result.status)}</p>
+        <TimingHistorySummary record={viewed} currency={list.currency} />
+        <SelectionDetails title="Previous selection" products={viewed.snapshot?.products ?? []} currency={list.currency} />
+      </>}
       <ReviewDetails changes={viewed.review} currency={list.currency} />
       <div className="actions">
-        <button type="button" className="primary" disabled={!items.length} onClick={beginReview}>{t('Recheck with current data')}</button>
-        <button type="button" onClick={() => { setViewed(null); requestAnimationFrame(() => formHeading.current?.focus()); }}>{t('Back to current check')}</button>
+        <button type="button" className="primary" disabled={!items.length} onClick={beginReview}>{t('Check again')}</button>
+        <button type="button" onClick={() => { setViewed(null); requestAnimationFrame(() => formHeading.current?.focus()); }}>{t('Back')}</button>
       </div>
     </section> : !items.length ? <h3 ref={formHeading} tabIndex={-1} className="decision-section">{t('No products yet')}</h3> : <>
-      <div className="decision-section">
-        <h3 ref={formHeading} tabIndex={-1}>{t('Budget details')}</h3>
+      {!reviewing && (quick ? <section className="decision-result">
+        <h3 ref={heading} tabIndex={-1}>{t(readinessLabels[quick])}</h3>
+        <QuickOutcome result={checkReadiness(quick, items)} currency={list.currency} showTitle={false} />
+        <div className="actions">
+          <button type="button" onClick={() => { setQuick(null); setError(''); requestAnimationFrame(() => formHeading.current?.focus()); }}>
+            {t('Change answer')}
+          </button>
+          <button type="button" className="primary" disabled={busy || history.busy} onClick={() => void saveQuick()}>{t('Save decision')}</button>
+        </div>
+      </section> : <section className="decision-section">
+        <h3 ref={formHeading} tabIndex={-1}>{t('If you buy now, will you still have enough for essentials?')}</h3>
+        <QuoteSummary quote={quickQuote} total={quickQuote.source === 'saved' ? quickQuote.subtotalMinor : null} currency={list.currency} />
+        <div className="answer-buttons">{readinessAnswers.map((answer) => <button type="button" key={answer}
+          onClick={() => { setQuick(answer); setError(''); setStatus(''); }}>{t(answerLabels[answer])}</button>)}</div>
+      </section>)}
+      <details className="decision-section advanced-check" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}>
+        <summary>{t('Check in more detail')}</summary>
+        <div className="advanced-fields">
+        <h3 ref={reviewing ? formHeading : undefined} tabIndex={reviewing ? -1 : undefined}>{t('Budget details')}</h3>
         {reviewing && <div className="review-details">
           <p><strong>{t('Previous result')}</strong> · {t(reviewing.result.status)}</p>
           <TimingHistorySummary record={reviewing} currency={list.currency} />
@@ -220,12 +294,12 @@ export function PurchaseTiming({ list, item, path, close }: {
           </fieldset>
           {alert && <p className="error" role="alert">{alert}</p>}
           <div className="actions">
-            <button className="primary" disabled={busy}>{t(busy ? 'Checking…' : reviewing ? 'Recheck with current data' : 'Check affordability')}</button>
+            <button className="primary" disabled={busy}>{t(busy ? 'Checking…' : reviewing ? 'Check again' : 'Check affordability')}</button>
             {reviewing && <button type="button" disabled={busy} onClick={() => { setViewed(reviewing); setReviewing(null); }}>{t('Cancel')}</button>}
           </div>
         </form>
         <p className="hint decision-privacy">{t('Saved timing checks keep the purchase details and outcome. Balances, bills, reserve and monthly savings amounts are not stored.')}</p>
-      </div>
+        </div>
       {result && <section className="decision-result" data-outcome={result.status}>
         {outdated && <p className="review-badge" role="status">{t('Needs review')}</p>}
         <h3 ref={heading} tabIndex={-1}>{reviewing ? t('Current result') : t(result.status)}</h3>
@@ -237,10 +311,12 @@ export function PurchaseTiming({ list, item, path, close }: {
           {t('Financial changes are shown by field. Previous balances, bills, reserve and savings are kept out of history.')}</p>}
         {submitted && <button type="button" className="primary" disabled={busy || history.busy} onClick={() => void save()}>{t('Save timing check')}</button>}
       </section>}
+      </details>
+      {!advanced && alert && <p role="alert" className="error">{alert}</p>}
     </>}
     {viewed && alert && <p role="alert" className="error">{alert}</p>}
     <p role="status" className="decision-status">{status && t(status)}</p>
-    <History history={history} name="Saved timing checks" initialOpen={!items.length} disabled={busy}
+    <History history={history} name="Previous decisions" initialOpen={!items.length} disabled={busy}
       onSelect={(record) => { if (record.kind === 'timing') { setViewed(record); setStatus(''); setError(''); setInvalidAmount(null); } }}
       onDelete={(id) => {
         if (viewed?.id === id) setViewed(null);
@@ -250,17 +326,27 @@ export function PurchaseTiming({ list, item, path, close }: {
   </ToolDialog>;
 }
 
+function QuickOutcome({ result, currency, showTitle = true }: { result: QuickTimingResult; currency: Currency; showTitle?: boolean }) {
+  const { t } = useLocale();
+  return <>
+    {showTitle && <p className="result-status">{t(readinessLabels[result.answer])}</p>}
+    <p>{t(readinessAdvice[result.answer])}</p>
+    <QuoteSummary quote={result.quote} total={result.quote.source === 'saved' ? result.quote.subtotalMinor : null} currency={currency} />
+    <p className="hint">{t('Based on your answer. No budget calculation was made.')}</p>
+  </>;
+}
+
 function QuoteSummary({ quote, total, currency }: { quote: PurchaseQuote; total: string | null; currency: Currency }) {
   const { t, money } = useLocale();
   return <p>{t(quoteNames[quote.source])} · {total === null ? t('Unknown') : money(total, currency)}
     {quote.source !== 'saved' && <> · {t('Known subtotal {price}', { price: money(quote.subtotalMinor, currency) })}</>}</p>;
 }
 
-function TimingHistorySummary({ record, currency }: { record: TimingRecord; currency: Currency }) {
+function TimingHistorySummary({ record, currency }: { record: DetailedRecord; currency: Currency }) {
   const { t, date, number, money } = useLocale();
   const { result, input } = record;
   return <>
-    <p className="hint">{t('Saved {date}', { date: date(record.createdAt) })}</p>
+    <p className="hint">{t('Last checked {date}', { date: date(record.createdAt) })}</p>
     <QuoteSummary quote={result.quote} total={result.totalMinor} currency={currency} />
     {input.extraMinor && input.extraMinor !== '0' && <p>{t('Additional costs')} · {money(input.extraMinor, currency)}</p>}
     {result.months && result.months !== '0' && <p>{t('Estimated time to afford')} · {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
 import type { Item } from '../shared/wishlist.js';
+import { isIkeaMetadataLink } from '../shared/product-import.js';
 
 type Glyph = 'plus' | 'edit' | 'trash' | 'arrow' | 'person' | 'privacy' | 'compare' | 'clock' | 'check' | 'close' | 'bookmark' | 'bell';
 
@@ -29,8 +30,7 @@ function ProductPhoto({ src }: { src: string }) {
 
 export function ProductMedia({ item, listId }: { item: Item; listId: string }) {
   const listing = item.url ? safeProductUrl(item.url) : null;
-  const supported = listing?.origin === 'https://www.ikea.com' &&
-    /^\/[a-z]{2}\/[a-z]{2}\/p\/[a-z0-9-]+-\d{8}\/?$/u.test(listing.pathname);
+  const supported = listing && isIkeaMetadataLink(listing);
   return <div aria-hidden="true" className="product-media">
     <span>{Array.from(item.name)[0]?.toLocaleUpperCase()}</span>
     {supported && <ProductPhoto key={listing.href} src={`/api/wishlists/${listId}/items/${item.id}/image`} />}

@@ -6,8 +6,10 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { currencies } from '../shared/wishlist.js';
-import { productMerchant, safeImportUrl } from '../shared/product-import.js';
+import { isIkeaMetadataLink, productMerchant, safeImportUrl } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
+import type { previewProductMetadata } from './product-preview.js';
+import { identifyProduct } from './product-identity.js';
 import { readWishlist } from './wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
 import { intelligenceRoutes } from './intelligence-routes.js';
@@ -39,6 +41,7 @@ const itemInput = z.strictObject({
   url: productUrl.transform((url) => url.href).nullable(),
   priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
   quantity: z.number().int().min(1).max(999),
+  priceSource: z.literal('imported_unverified').optional(),
 });
 
 type Options = {
@@ -49,6 +52,7 @@ type Options = {
   admin?: AdminCredentials;
   consumer?: { accounts: Accounts; providers: OAuthProviders };
   preview: (url: URL) => Promise<string | null>;
+  lookupMetadata?: (url: URL) => ReturnType<typeof previewProductMetadata>;
   productMedia?: ReturnType<typeof createProductMedia>;
   secret: string;
   secureCookies: boolean;
@@ -61,7 +65,7 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, productMedia = async () => null,
+export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null,
   secret, secureCookies, trustedProxy, webRoot, checkDatabase }: Options) {
   const app = express();
   const api = express.Router();
@@ -202,13 +206,25 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   api.post('/products/import', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const merchant = productMerchant(url.hostname);
-    const canLookUp = url.origin === 'https://www.ikea.com' && /^\/[a-z]{2}\/[a-z]{2}\/p\/[a-z0-9-]+-\d{8}\/?$/iu.test(url.pathname);
-    const name = canLookUp ? await preview(url) : null;
+    const canLookUp = isIkeaMetadataLink(url);
+    const meta = canLookUp && lookupMetadata ? await lookupMetadata(url) : null;
+    const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
+    const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
+    const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` : null;
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: url.href, name,
-      status: name ? 'name_available' : 'manual_required',
+      ...(imagePath && { imagePath }),
+      ...(meta?.price && { price: meta.price }),
+      status: imagePath || meta?.price ? 'details_available' : name ? 'name_available' : 'manual_required',
     };
     res.json(result);
+  });
+  api.get('/products/import/image', limitProductLookup, async (req, res) => {
+    const { url } = z.strictObject({ url: productUrl }).parse(req.query);
+    const listing = identifyProduct(url.href);
+    const image = listing && await productMedia(listing.canonicalUrl);
+    if (!image) return notFound(res);
+    res.set('Content-Type', image.type).send(image.bytes);
   });
 
   api.use((_req, res) => notFound(res));

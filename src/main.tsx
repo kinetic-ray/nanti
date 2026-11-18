@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
-import type { Currency, Item, ItemInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
+import type { Currency, Item, ItemWriteInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { DeleteForm, ItemForm, ListForm, PrivacyForm } from './forms.js';
 import { LanguagePicker, LocaleProvider, useLocale } from './locale.js';
@@ -36,7 +36,7 @@ function App() {
   const [revision, setRevision] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [tools, setTools] = useState<IntelligenceSelection | null>(null);
-  const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map(), comparison: new Map() }));
+  const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map() }));
   const [status, setStatus] = useState<Message | ''>('');
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
   const [showAccount, setShowAccount] = useState(/^\/account\/?$/u.test(location.pathname));
@@ -141,7 +141,7 @@ function App() {
     finish('Wishlist created.');
   }
 
-  async function saveItem(data: ItemInput) {
+  async function saveItem(data: ItemWriteInput) {
     if (editor?.kind !== 'item') return;
     const { item, list } = editor;
     const endpoint = `/wishlists/${list.id}/items`;
@@ -246,7 +246,7 @@ function App() {
               : !list ? <Loading label={t('Loading products…')} /> : <>
                 <div className="collection-tools">
                   <button type="button" onClick={() => setTools({ kind: 'comparison' })}>
-                    <Icon name="compare" />{t(list.items.length >= 2 ? 'Compare products' : 'Saved comparisons')}
+                    <Icon name="compare" />{t('Compare priorities')}
                   </button>
                   <button type="button" onClick={() => setTools({ kind: 'timing' })}>
                     <Icon name="clock" />{t(list.items.length ? 'Check wishlist timing' : 'Saved timing checks')}
@@ -308,10 +308,10 @@ function App() {
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}
       {editor?.kind === 'privacy' && <PrivacyForm signedIn={Boolean(accountStatus?.account)} close={() => setEditor(null)} cleared={() => {
-        drafts.impulse.clear(); drafts.comparison.clear(); finish('Assessment data cleared.');
+        drafts.impulse.clear(); finish('Assessment data cleared.');
       }} />}
       {tools && list && <Suspense fallback={<p role="status" className="sr-only">{t('Opening purchase tools…')}</p>}>
-        <PurchaseTools list={list} selection={tools} close={() => setTools(null)} drafts={drafts}
+        <PurchaseTools list={list} lists={lists ?? []} selection={tools} close={() => setTools(null)} drafts={drafts}
           onPriceUpdate={() => setRevision(value => value + 1)} />
       </Suspense>}
       {alertsOpen && <Suspense fallback={<p role="status" className="sr-only">{t('Loading price alerts…')}</p>}>

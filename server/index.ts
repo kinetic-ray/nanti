@@ -6,7 +6,7 @@ import { createApp } from './app.js';
 import { prismaWishlists } from './prisma-wishlists.js';
 import { prismaIntelligence } from './prisma-intelligence.js';
 import { assessmentRetentionDays } from './intelligence.js';
-import { previewProduct } from './product-preview.js';
+import { previewProduct, previewProductMetadata } from './product-preview.js';
 import { adminHashPattern, adminUsernamePattern } from './admin-credentials.js';
 import { prismaAffiliate } from './prisma-affiliate.js';
 import { prismaAccounts } from './prisma-accounts.js';
@@ -22,6 +22,7 @@ const config = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   NANTI_TRUST_PROXY: z.string().refine(value => !value || isIP(value) !== 0).default(''),
   NANTI_IKEA_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
+  NANTI_IKEA_PRICE_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
   NANTI_ADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
   NANTI_ADMIN_PASSWORD_HASH: z.string().regex(adminHashPattern).or(z.literal('')).default(''),
 }).refine((value) => Boolean(value.NANTI_ADMIN_USERNAME) === Boolean(value.NANTI_ADMIN_PASSWORD_HASH), {
@@ -79,6 +80,10 @@ const server = createApp({
     username: env.NANTI_ADMIN_USERNAME, passwordHash: env.NANTI_ADMIN_PASSWORD_HASH,
   } : undefined,
   preview: ikeaMetadataAllowed ? previewProduct : async () => null,
+  lookupMetadata: ikeaMetadataAllowed ? async (url) => {
+    const metadata = await previewProductMetadata(url);
+    return metadata && { ...metadata, price: env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted' ? metadata.price : null };
+  } : undefined,
   productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
   secret: env.SESSION_SECRET,
   secureCookies: env.NODE_ENV === 'production' || process.env.AUTH_PUBLIC_ORIGIN?.startsWith('https://') === true,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AssessmentPage, ReviewChange, SavedAssessment } from '../shared/intelligence.js';
+import { isQuickTiming } from '../shared/intelligence.js';
 import type { IntelligenceModule, Methodology } from '../shared/methodology.js';
 import type { TimingInput } from '../shared/purchase-timing.js';
 import type { Currency } from '../shared/wishlist.js';
@@ -24,15 +25,13 @@ export function ToolDialog({ title, context, module, version, close, busy = fals
   const { t } = useLocale();
   const [research, setResearch] = useState(false);
   return <Dialog title={title} busy={busy} close={close} focusHeading
-    className={`decision tool-dialog${wide ? ' decision-wide' : ''}`}>
+    className={`decision tool-dialog${wide ? ' decision-wide' : ''}`}
+    headerAction={<button type="button" className="icon-button" aria-label={t('Close')} title={t('Close')} disabled={busy} onClick={close}>
+      <Icon name="close" />
+    </button>}>
     <div className="decision-bar">
       <p className="hint">{context}</p>
-      <div className="actions">
-        <button type="button" className="methodology-entry" onClick={() => setResearch(true)}>{t('Research & Methodology')}</button>
-        <button type="button" className="icon-button" aria-label={t('Close')} title={t('Close')} disabled={busy} onClick={close}>
-          <Icon name="close" />
-        </button>
-      </div>
+      <button type="button" className="methodology-entry" onClick={() => setResearch(true)}>{t('Research & Methodology')}</button>
     </div>
     {children}
     {research && <MethodologyDialog module={module} version={version} close={() => setResearch(false)} />}
@@ -135,9 +134,9 @@ export function ReviewDetails({ changes, currency, label = 'Needs review' }: {
     <p className="review-badge">{t(label)}</p>
     <ul>{changes.map((change, index) => {
       switch (change.kind) {
-        case 'legacy': return <li key={index}>{t('This older result has no product snapshot. Check it again using today’s data.')}</li>;
-        case 'methodology': return <li key={index}>{t('The calculation method has changed.')}</li>;
-        case 'selection': return <li key={index}>{t('The selected products or alternative groups have changed.')}</li>;
+        case 'legacy': return <li key={index}>{t('Check again to include the latest product details.')}</li>;
+        case 'methodology': return <li key={index}>{t('There’s a new way to check this decision.')}</li>;
+        case 'selection': return <li key={index}>{t('The items in this check have changed.')}</li>;
         case 'preference': return <li key={index}>{t('The waiting preference has changed.')}</li>;
         case 'financial': return <li key={index}>{t('{field} differs from the previous check.', { field: t(financialLabels[change.field]) })}</li>;
         case 'planning': {
@@ -151,7 +150,7 @@ export function ReviewDetails({ changes, currency, label = 'Needs review' }: {
         case 'price':
         case 'quantity': {
           const format = (value: number | null) => value === null ? t('Unknown') :
-            change.kind === 'price' ? money(value, currency) : number(value);
+            change.kind === 'price' ? money(value, change.currency ?? currency) : number(value);
           return <li key={index}>{t('{name} · {field} changed from {before} to {after}.', {
             name: change.name, field: t(change.kind === 'price' ? 'Price' : 'Quantity'),
             before: format(change.before), after: format(change.after),
@@ -189,9 +188,10 @@ export function History({ history, name, onSelect, onDelete, disabled, initialOp
         {page && page.records.length > 0 && <ol className="history-list">
           {page.records.map((record) => <li key={record.id}>
             <div>
-              <strong>{record.kind === 'impulse' ? t(record.result.concern) :
+              <strong>{record.kind === 'impulse' ? t('Buying reasons checked') : isQuickTiming(record) ?
+                t({ safe: 'Essentials are covered', tight: 'It would be tight', unsure: 'Not sure yet' }[record.result.answer] as Message) :
                 record.kind === 'timing' ? t(record.result.status) : t('{n} products', { n: number(record.input.alternatives.length) })}</strong>
-              <div className="hint"><time dateTime={record.createdAt}>{date(record.createdAt)}</time></div>
+              <div className="hint"><time dateTime={record.createdAt}>{t('Last checked {date}', { date: date(record.createdAt) })}</time></div>
               {!!record.review?.length && <span className="review-badge">{t('Needs review')}</span>}
             </div>
             <div className="actions">
@@ -209,7 +209,7 @@ export function History({ history, name, onSelect, onDelete, disabled, initialOp
                   requestAnimationFrame(() => previousButton.current?.focus());
                 }}>{t('Cancel')}</button>
               </> : <>
-                <button type="button" disabled={disabled} onClick={() => onSelect(record)}>{t('View result')}</button>
+                <button type="button" disabled={disabled} onClick={() => onSelect(record)}>{t('View decision')}</button>
                 <button ref={(element) => { if (element && element.dataset.target === previousButton.current?.dataset.target) previousButton.current = element; }}
                   data-target={record.id} type="button" disabled={busy || disabled}
                   onClick={(event) => { previousButton.current = event.currentTarget; setDeletion(record.id); }}>{t('Delete')}</button>

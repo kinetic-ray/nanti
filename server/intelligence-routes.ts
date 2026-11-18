@@ -1,17 +1,22 @@
+import { createHash } from 'node:crypto';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { evaluateImpulse } from '../shared/impulse.js';
+import { evaluateBuyingReasons, evaluateImpulse } from '../shared/impulse.js';
 import { getMethodology } from '../shared/methodology.js';
 import { evaluateTiming } from '../shared/purchase-timing.js';
 import { comparisonAlternatives, evaluateComparison } from '../shared/value-ranker.js';
+import { isPriority, isQuickTiming } from '../shared/intelligence.js';
 import type { AssessmentKind, SavedPayload, TimingPlanInput } from '../shared/intelligence.js';
+import { rankPriorities } from '../shared/priorities.js';
+import { checkReadiness, readinessSelection } from '../shared/quick-timing.js';
 import { getPurchaseQuote, includedProducts } from '../shared/purchase-plan.js';
-import type { Item } from '../shared/wishlist.js';
+import type { Currency, Item } from '../shared/wishlist.js';
 import { SaveIntentConflict } from './intelligence.js';
 import type { AssessmentScope, FinancialFingerprints, IntelligenceRepository } from './intelligence.js';
 import { assessmentChanges, fingerprintFinances, productSnapshot, saveIntent, timingChanges, validatePlan } from './assessment-review.js';
 import {
-  algorithmVersion, comparisonBody, historyQuery, id, impulseBody, methodologyModule, preferenceBody, timingBody,
+  algorithmVersion, buyingReasonsBody, comparisonBody, historyQuery, id, impulseBody, methodologyModule, preferenceBody,
+  prioritiesBody, quickTimingBody, timingBody,
 } from './intelligence-validation.js';
 import type { ScopedWishlist, WishlistRepository } from './wishlist.js';
 
@@ -77,8 +82,13 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
     res.status(409).json({ code: 'inputs_changed', error: 'The saved products changed. Check again before saving.' });
   }
 
+  function sameProducts(items: Item[], expected: { id: string; priceMinor: number | null; quantity: number }[]) {
+    return items.length === expected.length && items.every((item) => expected.some((old) =>
+      item.id === old.id && item.priceMinor === old.priceMinor && item.quantity === old.quantity));
+  }
+
   async function save(req: Request, res: ScopedResponse, kind: AssessmentKind,
-    prepare: () => Promise<{ payload: SavedPayload; items: Item[]; financial?: FinancialFingerprints } | null>) {
+    prepare: () => Promise<{ payload: SavedPayload; items: (Item & { currency?: Currency })[]; financial?: FinancialFingerprints } | null>) {
     const key = id.optional().parse(req.get('Idempotency-Key'));
     const intent = key ? saveIntent(secret, key, req.body) : undefined;
     const target = scope(res, kind);
@@ -108,8 +118,12 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
       const page = await repository.history(scope(res, kind), historyQuery.parse(req.query).before);
       const { item, list, ownerId } = res.locals;
       const preference = kind === 'impulse' ? (await repository.preferences(ownerId)).coolingOffDays : undefined;
+      const otherLists = new Set(page.records.flatMap((record) => isPriority(record)
+        ? record.input.alternatives.map(({ wishlistId }) => wishlistId).filter((wishlistId) => wishlistId !== list.id) : []));
+      const loaded = await Promise.all([...otherLists].map((wishlistId) => wishlists.find(ownerId, wishlistId)));
+      const currentProducts = [list, ...loaded.filter((entry) => entry !== null)].flatMap((entry) => entry.items);
       res.json({ ...page, records: page.records.map((record) => {
-        const review = assessmentChanges(record, item ? [item] : list.items, preference);
+        const review = assessmentChanges(record, item ? [item] : isPriority(record) ? currentProducts : list.items, preference);
         return review.length ? { ...record, review } : record;
       }) });
     });
@@ -121,6 +135,15 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
 
   history(itemApi, '/impulse', 'impulse');
   itemApi.post('/impulse', async (req, res: ScopedResponse) => {
+    if (req.body && Object.hasOwn(req.body, 'answers')) {
+      const { answers, period } = buyingReasonsBody.parse(req.body);
+      await save(req, res, 'impulse', async () => ({
+        items: [res.locals.item!],
+        payload: { kind: 'impulse', input: answers,
+          result: evaluateBuyingReasons(answers, period, new Date().toISOString().slice(0, 10)) },
+      }));
+      return;
+    }
     const input = impulseBody.parse(req.body);
     await save(req, res, 'impulse', async () => {
       const { coolingOffDays } = await repository.preferences(res.locals.ownerId);
@@ -131,12 +154,29 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
 
   history(listApi, '/comparisons', 'comparison');
   listApi.post('/comparisons', async (req, res: ScopedResponse) => {
+    if (req.body?.mode === 'priorities') {
+      const { expectedProducts, ...input } = prioritiesBody.parse(req.body);
+      await save(req, res, 'comparison', async () => {
+        const { list, ownerId } = res.locals;
+        const ids = [...new Set(input.alternatives.map(({ wishlistId }) => wishlistId))];
+        const sources = await Promise.all(ids.map((id) => id === list.id ? list : wishlists.find(ownerId, id)));
+        const items = input.alternatives.map(({ wishlistId, itemId }) => {
+          const source = sources.find((source) => source?.id === wishlistId);
+          const item = source?.items.find((item) => item.id === itemId);
+          return item && source ? { ...item, currency: source.currency } : undefined;
+        });
+        if (items.some((item) => !item)) { missing(res); return null; }
+        const selected = items.filter((item) => item !== undefined);
+        if (!sameProducts(selected, expectedProducts)) { changed(res); return null; }
+        return { items: selected, payload: { kind: 'comparison', input, result: rankPriorities(input) } };
+      });
+      return;
+    }
     const { expectedProducts, ...input } = comparisonBody.parse(req.body);
     await save(req, res, 'comparison', async () => {
       const ids = new Set(input.alternatives.map(({ itemId }) => itemId));
       const items = res.locals.list.items.filter(({ id }) => ids.has(id));
-      if (expectedProducts && (expectedProducts.length !== items.length || items.length !== ids.size || items.some((item) =>
-        !expectedProducts.some((old) => item.id === old.id && item.priceMinor === old.priceMinor && item.quantity === old.quantity)))) {
+      if (expectedProducts && (items.length !== ids.size || !sameProducts(items, expectedProducts))) {
         changed(res);
         return null;
       }
@@ -178,7 +218,7 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
     }
     const financial = fingerprintFinances(secret, list.scopeId ?? res.locals.ownerId, input);
     const stored = input.reviewId ? await repository.find(scope(res, 'timing'), input.reviewId) : null;
-    if (input.reviewId && !stored) { missing(res); return null; }
+    if (input.reviewId && (!stored || isQuickTiming(stored.record))) { missing(res); return null; }
     const result = evaluateTiming({ ...input, purchaseMinor: quote.source === 'saved' ? quote.subtotalMinor : input.purchaseMinor },
       new Date().toISOString().slice(0, 10));
     const { previewToken, ...previewInput } = input;
@@ -200,6 +240,17 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
       res.json({ ...result, quote, review, snapshot, previewToken: token });
     });
     router.post('/timing/history', async (req, res: ScopedResponse) => {
+      if (req.body?.mode === 'quick') {
+        const { expectedSelection, ...input } = quickTimingBody.parse(req.body);
+        await save(req, res, 'timing', async () => {
+          const { item, list } = res.locals;
+          const items = item ? [item] : list.items;
+          if (!items.length) { missing(res); return null; }
+          if (createHash('sha256').update(readinessSelection(items)).digest('hex') !== expectedSelection) { changed(res); return null; }
+          return { items, payload: { kind: 'timing', input, result: checkReadiness(input.answer, items) } };
+        });
+        return;
+      }
       const input = timingBody.parse(req.body);
       await save(req, res, 'timing', async () => {
         const prepared = await prepareTiming(res, input);

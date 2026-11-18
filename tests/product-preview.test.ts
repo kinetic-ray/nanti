@@ -1,9 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
-import { previewProduct } from '../server/product-preview.js';
+import { previewProduct, previewProductMetadata } from '../server/product-preview.js';
 
 const link = new URL('https://www.ikea.com/us/en/p/example-product-12345678/?tracking=1#details');
 
 describe('Product preview', () => {
+  it('reads a single published price with currency, and withholds conflicting or aggregate offers', async () => {
+    const head = (fragment: string) => async () => new Response(`<head>
+      <meta property="og:title" content="Chair">
+      <meta property="og:image" content="https://www.ikea.com/us/en/images/products/example_1.jpg">
+      ${fragment}</head>`, { headers: { 'content-type': 'text/html' } });
+    const offer = (price: string, type = 'Offer') => `<script type="application/ld+json">{
+      "@type":"Product","offers":{"@type":"${type}","price":"${price}","priceCurrency":"USD"}
+    }</script>`;
+    const tags = '<meta property="product:price:amount" content="23.49"><meta property="product:price:currency" content="USD">';
+    await expect(previewProductMetadata(link, head(offer('23.49') + tags))).resolves.toMatchObject({
+      title: 'Chair', image: expect.stringContaining('example_1.jpg'), price: { priceMinor: 2349, currency: 'USD' },
+    });
+    await expect(previewProductMetadata(link, head(offer('25.00') + tags))).resolves.toMatchObject({ price: null });
+    await expect(previewProductMetadata(link, head(offer('23.49', 'AggregateOffer')))).resolves.toMatchObject({ price: null });
+  });
   it('reads the supported product name and strips tracking from the outgoing request', async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(
       '<head><meta content="Lamp &amp; Shade" property="og:title"></head>',
