@@ -127,12 +127,13 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
     // No full URLs, query strings, affiliate codes or product identifiers in logs.
     console.info('[product-import]', { merchant: productMerchant(initial.hostname), host, reason, ...(status === undefined ? {} : { status }) });
   };
+  let current = new URL(initial.href);
+  let hop = 0;
   try {
     const merchant = productMerchant(initial.hostname);
     if (merchant !== 'shopee' && merchant !== 'tokopedia') return null;
-    let current = new URL(initial.href);
     current.hash = '';
-    for (let hop = 0; hop < 6; hop++) {
+    for (hop = 0; hop < 6; hop++) {
       if (current.protocol !== 'https:' || !isMarketplaceHost(current.hostname, merchant) ||
           current.username || current.password || current.port) {
         diagnostic('redirect_disallowed', current.hostname);
@@ -228,7 +229,8 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
     diagnostic('redirect_limit', current.hostname);
     return null;
   } catch (error) {
-    diagnostic(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'request_error', initial.hostname);
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    diagnostic(timeout ? (hop > 0 ? 'destination_timeout' : 'timeout') : 'request_error', current.hostname);
     return null;
   }
 }
