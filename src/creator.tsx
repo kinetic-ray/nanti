@@ -22,7 +22,7 @@ export function CreatorLanding() {
           <p>{id ? 'Kumpulkan produk favorit, susun rekomendasi yang enak dilihat, lalu bagikan satu halaman ke audiensmu.' : 'Collect your favorite products, curate a beautiful list, and share one page with your audience.'}</p>
           <div className="creator-hero-actions">
             <a className="creator-primary" href="#cara-kerja">{id ? 'Lihat konsepnya' : 'Explore the concept'} <span aria-hidden="true">↗</span></a>
-            <a className="creator-secondary" href="/account">{id ? 'Akun Nanti' : 'Nanti account'}</a>
+            <a className="creator-secondary" href="/creator/demo">{id ? "Lihat contoh storefront" : "View sample storefront"}</a><a className="creator-secondary" href="/account">{id ? 'Akun Nanti' : 'Nanti account'}</a>
           </div>
           <p className="creator-fineprint">{id ? 'Ini pratinjau konsep. Belum tersedia pendaftaran atau publikasi halaman kreator.' : 'This is a concept preview. Creator registration and publishing are not available yet.'}</p>
         </div>
