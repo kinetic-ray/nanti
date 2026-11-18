@@ -53,3 +53,27 @@ describe('Product preview', () => {
     await expect(previewProduct(link, async () => { throw new Error('network'); })).resolves.toBeNull();
   });
 });
+
+
+describe('Marketplace shortlink redirects', () => {
+  it('follows an allowlisted Shopee redirect to a www product page and extracts metadata', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      const target = String(url);
+      if (target.startsWith('https://s.shopee.co.id/')) return new Response(null, {
+        status: 302, headers: { location: 'https://www.shopee.co.id/example-i.123.456' },
+      });
+      return new Response('<html><head><meta property="og:title" content="Example product"><meta property="og:image" content="https://cf.shopee.co.id/file/test"></head></html>',
+        { headers: { 'content-type': 'text/html' } });
+    });
+    await expect(previewProductMetadata(new URL('https://s.shopee.co.id/abcd'), fetcher))
+      .resolves.toMatchObject({ title: 'Example product', image: 'https://cf.shopee.co.id/file/test', price: null });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it('rejects redirects outside marketplace allowlists without fetching destination', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, {
+      status: 302, headers: { location: 'https://example.com/redirect' },
+    }));
+    await expect(previewProductMetadata(new URL('https://s.shopee.co.id/abcd'), fetcher)).resolves.toBeNull();
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+});
