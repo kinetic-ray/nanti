@@ -123,14 +123,21 @@ function isMarketplaceHost(host: string, merchant: 'shopee' | 'tokopedia') {
 }
 
 async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
+  const diagnostic = (reason: string, host: string, status?: number) => {
+    // No full URLs, query strings, affiliate codes or product identifiers in logs.
+    console.info('[product-import]', { merchant: productMerchant(initial.hostname), host, reason, ...(status === undefined ? {} : { status }) });
+  };
   try {
     const merchant = productMerchant(initial.hostname);
     if (merchant !== 'shopee' && merchant !== 'tokopedia') return null;
     let current = new URL(initial.href);
     current.hash = '';
-    for (let hop = 0; hop < 4; hop++) {
+    for (let hop = 0; hop < 6; hop++) {
       if (current.protocol !== 'https:' || !isMarketplaceHost(current.hostname, merchant) ||
-          current.username || current.password || current.port) return null;
+          current.username || current.password || current.port) {
+        diagnostic('redirect_disallowed', current.hostname);
+        return null;
+      }
       const response = await request(current, {
         redirect: 'manual', signal: AbortSignal.timeout(3500),
         headers: { accept: 'text/html' },
@@ -138,12 +145,12 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location');
         await response.body?.cancel();
-        if (!location) return null;
+        if (!location) { diagnostic('redirect_missing_location', current.hostname, response.status); return null; }
         current = new URL(location, current);
         continue;
       }
       if (!response.ok || !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ||
-          !response.body) { await response.body?.cancel(); return null; }
+          !response.body) { diagnostic(!response.ok ? 'http_failure' : 'not_html', current.hostname, response.status); await response.body?.cancel(); return null; }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let html = '';
@@ -215,8 +222,13 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
           }
         } catch { /* Invalid image URL. */ }
       }
+      if (!title && !image) diagnostic('metadata_missing', current.hostname, response.status);
       return title || image ? { title, image, price: null } : null;
     }
+    diagnostic('redirect_limit', current.hostname);
     return null;
-  } catch { return null; }
+  } catch (error) {
+    diagnostic(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'request_error', initial.hostname);
+    return null;
+  }
 }
