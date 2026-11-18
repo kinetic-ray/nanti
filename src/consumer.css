@@ -728,3 +728,25 @@ body:has(.consumer) { background: #f8f6fc; }
   .decision-progress progress::-webkit-progress-value { transition: none; }
   .decision-progress progress::-moz-progress-bar { transition: none; }
 }
+
+/* Priority comparison: clearer mobile rhythm and hierarchy. */
+.consumer .decision.tool-dialog.decision-wide > .dialog-header { padding-bottom: .65rem; }
+.consumer .decision.tool-dialog.decision-wide > .dialog-header h2 { font-size: clamp(1.45rem, 5vw, 1.85rem); line-height: 1.2; letter-spacing: -.035em; }
+.consumer .decision.tool-dialog.decision-wide .decision-bar { padding: .65rem 0 .9rem; gap: .5rem 1rem; align-items: center; }
+.consumer .decision.tool-dialog.decision-wide .decision-bar .hint { font-size: .875rem; line-height: 1.4; }
+.consumer .decision.tool-dialog.decision-wide .methodology-entry { padding: .35rem 0; font-size: .875rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose { margin-top: 0; padding-top: 1.15rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose h3 { font-size: clamp(1.2rem, 4.2vw, 1.4rem); line-height: 1.3; letter-spacing: -.025em; margin: 0 0 .45rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose > .hint { font-size: .92rem; line-height: 1.5; margin: 0 0 1rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose .product-options { gap: .6rem; margin: 0 0 1rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose .check-label { min-height: 3.5rem; padding: .8rem .9rem; gap: .75rem; border-radius: .85rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose-actions { margin-top: .2rem; }
+.consumer .decision.tool-dialog.decision-wide .priority-choose-actions .primary { min-height: 3rem; }
+.consumer .decision.tool-dialog.decision-wide .decision-history { margin-top: 1.35rem; padding-top: .9rem; }
+.consumer .decision.tool-dialog.decision-wide .decision-history > summary { font-size: .95rem; min-height: 2.75rem; }
+@media (max-width: 600px) {
+  .consumer .decision.tool-dialog.decision-wide .decision-bar { align-items: flex-start; }
+  .consumer .decision.tool-dialog.decision-wide .decision-bar .hint { flex-basis: 100%; }
+  .consumer .decision.tool-dialog.decision-wide .priority-choose-actions .primary { width: 100%; }
+  .consumer .decision.tool-dialog.decision-wide .priority-choose { padding-top: 1rem; }
+}
