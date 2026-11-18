@@ -118,11 +118,25 @@ export function ItemForm({ item, currency, close, save }: {
   const [importedName, setImportedName] = useState(false);
   const [importedPrice, setImportedPrice] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [manualImageUrl, setManualImageUrl] = useState('');
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const uploadInput = useRef<HTMLInputElement>(null);
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
   const pastePending = useRef(false);
+
+  function chooseImage(file?: File) {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setError('Choose a JPG, PNG or WebP image smaller than 2 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string') { setUploadedImage(reader.result); setError(''); } };
+    reader.readAsDataURL(file);
+  }
 
   function setLink(value: string) {
     setUrl(value);
@@ -243,6 +257,27 @@ export function ItemForm({ item, currency, close, save }: {
           </div>
         </div>}
         {showDetails && <>
+          <div className="product-image-editor">
+            <input ref={uploadInput} type="file" accept="image/jpeg,image/png,image/webp"
+              className="product-image-file" aria-label="Upload product image"
+              onChange={event => chooseImage(event.target.files?.[0])} />
+            <button type="button" className="product-image-placeholder"
+              aria-label="Choose a product image from your device"
+              disabled={busy || looking} onClick={() => uploadInput.current?.click()}>
+              {uploadedImage || manualImageUrl || (preview?.imagePath && !imageFailed)
+                ? <img src={uploadedImage || manualImageUrl || preview?.imagePath || ''}
+                    alt="Product preview" onError={() => { setManualImageUrl(''); setImageFailed(true); }} />
+                : <span aria-hidden="true">＋<small>Image</small></span>}
+            </button>
+            <div className="product-image-url">
+              <label>Image URL <span className="optional">(optional)</span>
+                <input type="url" value={manualImageUrl} placeholder="https://example.com/product.jpg"
+                  disabled={busy || looking} onChange={event => { setManualImageUrl(event.target.value); setUploadedImage(null); }} />
+              </label>
+              <p className="hint">Tap the image to upload, or paste an image URL. Image selection is a preview only until saving is supported.</p>
+              {(uploadedImage || manualImageUrl) && <button type="button" onClick={() => { setUploadedImage(null); setManualImageUrl(''); if (uploadInput.current) uploadInput.current.value = ''; }}>Remove image</button>}
+            </div>
+          </div>
           <label>{t('Product name')}<input ref={nameInput} name="product-name" required maxLength={160} value={name} disabled={looking || busy}
             onChange={(event) => { setName(event.target.value); setImportedName(false); }} /></label>
           <div className="fields">
