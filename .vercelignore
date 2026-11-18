@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+.gitnexus/
+dist/
+server/generated/

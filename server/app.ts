@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import type { ErrorRequestHandler, Response } from 'express';
 import cookieParser from 'cookie-parser';
@@ -56,9 +56,10 @@ type Options = {
   productMedia?: ReturnType<typeof createProductMedia>;
   secret: string;
   secureCookies: boolean;
-  trustedProxy?: string;
+  trustedProxy?: string | number;
   webRoot?: string;
   checkDatabase?: () => Promise<void>;
+  retention?: { secret: string; prune: () => Promise<unknown> };
 };
 
 function notFound(response: Response) {
@@ -66,7 +67,7 @@ function notFound(response: Response) {
 }
 
 export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null,
-  secret, secureCookies, trustedProxy, webRoot, checkDatabase }: Options) {
+  secret, secureCookies, trustedProxy, webRoot, checkDatabase, retention }: Options) {
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
@@ -93,6 +94,16 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
       res.status(503).json({ service: 'nanti', ...databaseProblem });
     }
   });
+  if (retention) {
+    const digest = (value: string) => createHash('sha256').update(value).digest();
+    const authorized = digest(`Bearer ${retention.secret}`);
+    api.get('/maintenance/retention', async (req, res) => {
+      if (req.method !== 'GET') return res.status(405).set('Allow', 'GET').end();
+      if (!timingSafeEqual(authorized, digest(req.get('authorization') ?? ''))) return res.status(401).end();
+      await retention.prune();
+      res.status(204).end();
+    });
+  }
   api.use(cookieParser(secret));
   if (account) api.use('/account', account.callbacks);
   api.use((req, res, next) => {
