@@ -66,7 +66,7 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
       if (index !== -1) dialogHistoryStack.splice(index, 1);
       // Explicit close (button/save) must also remove the synthetic entry.
       if (!consumed && history.state?.__nantiDialog === marker) {
-        pendingDialogHistoryCleanup++;
+        if (dialogHistoryStack.length > 0) pendingDialogHistoryCleanup++;
         history.back();
       }
       viewport?.removeEventListener('resize', updateViewport);
