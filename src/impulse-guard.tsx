@@ -48,6 +48,8 @@ export function ImpulseGuard({ path, name, currency, close, drafts }: {
   const today = new Date().toISOString().slice(0, 10);
   const result = viewed?.result ?? (!question ? evaluateScreening(answers, period, today) : null);
   const screening = result && 'outcome' in result ? result : null;
+  const screeningCopy = screening && (screening.outcome === 'green' || screening.outcome === 'yellow' || screening.outcome === 'red')
+    ? screeningOutcomes[screening.outcome] : null;
   const latest = history.page?.records[0];
   const reviewOn = latest?.kind === 'impulse' && 'reviewOn' in latest.result ? latest.result.reviewOn : null;
 
@@ -105,12 +107,12 @@ export function ImpulseGuard({ path, name, currency, close, drafts }: {
     </div>
     {result ? <section className="screening-result">
       <div className="decision-result screening-summary" data-screening={screening?.outcome} data-outcome={result.concern}>
-        {screening && <p className="screening-label">
+        {screeningCopy && <p className="screening-label">
           <Icon name={screening.outcome === 'green' ? 'check' : screening.outcome === 'yellow' ? 'clock' : 'bookmark'} />
-          {t(screeningOutcomes[screening.outcome][0])}
+          {t(screeningCopy![0])}
         </p>}
-        <h3 ref={heading} tabIndex={-1}>{t(screening ? screeningOutcomes[screening.outcome][1] : outcomes[result.concern][0])}</h3>
-        <p>{t(screening ? screeningOutcomes[screening.outcome][2] : outcomes[result.concern][1])}</p>
+        <h3 ref={heading} tabIndex={-1}>{t(screeningCopy ? screeningCopy[1] : outcomes[result.concern][0])}</h3>
+        <p>{t(screeningCopy ? screeningCopy[2] : outcomes[result.concern][1])}</p>
         {'outcome' in result ? <ScreeningExplanation result={result} /> : <ImpulseExplanation result={result} />}
       </div>
       {viewed && <p className="hint">{t('Last checked {date}', { date: date(viewed.createdAt) })}</p>}
