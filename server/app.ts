@@ -41,6 +41,7 @@ const itemInput = z.strictObject({
   url: productUrl.transform((url) => url.href).nullable(),
   priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
   quantity: z.number().int().min(1).max(999),
+  imageData: z.union([z.null(), z.string().max(260_000).regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/)]).optional(),
   priceSource: z.literal('imported_unverified').optional(),
 });
 
