@@ -13,7 +13,8 @@ const link = 'https://retailer.example.test/p/lamp?utm_source=user';
 const testDatabase = process.env.TEST_DATABASE_URL;
 
 it('recognizes supported storefronts, preserves original destinations, and fetches only an explicitly enabled IKEA adapter', async () => {
-  const preview = vi.fn().mockResolvedValueOnce('Fixture retailer title').mockResolvedValueOnce(null);
+  const preview = vi.fn().mockImplementation(async (url: URL) => url.hostname === 'shopee.co.id' ||
+    (url.hostname === 'www.ikea.com' && !url.searchParams.has('repeat')) ? 'Fixture retailer title' : null);
   const app = createApp({ preview, secureCookies: false, secret: randomUUID(),
     repository: { list: vi.fn().mockResolvedValue([]), find: vi.fn(), create: vi.fn(), rename: vi.fn(),
       remove: vi.fn(), addItem: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn() } });
@@ -38,13 +39,13 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
   await guest.post('/api/products/import').set(mutation).send({ url: ikea }).expect(200, {
     merchant: 'ikea', hostname: 'www.ikea.com', originalUrl: ikea, name: 'Fixture retailer title', status: 'name_available',
   });
-  await guest.post('/api/products/import').set(mutation).send({ url: ikea }).expect(200).expect(({ body }) =>
+  await guest.post('/api/products/import').set(mutation).send({ url: ikea + '&repeat=1' }).expect(200).expect(({ body }) =>
     expect(body.status).toBe('manual_required'));
   for (const url of ['file:///tmp/test', 'http://localhost:9999/', 'http://10.0.0.1/',
     'https://store.example.test/?redirect=https%3A%2F%2Fother.example.test']) {
     await guest.post('/api/products/import').set(mutation).send({ url }).expect(400);
   }
-  expect(preview).toHaveBeenCalledTimes(2);
+  expect(preview).toHaveBeenCalledTimes(3);
 });
 
 it('returns a reviewable authorized preview while keeping external image URLs out of the response', async () => {
