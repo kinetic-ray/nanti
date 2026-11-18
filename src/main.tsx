@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
+import { sharedProductLink } from './share-target.js';
 import type { Currency, Item, ItemWriteInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { DeleteForm, ItemForm, ListForm, PrivacyForm } from './forms.js';
@@ -43,6 +44,8 @@ function App() {
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [unreadAlerts, setUnreadAlerts] = useState(0);
+  const [sharedLink, setSharedLink] = useState(() => sharedProductLink(new URL(location.href)));
+  const [sharedDraft, setSharedDraft] = useState(() => sharedProductLink(new URL(location.href)));
 
   useEffect(() => {
     const changed = (event: StorageEvent) => { if (event.key === authChangeKey) location.reload(); };
@@ -91,6 +94,15 @@ function App() {
   const activeId = selected?.id;
 
   useEffect(() => {
+    if (!lists || !sharedLink || !selected) return;
+    setEditor({ kind: 'item', list: selected });
+    setSharedLink(null);
+    const address = new URL(location.href);
+    for (const key of ['title', 'text', 'url']) address.searchParams.delete(key);
+    history.replaceState(history.state, '', address.pathname + address.search + address.hash);
+  }, [lists, selected, sharedLink]);
+
+  useEffect(() => {
     if (!activeId) return;
     const controller = new AbortController();
     api<PriceInbox>('/prices/alerts', { signal: controller.signal }).then(
@@ -122,6 +134,7 @@ function App() {
   }
 
   function finish(message: Message) {
+    setSharedDraft(null);
     setEditor(null);
     setStatus(message);
   }
@@ -303,8 +316,8 @@ function App() {
         {status && <><Icon name="check" />{t(status)}</>}
       </div>
       {editor?.kind === 'list' && <ListForm list={editor.list} close={() => setEditor(null)} save={saveList} />}
-      {editor?.kind === 'item' && <ItemForm item={editor.item} listId={editor.list.id} currency={editor.list.currency}
-        close={() => setEditor(null)} save={saveItem} />}
+      {editor?.kind === 'item' && <ItemForm item={editor.item} initialUrl={!editor.item ? sharedDraft ?? undefined : undefined} listId={editor.list.id} currency={editor.list.currency}
+        close={() => { setSharedDraft(null); setEditor(null); }} save={saveItem} />}
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}
       {editor?.kind === 'privacy' && <PrivacyForm signedIn={Boolean(accountStatus?.account)} close={() => setEditor(null)} cleared={() => {
