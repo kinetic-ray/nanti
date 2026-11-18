@@ -11,6 +11,9 @@ export async function previewProduct(url: URL, request = fetch): Promise<string 
 }
 
 export async function previewProductMetadata(url: URL, request = fetch) {
+  // Shopee short links and product pages may expose public Open Graph metadata.
+  // Only follow redirects within explicitly allowed Shopee domains; never fetch arbitrary destinations.
+  if (isShopeeHost(url.hostname)) return previewShopeeMetadata(url, request);
   if (!isIkeaMetadataLink(url)) return null;
 
   try {
@@ -104,4 +107,78 @@ function productOffers(data: unknown, url: URL): NonNullable<ProductImport['pric
       return price ? [price] : [];
     });
   });
+}
+
+const shopeeHosts = new Set([
+  's.shopee.co.id', 'shopee.co.id', 'shopee.com', 'shopee.sg',
+  'shopee.com.my', 'shopee.co.th', 'shopee.vn', 'shopee.ph',
+  'shopee.com.br', 'shope.ee',
+]);
+function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase()); }
+
+async function previewShopeeMetadata(initial: URL, request: typeof fetch) {
+  try {
+    let current = new URL(initial.href);
+    current.hash = '';
+    for (let hop = 0; hop < 4; hop++) {
+      if (current.protocol !== 'https:' || !isShopeeHost(current.hostname) ||
+          current.username || current.password || current.port) return null;
+      const response = await request(current, {
+        redirect: 'manual', signal: AbortSignal.timeout(3500),
+        headers: { accept: 'text/html' },
+      });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        await response.body?.cancel();
+        if (!location) return null;
+        current = new URL(location, current);
+        continue;
+      }
+      if (!response.ok || !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ||
+          !response.body) { await response.body?.cancel(); return null; }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let html = '';
+      let total = 0;
+      try {
+        while (total < MAX_BYTES) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const length = Math.min(value.byteLength, MAX_BYTES - total);
+          total += length;
+          html += decoder.decode(value.subarray(0, length), { stream: true });
+          if (/<\/head\s*>/i.test(html)) break;
+        }
+      } finally { await reader.cancel(); }
+      const document = parse(html + decoder.decode());
+      const root = document.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
+        'tagName' in node && node.tagName === 'html');
+      const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
+        'tagName' in node && node.tagName === 'head');
+      const tags = new Map<string, string>();
+      for (const node of head?.childNodes ?? []) {
+        if (!('tagName' in node) || node.tagName !== 'meta') continue;
+        const key = node.attrs.find(a => a.name === 'property' || a.name === 'name')?.value.toLowerCase();
+        const content = node.attrs.find(a => a.name === 'content')?.value.trim();
+        if (key && content && !tags.has(key)) tags.set(key, content);
+      }
+      const title = (tags.get('og:title') ?? tags.get('twitter:title') ?? '').slice(0, 160) || null;
+      const candidate = tags.get('og:image') ?? tags.get('twitter:image');
+      let image: string | null = null;
+      if (candidate) {
+        try {
+          const parsed = new URL(candidate, current);
+          // Only publicly hosted Shopee image-CDN URLs; no arbitrary image fetching.
+          const host = parsed.hostname.toLowerCase();
+          if (parsed.protocol === 'https:' && !parsed.username && !parsed.password &&
+              (host === 'susercontent.com' || host.endsWith('.susercontent.com') ||
+               host === 'shopee.co.id' || host.endsWith('.shopee.co.id'))) {
+            image = parsed.href.slice(0, 2048);
+          }
+        } catch { /* Invalid image URL. */ }
+      }
+      return title || image ? { title, image, price: null } : null;
+    }
+    return null;
+  } catch { return null; }
 }

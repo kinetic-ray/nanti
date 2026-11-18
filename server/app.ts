@@ -221,7 +221,8 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
     const meta = canLookUp && lookupMetadata ? await lookupMetadata(url) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
     const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
-    const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` : null;
+    const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
+      merchant === 'shopee' ? meta?.image ?? null : null;
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: url.href, name,
       ...(imagePath && { imagePath }),
