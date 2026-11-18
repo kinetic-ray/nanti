@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { loginProviders } from '../shared/account.js';
 import type { AccountStatus, AuthPurpose, LoginProvider } from '../shared/account.js';
 import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
@@ -79,9 +80,21 @@ export function AccountDialog({ status, notice, close, update }: {
   const providerButtons = (choices: LoginProvider[], purpose: AuthPurpose) => choices.map(provider =>
     <button key={provider} type="button" disabled={busy} className={`account-provider provider-${provider}`}
       onClick={() => void run(() => start(provider, purpose))}>
-      {t(purpose === 'signin' ? 'Continue with {provider}' : purpose === 'link' ?
-        'Connect {provider}' : 'Verify with {provider}', { provider: providerNames[provider] })}<Icon name="arrow" />
+      <span className="account-provider-mark" aria-hidden="true">{provider === 'google' ? 'G' : '●'}</span>
+      <span className="account-provider-label">{t(purpose === 'signin' ? 'Continue with {provider}' : purpose === 'link' ?
+        'Connect {provider}' : 'Verify with {provider}', { provider: providerNames[provider] })}</span>
+      <Icon name="arrow" />
     </button>);
+  const signInShell = loginProviders.map(provider => {
+    const enabled = status?.available.includes(provider) ?? false;
+    return enabled ? providerButtons([provider], 'signin') : <button key={provider} type="button"
+      className={`account-provider provider-${provider} account-provider-pending`} disabled
+      aria-label={`${providerNames[provider]} sign-in is not configured`}>
+      <span className="account-provider-mark" aria-hidden="true">{provider === 'google' ? 'G' : '●'}</span>
+      <span className="account-provider-label">{t('Continue with {provider}', { provider: providerNames[provider] })}</span>
+      <span className="account-provider-status">Coming soon</span>
+    </button>;
+  });
 
   return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
     title={t(account ? 'Your account' : 'Sign in to Nanti')} busy={busy} close={close} focusHeading>
@@ -98,11 +111,16 @@ export function AccountDialog({ status, notice, close, update }: {
         update(current);
       })}>{t('Try again')}</button>
     </> :
-      !account ? <>
+      !account ? <section className="account-signin-shell">
+        <div className="account-signin-emblem" aria-hidden="true">N</div>
+        <h3>Your wishlist, wherever you go.</h3>
         <p>{t('Keep your wishlists and purchase decisions with you across devices.')}</p>
-        <div className="account-providers">{providerButtons(status.available, 'signin')}</div>
-        {!status.available.length && <p>{t('Sign-in is currently unavailable.')}</p>}
-      </> : <>
+        <div className="account-providers">{signInShell}</div>
+        {!status.available.length && <p className="account-signin-note" role="status">
+          Google and Apple sign-in are being prepared. You can still use Nanti as a guest.
+        </p>}
+        <p className="account-signin-note">Your existing guest wishlists stay available on this device.</p>
+      </section> : <>
         {account.import && <section className="account-import" aria-labelledby="account-import-heading">
           <h3 id="account-import-heading">{t('Bring your guest data')}</h3>
           <p>{t('This browser has {guest} guest wishlists. Your account has {account} wishlists.', {
