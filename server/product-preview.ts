@@ -181,6 +181,8 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
       // Prefer public social preview tags, then structured Product data if available.
       let structuredTitle: string | null = null;
       let structuredImage: string | null = null;
+      const offers: NonNullable<ProductImport['price']>[] = [];
+      let conflictingPrices = false;
       for (const node of head?.childNodes ?? []) {
         if (!('tagName' in node) || node.tagName !== 'script' ||
             !node.attrs.some(a => a.name === 'type' && a.value.toLowerCase() === 'application/ld+json')) continue;
@@ -200,10 +202,25 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
               const photos = 'image' in value ? value.image : null;
               const photo = Array.isArray(photos) ? photos[0] : photos;
               if (typeof photo === 'string') structuredImage ??= photo;
+              // Only trust an explicit single Product Offer for the current listing.
+              // Aggregate/variant price ranges must not become a fabricated exact price.
+              const rawOffers = 'offers' in value ? value.offers : null;
+              if (rawOffers && !Array.isArray(rawOffers) && typeof rawOffers === 'object' &&
+                  '@type' in rawOffers && rawOffers['@type'] === 'Offer' &&
+                  'price' in rawOffers && 'priceCurrency' in rawOffers) {
+                const offer = parseOffer(rawOffers.price, rawOffers.priceCurrency);
+                if (offer) offers.push(offer);
+              }
             }
           }
         } catch { /* Ignore malformed structured data. */ }
       }
+      const socialOffer = parseOffer(tags.get('product:price:amount'), tags.get('product:price:currency'));
+      if (socialOffer) offers.push(socialOffer);
+      const firstOffer = offers[0];
+      conflictingPrices = offers.some(offer => firstOffer &&
+        (offer.priceMinor !== firstOffer.priceMinor || offer.currency !== firstOffer.currency));
+      const price = !conflictingPrices && firstOffer ? firstOffer : null;
       const title = (tags.get('og:title') ?? tags.get('twitter:title') ??
         structuredTitle ?? '').slice(0, 160) || null;
       const candidate = tags.get('og:image') ?? tags.get('twitter:image') ??
@@ -224,7 +241,7 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
         } catch { /* Invalid image URL. */ }
       }
       if (!title && !image) diagnostic('metadata_missing', current.hostname, response.status);
-      return title || image ? { title, image, price: null } : null;
+      return title || image || price ? { title, image, price } : null;
     }
     diagnostic('redirect_limit', current.hostname);
     return null;
