@@ -7,9 +7,9 @@ import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 
-export function Dialog({ title, busy, close, children, className, focusHeading = false, headerAction }: {
+export function Dialog({ title, busy, close, children, className, focusHeading = false, headerAction, closeOnCancel = true }: {
   title: string; busy: boolean; close: () => void; children: ReactNode;
-  className?: string; focusHeading?: boolean; headerAction?: ReactNode;
+  className?: string; focusHeading?: boolean; headerAction?: ReactNode; closeOnCancel?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -46,7 +46,7 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
     <dialog ref={ref} className={className} aria-labelledby={heading} onCancel={(event) => {
       event.stopPropagation();
       event.preventDefault();
-      if (!busy) close();
+      if (!busy && closeOnCancel) close();
     }}>
       <div className="dialog-header">
         <h2 ref={titleRef} id={heading} tabIndex={focusHeading ? -1 : undefined}>{title}</h2>
@@ -211,7 +211,7 @@ export function ItemForm({ item, currency, close, save }: {
   }
 
   return (
-    <Dialog title={t(item ? 'Edit product' : 'Add product')} busy={busy} close={close} className="import-dialog">
+    <Dialog title={t(item ? 'Edit product' : 'Add product')} busy={busy} close={close} className="import-dialog" closeOnCancel={false}>
       <form noValidate autoComplete="off" onSubmit={submit}>
         <label>{t(item ? 'Product link' : 'Paste a product link')}
           <input type="url" name="product-url" value={url} maxLength={2048} placeholder="https://…" spellCheck={false}
