@@ -1,6 +1,6 @@
 # Product image storage (Issue #11)
 
-This branch replaces the earlier TiDB Base64 image design with a portable S3-compatible private bucket. **Do not deploy this branch without database migration and testing.**
+This branch replaces the earlier TiDB Base64 image design with a portable S3-compatible private bucket. **The imageKey schema was merged into main before the production migration was verified. Do not assume the deployed application is healthy until the migration has been applied and /api/health returns ready.**
 
 ## Setup
 
@@ -18,7 +18,7 @@ The bucket needs CORS for browser `PUT` from the actual Nanti web origin, allowi
 
 ## Release gate
 
-- Apply `20261118130000_item_image_data` migration to an isolated copy first, then to production after backup.
+- Back up TiDB and verify that migration `20261118130000_item_image_data` has been applied. If not, run `npm run db:migrate` using the authorized production `DATABASE_URL` from a trusted environment; never paste credentials into issues or chat. First rehearse against an isolated copy. The `/api/health` readiness probe now selects `Item.imageKey` to detect a missing column even if no items exist.
 - Test S3 signing with the actual provider and bucket CORS (R2 and self-hosted S3).
 - Run `npm run typecheck`, `npm run build`, and browser smoke tests.
 - Verify guest/account ownership, editing and removing images, Android gallery Back, and that images survive reload.

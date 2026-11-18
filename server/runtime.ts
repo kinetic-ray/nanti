@@ -54,6 +54,9 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
   const checkDatabase = async () => {
     await db.$transaction([
       db.dataOwner.findFirst({ select: { id: true } }),
+      // Check the latest Item schema even when there are no wishlists.
+      // A missing imageKey migration must fail readiness before users hit CRUD.
+      db.item.findFirst({ select: { id: true, imageKey: true } }),
       db.priceObservation.findFirst({ select: { id: true } }),
       db.priceTarget.findFirst({ select: { itemId: true } }),
       db.priceAlert.findFirst({ select: { id: true } }),
