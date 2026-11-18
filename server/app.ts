@@ -69,7 +69,7 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null,
+export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage,
   secret, secureCookies, trustedProxy, webRoot, checkDatabase, retention }: Options) {
   const app = express();
   const api = express.Router();
