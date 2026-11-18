@@ -7,6 +7,8 @@ import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 
+const dialogHistoryStack: string[] = [];
+
 export function Dialog({ title, busy, close, children, className, focusHeading = false, headerAction, closeOnCancel = true }: {
   title: string; busy: boolean; close: () => void; children: ReactNode;
   className?: string; focusHeading?: boolean; headerAction?: ReactNode; closeOnCancel?: boolean;
@@ -42,17 +44,21 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
     const marker = crypto.randomUUID();
     const state = { ...((history.state && typeof history.state === 'object') ? history.state : {}), __nantiDialog: marker };
     history.pushState(state, '', location.href);
+    dialogHistoryStack.push(marker);
     let consumed = false;
     const onPopState = () => {
-      if (consumed) return;
-      consumed = true;
-      if (!busyRef.current) closeRef.current();
-      else history.pushState(state, '', location.href);
+      if (consumed || dialogHistoryStack[dialogHistoryStack.length - 1] !== marker) return;
+      if (!busyRef.current) {
+        consumed = true;
+        closeRef.current();
+      } else history.pushState(state, '', location.href);
     };
     window.addEventListener('popstate', onPopState);
     if (focusHeading) titleRef.current?.focus();
     return () => {
       window.removeEventListener('popstate', onPopState);
+      const index = dialogHistoryStack.lastIndexOf(marker);
+      if (index !== -1) dialogHistoryStack.splice(index, 1);
       // Explicit close (button/save) must also remove the synthetic entry.
       if (!consumed && history.state?.__nantiDialog === marker) history.back();
       viewport?.removeEventListener('resize', updateViewport);
