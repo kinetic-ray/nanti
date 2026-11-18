@@ -98,3 +98,31 @@ describe('Tokopedia redirect diagnostics', () => {
     } finally { log.mockRestore(); }
   });
 });
+
+describe('Marketplace price metadata', () => {
+  const target = new URL('https://www.tokopedia.com/shop/product');
+  const fetchHtml = (fragment: string) => async () => new Response(
+    '<html><head><meta property="og:title" content="Product">' + fragment + '</head></html>',
+    { headers: { 'content-type': 'text/html' } },
+  );
+  it('imports a single published IDR offer', async () => {
+    const json = JSON.stringify({ '@type': 'Product', url: target.href,
+      offers: { '@type': 'Offer', price: '129000', priceCurrency: 'IDR' } });
+    await expect(previewProductMetadata(target, fetchHtml(
+      '<script type="application/ld+json">' + json + '</script>')))
+      .resolves.toMatchObject({ title: 'Product', price: { priceMinor: 12900000, currency: 'IDR' } });
+  });
+  it('withholds conflicting prices and ignores unrelated listings', async () => {
+    const json = JSON.stringify({ '@type': 'Product', url: 'https://www.tokopedia.com/other/item',
+      offers: { '@type': 'Offer', price: '1', priceCurrency: 'IDR' } });
+    const fragment = '<meta property="product:price:amount" content="100"><meta property="product:price:currency" content="IDR">' +
+      '<script type="application/ld+json">' + json + '</script>';
+    await expect(previewProductMetadata(target, fetchHtml(fragment)))
+      .resolves.toMatchObject({ price: { priceMinor: 10000, currency: 'IDR' } });
+    const conflict = '<meta property="product:price:amount" content="200"><meta property="product:price:currency" content="IDR">' +
+      '<script type="application/ld+json">' + JSON.stringify({ '@type': 'Product',
+        offers: { '@type': 'Offer', price: '300', priceCurrency: 'IDR' } }) + '</script>';
+    await expect(previewProductMetadata(target, fetchHtml(conflict)))
+      .resolves.toMatchObject({ price: null });
+  });
+});
