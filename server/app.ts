@@ -81,12 +81,15 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   // Keep all other Helmet CSP protections and allow only the known CDN hosts.
   const imageSources = ["'self'", 'data:', 'https://*.susercontent.com',
     'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id',
-    'https://*.tokopedia.net', 'https://tokopedia.net', 'https://*.tokopedia.com', 'https://tokopedia.com'];
+    'https://*.tokopedia.net', 'https://tokopedia.net', 'https://*.tokopedia.com', 'https://tokopedia.com',
+    ...(imageStorage ? [imageStorage.origin] : [])];
   app.use(helmet(secureCookies ? {
-    contentSecurityPolicy: { directives: { imgSrc: imageSources } },
+    contentSecurityPolicy: { directives: { imgSrc: imageSources,
+      connectSrc: ["'self'", ...(imageStorage ? [imageStorage.origin] : [])] } },
   } : {
     strictTransportSecurity: false,
-    contentSecurityPolicy: { directives: { upgradeInsecureRequests: null, imgSrc: imageSources } },
+    contentSecurityPolicy: { directives: { upgradeInsecureRequests: null, imgSrc: imageSources,
+      connectSrc: ["'self'", ...(imageStorage ? [imageStorage.origin] : [])] } },
   }));
   api.use((_req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -161,7 +164,10 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   if (prices) api.use(priceRoutes(prices));
   api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
-  api.post('/uploads/product-image', async (req, res) => {
+  api.post('/uploads/product-image', rateLimit({
+    windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Too many image uploads. Try again shortly.' },
+  }), async (req, res) => {
     if (!imageStorage) return res.status(503).json({ error: 'Image uploads are not configured.' });
     const { contentType, size } = z.strictObject({
       contentType: z.literal('image/jpeg'), size: z.number().int().min(1).max(195_000),

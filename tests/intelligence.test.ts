@@ -25,7 +25,7 @@ describe('Impulse Guard', () => {
       concern: 'Insufficient information', points: 2, possiblePoints: 3, reviewOn: null,
     });
     expect(getMethodology('impulse', '1.1.0')?.rules[0]).toContain('specific need');
-    expect(getMethodology('impulse')?.version).toBe('2.0.0');
+    expect(getMethodology('impulse')?.version).toBe('3.0.0');
   });
 
   it('calculates exact review dates across month ends and leap years', () => {
