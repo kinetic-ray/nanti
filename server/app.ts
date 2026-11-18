@@ -19,6 +19,7 @@ import type { AdminCredentials } from './admin-credentials.js';
 import type { AffiliateRepository } from './prisma-affiliate.js';
 import { purchaseDestinationRoutes } from './purchase-destinations.js';
 import type { createProductMedia } from './product-media.js';
+import type { createImageStorage } from './image-storage.js';
 import { accountRoutes } from './account-routes.js';
 import type { Accounts } from './prisma-accounts.js';
 import type { OAuthProviders } from './oauth-providers.js';
@@ -55,6 +56,7 @@ type Options = {
   preview: (url: URL) => Promise<string | null>;
   lookupMetadata?: (url: URL) => ReturnType<typeof previewProductMetadata>;
   productMedia?: ReturnType<typeof createProductMedia>;
+  imageStorage?: ReturnType<typeof createImageStorage>;
   secret: string;
   secureCookies: boolean;
   trustedProxy?: string | number;
@@ -159,6 +161,24 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   if (prices) api.use(priceRoutes(prices));
   api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
+  api.post('/uploads/product-image', async (req, res) => {
+    if (!imageStorage) return res.status(503).json({ error: 'Image uploads are not configured.' });
+    const { contentType, size } = z.strictObject({
+      contentType: z.literal('image/jpeg'), size: z.number().int().min(1).max(195_000),
+    }).parse(req.body);
+    void contentType;
+    void size;
+    res.json(imageStorage.createUpload(res.locals.ownerId));
+  });
+
+  api.get('/wishlists/:listId/items/:itemId/uploaded-image', async (req, res) => {
+    if (!imageStorage) return notFound(res);
+    const list = await repository.find(res.locals.ownerId, uuid.parse(req.params.listId));
+    const item = list?.items.find(entry => entry.id === uuid.parse(req.params.itemId));
+    if (!item?.imageKey || !imageStorage.validKey(list!.scopeId ?? res.locals.ownerId, item.imageKey)) return notFound(res);
+    res.set('Cache-Control', 'private, no-store').redirect(302, imageStorage.imageUrl(item.imageKey));
+  });
+
   api.get('/wishlists/:listId/items/:itemId/image', rateLimit({
     windowMs: 60_000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many product image requests.' },
@@ -195,13 +215,19 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   });
   api.post('/wishlists/:listId/items', async (req, res) => {
     const listId = uuid.parse(req.params.listId);
-    if (!await repository.addItem(res.locals.ownerId, listId, itemInput.parse(req.body))) return notFound(res);
+    const input = itemInput.parse(req.body);
+    if (input.imageKey && (!imageStorage || !imageStorage.validKey(res.locals.ownerId, input.imageKey) ||
+      !await imageStorage.exists(input.imageKey))) return res.status(400).json({ error: 'Image upload was not verified.' });
+    if (!await repository.addItem(res.locals.ownerId, listId, input)) return notFound(res);
     res.sendStatus(201);
   });
   api.put('/wishlists/:listId/items/:itemId', async (req, res) => {
     const listId = uuid.parse(req.params.listId);
     const itemId = uuid.parse(req.params.itemId);
-    if (!await repository.updateItem(res.locals.ownerId, listId, itemId, itemInput.parse(req.body))) {
+    const input = itemInput.parse(req.body);
+    if (input.imageKey && (!imageStorage || !imageStorage.validKey(res.locals.ownerId, input.imageKey) ||
+      !await imageStorage.exists(input.imageKey))) return res.status(400).json({ error: 'Image upload was not verified.' });
+    if (!await repository.updateItem(res.locals.ownerId, listId, itemId, input)) {
       return notFound(res);
     }
     res.sendStatus(204);
