@@ -169,20 +169,34 @@ export function ItemForm({ item, listId, currency, close, save }: {
       return;
     }
     try {
-      const bitmap = await createImageBitmap(file);
-      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('Unable to process image.');
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      const compressed = canvas.toDataURL('image/jpeg', 0.68);
-      if (compressed.length > 250_000) throw new Error('Image is too large after compression.');
-      setUploadedImage(compressed);
-      setImageKey(null);
-      setError('');
+      // Some Android WebViews do not support createImageBitmap; decode through
+      // a regular image element so gallery uploads remain available.
+      const objectUrl = URL.createObjectURL(file);
+      const picture = new Image();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          picture.onload = () => resolve();
+          picture.onerror = () => reject(new Error('Could not read this image.'));
+          picture.src = objectUrl;
+        });
+        const scale = Math.min(1, 640 / Math.max(picture.naturalWidth, picture.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(picture.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(picture.naturalHeight * scale));
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Unable to process image.');
+        context.drawImage(picture, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.68);
+        if (!compressed.startsWith('data:image/jpeg;base64,') || compressed.length > 250_000) {
+          throw new Error('Image is too large or could not be compressed.');
+        }
+        setUploadedImage(compressed);
+        setImageKey(null);
+        setImageFailed(false);
+        setError('');
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     } catch (failure) {
       setError(errorMessage(failure));
     }
@@ -321,7 +335,7 @@ export function ItemForm({ item, listId, currency, close, save }: {
           <div className="product-image-editor">
             <input ref={uploadInput} type="file" accept="image/jpeg,image/png,image/webp"
               className="product-image-file" aria-label="Upload product image"
-              onChange={event => chooseImage(event.target.files?.[0])} />
+              onChange={event => { const selected = event.target.files?.[0]; event.target.value = ''; void chooseImage(selected); }} />
             <button type="button" className="product-image-placeholder"
               aria-label="Tambah gambar (opsional), pilih dari galeri"
               disabled={busy || looking} onClick={() => uploadInput.current?.click()}>
