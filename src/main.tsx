@@ -18,6 +18,7 @@ import './consumer.css';
 
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
+const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ CreatorStorefront }) => ({ default: CreatorStorefront })));
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
 
@@ -356,6 +357,8 @@ if (root) {
   if (/^\/admin\/?$/u.test(location.pathname)) {
     document.documentElement.lang = 'en';
     createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening Affiliate Center…</p>}><AdminCenter /></Suspense>);
+  } else if (/^\/creator\/demo\/?$/u.test(location.pathname)) {
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening creator storefront…</p>}><CreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/?$/u.test(location.pathname)) {
     createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening Nanti Kreator…</p>}><CreatorLanding /></Suspense></LocaleProvider>);
   } else createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
