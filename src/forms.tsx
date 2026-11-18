@@ -135,8 +135,9 @@ export function ListForm({ list, close, save }: {
   );
 }
 
-export function ItemForm({ item, currency, close, save }: {
+export function ItemForm({ item, listId, currency, close, save }: {
   item?: Item;
+  listId: string;
   currency: Currency;
   close: () => void;
   save: (data: ItemWriteInput) => Promise<void>;
@@ -153,6 +154,7 @@ export function ItemForm({ item, currency, close, save }: {
   const [importedPrice, setImportedPrice] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [imageKey, setImageKey] = useState<string | null>(item?.imageKey ?? null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
@@ -160,15 +162,30 @@ export function ItemForm({ item, currency, close, save }: {
   const nameInput = useRef<HTMLInputElement>(null);
   const pastePending = useRef(false);
 
-  function chooseImage(file?: File) {
+  async function chooseImage(file?: File) {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
       setError('Choose a JPG, PNG or WebP image smaller than 2 MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === 'string') { setUploadedImage(reader.result); setError(''); } };
-    reader.readAsDataURL(file);
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Unable to process image.');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const compressed = canvas.toDataURL('image/jpeg', 0.68);
+      if (compressed.length > 250_000) throw new Error('Image is too large after compression.');
+      setUploadedImage(compressed);
+      setImageKey(null);
+      setError('');
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
   }
 
   function setLink(value: string) {
@@ -235,7 +252,18 @@ export function ItemForm({ item, currency, close, save }: {
     }
     setBusy(true);
     try {
-      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity),
+      if (uploadedImage) {
+        const blob = await (await fetch(uploadedImage)).blob();
+        if (blob.size > 195_000) throw new Error('Image is too large after compression.');
+        const { uploadUrl, key } = await api<{ uploadUrl: string; key: string }>('/uploads/product-image', { method: 'POST', data: { contentType: 'image/jpeg', size: blob.size } });
+        const result = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        if (!result.ok) throw new Error('Image upload failed. Try again.');
+        setImageKey(key);
+        await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageKey: key,
+          ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
+        return;
+      }
+      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageKey,
         ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
     } catch (failure) {
       setError(errorMessage(failure));
@@ -297,13 +325,13 @@ export function ItemForm({ item, currency, close, save }: {
             <button type="button" className="product-image-placeholder"
               aria-label="Tambah gambar (opsional), pilih dari galeri"
               disabled={busy || looking} onClick={() => uploadInput.current?.click()}>
-              {uploadedImage || (preview?.imagePath && !imageFailed)
-                ? <img src={uploadedImage || preview?.imagePath || ''}
+              {uploadedImage || (imageKey && item && !imageFailed) || (preview?.imagePath && !imageFailed)
+                ? <img src={uploadedImage || (imageKey && item ? `/api/wishlists/${listId}/items/${item.id}/uploaded-image` : '') || preview?.imagePath || ''}
                     alt="Product preview" onError={() => setImageFailed(true)} />
                 : <span aria-hidden="true">＋<small>Tambah gambar (opsional)</small></span>}
             </button>
-            {uploadedImage && <button type="button" className="product-image-remove"
-              onClick={() => { setUploadedImage(null); if (uploadInput.current) uploadInput.current.value = ''; }}>
+            {(uploadedImage || imageKey) && <button type="button" className="product-image-remove"
+              onClick={() => { setUploadedImage(null); setImageKey(null); if (uploadInput.current) uploadInput.current.value = ''; }}>
               Hapus gambar
             </button>}
           </div>

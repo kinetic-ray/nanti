@@ -7,7 +7,7 @@ import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
 import { lockPriceItem, recordObservation } from './prisma-prices.js';
 
 const summary = { id: true, name: true, currency: true } as const;
-const item = { id: true, name: true, url: true, priceMinor: true, quantity: true } as const;
+const item = { id: true, name: true, url: true, priceMinor: true, quantity: true, imageKey: true } as const;
 
 function mapSummary<T extends { id: string; name: string; currency: string }>(row: T) {
   const currency = currencies.find((value) => value === row.currency);

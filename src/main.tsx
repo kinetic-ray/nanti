@@ -303,7 +303,7 @@ function App() {
         {status && <><Icon name="check" />{t(status)}</>}
       </div>
       {editor?.kind === 'list' && <ListForm list={editor.list} close={() => setEditor(null)} save={saveList} />}
-      {editor?.kind === 'item' && <ItemForm item={editor.item} currency={editor.list.currency}
+      {editor?.kind === 'item' && <ItemForm item={editor.item} listId={editor.list.id} currency={editor.list.currency}
         close={() => setEditor(null)} save={saveItem} />}
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}
