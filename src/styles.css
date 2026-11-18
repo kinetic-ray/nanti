@@ -232,3 +232,19 @@ textarea { display: block; width: 100%; color: inherit; font: inherit; padding: 
 .product-image-placeholder span { display: grid; justify-items: center; gap: .35rem; font-size: 2.5rem; line-height: 1; }
 .product-image-placeholder small { font-size: .9rem; font-weight: 600; line-height: 1.4; }
 .product-image-remove { justify-self: center; }
+
+/* Consumer sign-in: provider shell remains visible before OAuth credentials are configured. */
+.account-signin-shell { text-align: center; padding: .5rem 0 0; }
+.account-signin-emblem { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; margin: .25rem auto 1rem; border-radius: 1.15rem; background: var(--accent); color: white; font-size: 1.65rem; font-weight: 850; letter-spacing: -.08em; }
+.account-signin-shell h3 { font-size: clamp(1.1rem, 3.6vw, 1.35rem); letter-spacing: -.025em; }
+.account-signin-shell > p { max-width: 29rem; margin: .65rem auto; color: var(--muted); }
+.account-signin-shell .account-providers { margin: 1.5rem 0 1rem; gap: .7rem; }
+.account-signin-shell .account-provider { display: flex; align-items: center; gap: .85rem; min-height: 3.25rem; padding: .65rem .9rem; border: 1px solid var(--field); border-radius: .85rem; background: var(--paper); color: var(--ink); text-align: start; }
+.account-signin-shell .account-provider-mark { display: grid; place-items: center; width: 1.8rem; height: 1.8rem; flex: none; border-radius: 50%; font-size: 1.2rem; font-weight: 800; }
+.account-signin-shell .provider-google .account-provider-mark { color: #4285f4; }
+.account-signin-shell .provider-apple .account-provider-mark { color: var(--ink); }
+.account-signin-shell .account-provider-label { flex: 1; }
+.account-signin-shell .account-provider-pending { opacity: .72; cursor: not-allowed; }
+.account-signin-shell .account-provider-status { font-size: .72rem; font-weight: 650; white-space: nowrap; color: var(--muted); }
+.account-signin-shell .account-signin-note { font-size: .82rem; line-height: 1.5; }
+@media (max-width: 370px) { .account-signin-shell .account-provider { gap: .5rem; padding-inline: .6rem; } }
