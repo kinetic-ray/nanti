@@ -122,7 +122,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
     }
     res.status(403).json({ error: 'Request could not be verified.' });
   });
-  api.use(express.json({ limit: '12kb' }));
+  api.use(express.json({ limit: '300kb' }));
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
   if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
