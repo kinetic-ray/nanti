@@ -217,7 +217,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   api.post('/products/import', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const merchant = productMerchant(url.hostname);
-    const canLookUp = isIkeaMetadataLink(url);
+    const canLookUp = isIkeaMetadataLink(url) || merchant === 'shopee';
     const meta = canLookUp && lookupMetadata ? await lookupMetadata(url) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
     const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
