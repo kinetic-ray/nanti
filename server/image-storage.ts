@@ -57,6 +57,7 @@ export function createImageStorage(environment: NodeJS.ProcessEnv) {
       return { key, uploadUrl: signedUrl('PUT', key, 300, 'image/jpeg') };
     },
     validKey,
+    origin: endpoint.origin,
     async exists(key: string) {
       const response = await fetch(signedUrl('HEAD', key, 60), { method: 'HEAD', signal: AbortSignal.timeout(5000) });
       const size = Number(response.headers.get('content-length'));
