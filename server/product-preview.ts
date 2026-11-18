@@ -13,7 +13,12 @@ export async function previewProduct(url: URL, request = fetch): Promise<string 
 export async function previewProductMetadata(url: URL, request = fetch) {
   // Shopee short links and product pages may expose public Open Graph metadata.
   // Only follow redirects within explicitly allowed Shopee domains; never fetch arbitrary destinations.
-  if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') return previewMarketplaceMetadata(url, request);
+  if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') {
+    // Provider is opt-in; retain the existing public-metadata fallback.
+    const provider = await previewShopeeProvider(url, request);
+    if (provider) return provider;
+    return previewMarketplaceMetadata(url, request);
+  }
   if (!isIkeaMetadataLink(url)) return null;
 
   try {
@@ -254,6 +259,56 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
   } catch (error) {
     const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
     diagnostic(timeout ? (hop > 0 ? 'destination_timeout' : 'timeout') : 'request_error', current.hostname);
+    return null;
+  }
+}
+
+/**
+ * Optional Zapi Shopee product-detail integration.
+ * ZAPI_API_KEY is server-only. The provider accepts a product URL, but shortlink
+ * compatibility must be verified against live products before being promised.
+ */
+async function previewShopeeProvider(url: URL, request: typeof fetch) {
+  const key = process.env.ZAPI_API_KEY?.trim();
+  if (!key || productMerchant(url.hostname) !== 'shopee') return null;
+  try {
+    const endpoint = new URL('https://api.zapi.ink/v1/marketplace:shopee/product');
+    endpoint.searchParams.set('product', url.href);
+    const response = await request(endpoint, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(5000),
+      headers: { 'x-api-key': key, accept: 'application/json' },
+    });
+    if (!response.ok || !/^application\/json\b/i.test(response.headers.get('content-type') ?? '')) {
+      await response.body?.cancel();
+      console.info('[product-import]', { merchant: 'shopee', host: 'api.zapi.ink',
+        reason: response.status === 401 ? 'provider_auth_failed' : 'provider_unavailable', status: response.status });
+      return null;
+    }
+    // Bound the JSON response; do not trust unbounded third-party payloads.
+    const body = await response.text();
+    if (body.length > MAX_BYTES) return null;
+    const envelope: unknown = JSON.parse(body);
+    if (!envelope || typeof envelope !== 'object' || !('data' in envelope)) return null;
+    const data = envelope.data;
+    if (!data || typeof data !== 'object') return null;
+    const title = 'name' in data && typeof data.name === 'string' ? data.name.trim().slice(0, 160) || null : null;
+    const candidate = 'defaultImage' in data && typeof data.defaultImage === 'string' ? data.defaultImage :
+      'images' in data && Array.isArray(data.images) && typeof data.images[0] === 'string' ? data.images[0] : null;
+    let image: string | null = null;
+    if (candidate) {
+      const parsed = new URL(candidate);
+      const host = parsed.hostname.toLowerCase();
+      if (parsed.protocol === 'https:' && !parsed.username && !parsed.password &&
+          (host === 'susercontent.com' || host.endsWith('.susercontent.com') ||
+           host === 'shopee.co.id' || host.endsWith('.shopee.co.id'))) image = parsed.href.slice(0, 2048);
+    }
+    const rawPrice = 'price' in data ? data.price : null;
+    const price = typeof rawPrice === 'number' && Number.isSafeInteger(rawPrice) &&
+      rawPrice >= 0 && rawPrice <= 9_999_999 ? { priceMinor: rawPrice * 100, currency: 'IDR' as const } : null;
+    return title || image || price ? { title, image, price } : null;
+  } catch {
+    console.info('[product-import]', { merchant: 'shopee', host: 'api.zapi.ink', reason: 'provider_request_failed' });
     return null;
   }
 }
