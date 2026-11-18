@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { impulseRules, waitingPeriods } from '../shared/impulse.js';
+import { screeningVersion } from '../shared/screening.js';
 import { priorityFactors, priorityLimit } from '../shared/priorities.js';
 import { readinessAnswers } from '../shared/quick-timing.js';
 import { intelligenceModules } from '../shared/methodology.js';
@@ -38,6 +39,14 @@ export const buyingReasonsBody = z.strictObject({
     useOften: z.boolean().optional(), canWait: z.boolean().optional(),
   }),
   period: z.enum(waitingPeriods).nullable(),
+});
+
+export const screeningBody = buyingReasonsBody.extend({
+  version: z.literal(screeningVersion),
+  answers: buyingReasonsBody.shape.answers.extend({
+    practicalNeed: z.boolean().optional(),
+    socialPressure: z.boolean().optional(),
+  }),
 });
 
 export const quickTimingBody = z.strictObject({

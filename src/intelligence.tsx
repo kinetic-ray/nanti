@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { BuyingAnswers } from '../shared/impulse.js';
+import type { ScreeningAnswers } from '../shared/screening.js';
 import type { Item, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { Dialog } from './forms.js';
 import { ImpulseGuard } from './impulse-guard.js';
@@ -16,7 +16,7 @@ export type IntelligenceSelection =
   | { kind: 'comparison' }
   | { kind: 'timing' };
 
-export type IntelligenceDrafts = { impulse: Map<string, BuyingAnswers> };
+export type IntelligenceDrafts = { impulse: Map<string, ScreeningAnswers> };
 
 export function PurchaseTools({ list, lists, selection, close, drafts, onPriceUpdate }: {
   list: Wishlist; lists: WishlistSummary[]; selection: IntelligenceSelection; close: () => void; drafts: IntelligenceDrafts; onPriceUpdate: () => void;

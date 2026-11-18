@@ -1,5 +1,6 @@
 import { factorsForImpulseVersion } from '../shared/impulse.js';
 import type { ImpulseFactor } from '../shared/impulse.js';
+import { screeningVersion } from '../shared/screening.js';
 import type { IntelligenceModule, Methodology } from '../shared/methodology.js';
 import { translate } from './messages.js';
 import type { Language } from './messages.js';
@@ -27,6 +28,19 @@ export function impulseCopy(language: Language, factor: ReturnType<typeof factor
 
 export function localizedMethodology(module: IntelligenceModule, data: Methodology, language: Language): Methodology {
   if (language === 'en') return data;
+  if (module === 'impulse' && data.version === screeningVersion) return {
+    ...data, title: 'Cek alasan beli',
+    purpose: 'Membantu kamu memahami alasan di balik pilihan beli.',
+    concepts: 'Riset pembelian impulsif membahas pengaruh situasi, penawaran, dan tekanan sosial. Nanti memakai pertanyaan ini sebagai bahan refleksi.',
+    inputs: 'Kebutuhan, barang yang sudah kamu punya, perkiraan pemakaian, dampak menunda, minat tanpa diskon, dan rasa takut ketinggalan.',
+    rules: [
+      'Hijau berarti kebutuhan jelas, belum ada pengganti, dan barang bakal sering dipakai atau menunda bisa mengganggu kegiatan. Kalau ada dorongan dari luar dan belinya bisa ditunda, beri waktu dulu.',
+      'Merah berarti jawaban menunjukkan manfaat tambahan yang kecil. Misalnya, barang yang sudah ada cukup dan barang baru jarang dipakai, atau kebutuhan belum jelas dan kamu masih bisa menunggu.',
+      'Kuning berarti jawabannya beragam atau masih ada yang perlu dicek. Nanti menyebut rasa takut ketinggalan hanya kalau kamu menjawab bahwa kamu merasakannya.',
+      'Jeda bersifat opsional dan menyimpan tanggal cek ulang. Satu bulan berarti tanggal yang sama bulan depan atau hari terakhir jika bulannya lebih pendek. Tanggal memakai UTC.',
+    ],
+    limitations: 'Ini bahan refleksi dari jawabanmu. Cek ini tidak mendiagnosis impulsivitas atau menghitung anggaran. Tanggal cek ulang tersimpan tanpa pengingat otomatis.',
+  };
   if (data.version === '2.0.0') {
     if (module === 'impulse') return {
       ...data, title: 'Cek alasan beli',

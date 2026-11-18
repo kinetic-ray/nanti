@@ -1,4 +1,5 @@
 import type { BuyingAnswers, ImpulseAnswers, ImpulseResult } from './impulse.js';
+import type { ScreeningAnswers, ScreeningResult } from './screening.js';
 import type { ComparisonInput, ComparisonResult } from './value-ranker.js';
 import type { PriorityInput, PriorityResult } from './priorities.js';
 import type { QuickTimingInput, QuickTimingResult } from './quick-timing.js';
@@ -26,7 +27,7 @@ export type LegacyComparison = { kind: 'comparison'; input: ComparisonInput; res
 export type QuickTimingAssessment = { kind: 'timing'; input: QuickTimingInput; result: QuickTimingResult };
 export type DetailedTimingAssessment = { kind: 'timing'; input: SavedTimingInput; result: TimingSummary };
 export type SavedPayload =
-  | { kind: 'impulse'; input: ImpulseAnswers | BuyingAnswers; result: ImpulseResult }
+  | { kind: 'impulse'; input: ImpulseAnswers | BuyingAnswers | ScreeningAnswers; result: ImpulseResult | ScreeningResult }
   | LegacyComparison | PriorityAssessment | DetailedTimingAssessment | QuickTimingAssessment;
 
 export type SavedAssessment = SavedPayload & {

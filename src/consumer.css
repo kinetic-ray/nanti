@@ -25,7 +25,7 @@ body:has(.consumer) { background: #f8f6fc; }
   --radius: .75rem;
   --card-radius: 1.25rem;
   --shadow: 0 6px 24px #30214e0a;
-  --motion: 150ms ease-out;
+  --motion: 180ms ease-out;
   max-width: 82rem;
   min-height: 100svh;
   padding:
@@ -385,6 +385,7 @@ body:has(.consumer) { background: #f8f6fc; }
   color: var(--ink);
   font-size: 1rem;
 }
+.consumer select { padding-inline-end: 2.5rem; }
 .consumer .error[role="alert"] { margin: .5rem 0; border-radius: var(--radius); padding: .65rem .8rem; background: #faedf1; }
 .consumer .form-actions { margin-top: .35rem; }
 .consumer .form-actions > button:not(.primary, .danger):first-child { background: transparent; }
@@ -454,16 +455,39 @@ body:has(.consumer) { background: #f8f6fc; }
 .decision-progress p { margin: 0; }
 .decision-progress progress { width: 100%; height: .5rem; accent-color: var(--accent); border: 0; border-radius: .5rem; overflow: hidden; background: var(--wash); }
 .decision-progress progress::-webkit-progress-bar { background: var(--wash); }
-.decision-progress progress::-webkit-progress-value { background: var(--accent); border-radius: .5rem; }
-.decision-progress progress::-moz-progress-bar { background: var(--accent); }
+.decision-progress progress::-webkit-progress-value { background: var(--accent); border-radius: .5rem; transition: width var(--motion); }
+.decision-progress progress::-moz-progress-bar { background: var(--accent); transition: width var(--motion); }
 .consumer .answer-options { display: grid; gap: .4rem; }
 .answer-buttons { display: grid; gap: .45rem; margin-block: .65rem; }
 .consumer .answer-buttons button { text-align: start; background: var(--wash); border-color: var(--line); }
 .consumer .answer-buttons button:hover { border-color: var(--accent); }
+.screening-question, .screening-summary { animation: reveal-toast var(--motion) both; }
+.screening-feedback {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-block: .65rem;
+  padding: .55rem .7rem;
+  background: var(--wash);
+  border-radius: var(--radius);
+  font-size: .875rem;
+}
+.screening-feedback .icon, .screening-label .icon, .wait-options .icon { flex: none; }
+.screening-answers button { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+.consumer .screening-answers button[aria-pressed="true"] { color: var(--accent-strong); border-color: var(--accent); background: #e5d9f8; }
+.screening-result { display: grid; gap: .65rem; }
 .wait-options { display: grid; gap: .45rem; margin-block: 1rem; padding: 0; border: 0; }
-.wait-options .check-label { padding: .5rem .65rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); }
+.wait-options legend { font-weight: 750; }
+.wait-options .hint { margin-block-end: .15rem; }
+.wait-options .check-label { min-height: 3.2rem; padding: .5rem .65rem; border: 1px solid var(--field); border-radius: .65rem; background: var(--paper); transition: background-color var(--motion), border-color var(--motion); }
+.wait-options .check-label:hover, .wait-options .check-label:focus-within { border-color: var(--accent); }
 .wait-options .check-label:has(:checked) { border-color: var(--accent); background: var(--wash); }
 .wait-options small { display: block; }
+.wait-options .icon { margin-inline-start: auto; color: var(--accent); }
+.screening-actions { margin-block-end: .25rem; }
+@media (max-width: 430px) {
+  .screening-actions > button { flex: 1 1 10rem; }
+}
 .decision-pause { padding: .75rem; margin-block-start: .75rem; border-radius: var(--radius); background: var(--wash); }
 .decision-pause p, .decision-reasons li { margin-block: 0 .5rem; }
 .advanced-fields { display: grid; gap: .5rem; padding-block: .5rem; }
@@ -485,6 +509,17 @@ body:has(.consumer) { background: #f8f6fc; }
 .consumer .decision-result:is([data-outcome="Wait"], [data-outcome="Moderate"]) { background: var(--wash); }
 .consumer .decision-result:is([data-outcome="Insufficient Data"], [data-outcome="Reconsider"],
   [data-outcome="Insufficient information"], [data-outcome="High"], [data-outcome="missing-data"]) { background: #fff5df; }
+.consumer .screening-summary[data-screening] { background: var(--screening-surface); color: var(--screening-ink); border: 1px solid var(--screening-border); }
+.screening-summary[data-screening="green"] { --screening-surface: #eaf7ef; --screening-ink: #234e3a; --screening-border: #8bb99b; }
+.screening-summary[data-screening="yellow"] { --screening-surface: #fff4dc; --screening-ink: #64450f; --screening-border: #c4a35c; }
+.screening-summary[data-screening="red"] { --screening-surface: #fcebf0; --screening-ink: #772d40; --screening-border: #c48798; }
+.screening-label { display: flex; align-items: center; gap: .45rem; font-size: .8125rem; font-weight: 800; }
+.screening-result .decision-reasons { padding-inline-start: 1.25rem; margin-block: .6rem .25rem; }
+@media (prefers-color-scheme: dark) {
+  .screening-summary[data-screening="green"] { --screening-surface: #1b362a; --screening-ink: #d9f7e5; --screening-border: #78b896; }
+  .screening-summary[data-screening="yellow"] { --screening-surface: #3e301a; --screening-ink: #fff0cb; --screening-border: #d0ae68; }
+  .screening-summary[data-screening="red"] { --screening-surface: #432631; --screening-ink: #ffe0e7; --screening-border: #dc93a7; }
+}
 .consumer .decision .decision-snapshot { padding: clamp(.95rem, 3vw, 1.35rem); border-radius: var(--card-radius); background: #f4effa; }
 .consumer .decision-result .result-status, .consumer .decision-result .result-lead { font-weight: 800; font-size: 1.05rem; }
 .consumer .result-explanation { margin-block: .3rem .6rem; }
@@ -689,5 +724,7 @@ body:has(.consumer) { background: #f8f6fc; }
 
 @media (prefers-reduced-motion: reduce) {
   .consumer button:active:not(:disabled) { transform: none; }
-  .consumer .loading-surface i, .consumer .toast { animation: none; }
+  .consumer .loading-surface i, .consumer .toast, .screening-question, .screening-summary { animation: none; }
+  .decision-progress progress::-webkit-progress-value { transition: none; }
+  .decision-progress progress::-moz-progress-bar { transition: none; }
 }

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { evaluateBuyingReasons, evaluateImpulse } from '../shared/impulse.js';
+import { evaluateScreening } from '../shared/screening.js';
 import { getMethodology } from '../shared/methodology.js';
 import { evaluateTiming } from '../shared/purchase-timing.js';
 import { comparisonAlternatives, evaluateComparison } from '../shared/value-ranker.js';
@@ -16,7 +17,7 @@ import type { AssessmentScope, FinancialFingerprints, IntelligenceRepository } f
 import { assessmentChanges, fingerprintFinances, productSnapshot, saveIntent, timingChanges, validatePlan } from './assessment-review.js';
 import {
   algorithmVersion, buyingReasonsBody, comparisonBody, historyQuery, id, impulseBody, methodologyModule, preferenceBody,
-  prioritiesBody, quickTimingBody, timingBody,
+  prioritiesBody, quickTimingBody, screeningBody, timingBody,
 } from './intelligence-validation.js';
 import type { ScopedWishlist, WishlistRepository } from './wishlist.js';
 
@@ -136,11 +137,13 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
   history(itemApi, '/impulse', 'impulse');
   itemApi.post('/impulse', async (req, res: ScopedResponse) => {
     if (req.body && Object.hasOwn(req.body, 'answers')) {
-      const { answers, period } = buyingReasonsBody.parse(req.body);
+      const versioned = Object.hasOwn(req.body, 'version');
+      const { answers, period } = (versioned ? screeningBody : buyingReasonsBody).parse(req.body);
+      const today = new Date().toISOString().slice(0, 10);
       await save(req, res, 'impulse', async () => ({
         items: [res.locals.item!],
         payload: { kind: 'impulse', input: answers,
-          result: evaluateBuyingReasons(answers, period, new Date().toISOString().slice(0, 10)) },
+          result: versioned ? evaluateScreening(answers, period, today) : evaluateBuyingReasons(answers, period, today) },
       }));
       return;
     }

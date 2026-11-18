@@ -1,4 +1,5 @@
 import { buyingReasonsVersion, factorsForImpulseVersion, impulseFactors, impulseRules, impulseVersion } from './impulse.js';
+import { screeningVersion } from './screening.js';
 import { priorityVersion } from './priorities.js';
 import { quickTimingVersion } from './quick-timing.js';
 import { timingVersion } from './purchase-timing.js';
@@ -74,6 +75,16 @@ const original = {
 // Keep released entries here when documenting a new engine version.
 const versions: Record<IntelligenceModule, readonly Methodology[]> = {
   impulse: [{
+    ...original.impulse, title: 'Check buying reasons', version: screeningVersion,
+    inputs: 'Practical need, what you already own, expected use, the consequences of waiting, interest at full price, and fear of missing out.',
+    rules: [
+      'Green means there is a clear practical need, no adequate substitute, and frequent use or a consequence of waiting. Outside pressure calls for a pause when there is room to wait.',
+      'Red means the answers point to little practical value. Examples include an adequate substitute and infrequent use, or no clear need coupled with a safe delay or strong outside pressure.',
+      'Yellow covers mixed or missing evidence. A discount alone does not establish fear of missing out. The check mentions it only when you report it.',
+      'An optional pause saves a review date. One month means the same date next month, or its last day if shorter. Dates use UTC.',
+    ],
+    limitations: 'These rules help you reflect on your own answers. Nanti does not diagnose impulsivity, assess affordability here, or send reminders for a saved date.',
+  }, {
     ...original.impulse, title: 'Check buying reasons', version: buyingReasonsVersion,
     inputs: 'Four answers about the discount, what you own, how often you expect to use it, and whether it can wait.',
     rules: [

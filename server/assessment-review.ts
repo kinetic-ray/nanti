@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { buyingReasonsVersion } from '../shared/impulse.js';
+import { screeningVersion } from '../shared/screening.js';
 import { isPriority, isQuickTiming } from '../shared/intelligence.js';
 import type { AssessmentSnapshot, ReviewChange, SavedAssessment, TimingPlanInput } from '../shared/intelligence.js';
 import { includedProducts } from '../shared/purchase-plan.js';
@@ -11,7 +11,7 @@ import { quickTimingVersion } from '../shared/quick-timing.js';
 import type { Currency, Item } from '../shared/wishlist.js';
 import type { FinancialFingerprints, SaveIntent, StoredAssessment } from './intelligence.js';
 
-const versions = { impulse: buyingReasonsVersion, comparison: comparisonVersion, timing: timingVersion };
+const versions = { impulse: screeningVersion, comparison: comparisonVersion, timing: timingVersion };
 const moneyFields = ['liquidMinor', 'obligationsMinor', 'reserveMinor', 'monthlyMinor'] as const;
 const planningFields = ['purchaseMinor', 'extraMinor', 'targetDate'] as const;
 
