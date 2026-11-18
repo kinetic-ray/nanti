@@ -8,6 +8,7 @@ import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 
 const dialogHistoryStack: string[] = [];
+let pendingDialogHistoryCleanup = 0;
 
 export function Dialog({ title, busy, close, children, className, focusHeading = false, headerAction, closeOnCancel = true }: {
   title: string; busy: boolean; close: () => void; children: ReactNode;
@@ -47,6 +48,10 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
     dialogHistoryStack.push(marker);
     let consumed = false;
     const onPopState = () => {
+      if (pendingDialogHistoryCleanup > 0) {
+        pendingDialogHistoryCleanup--;
+        return;
+      }
       if (consumed || dialogHistoryStack[dialogHistoryStack.length - 1] !== marker) return;
       if (!busyRef.current) {
         consumed = true;
@@ -60,7 +65,10 @@ export function Dialog({ title, busy, close, children, className, focusHeading =
       const index = dialogHistoryStack.lastIndexOf(marker);
       if (index !== -1) dialogHistoryStack.splice(index, 1);
       // Explicit close (button/save) must also remove the synthetic entry.
-      if (!consumed && history.state?.__nantiDialog === marker) history.back();
+      if (!consumed && history.state?.__nantiDialog === marker) {
+        pendingDialogHistoryCleanup++;
+        history.back();
+      }
       viewport?.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('scroll', updateViewport);
       window.removeEventListener('resize', updateViewport);
