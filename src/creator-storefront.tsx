@@ -4,6 +4,7 @@ import { defaultDesign } from './creator-design.js';
 import type { CreatorDesign, CreatorSection } from './creator-design.js';
 import { useLocale, LanguagePicker } from './locale.js';
 import './creator-storefront.css';
+import './creator-design.css';
 
 const collections = [
   { id: 'daily', name: 'Daily essentials', description: 'Little things I reach for every day.', symbol: '✳', tone: 'lilac' },
