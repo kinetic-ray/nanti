@@ -118,7 +118,7 @@ export function ValueRanker({ list, lists, path, close }: {
   }
 
   const result = !viewed && step === 'result' && input ? rankPriorities(input) : null;
-  return <ToolDialog title={t('Compare priorities')} context={viewed ? list.name : t('Your wishlists')} module="comparison"
+  return <ToolDialog title={t('Compare priorities')} context={viewed ? list.name : t('Your wishlists')} module="comparison" wide
     version={viewed?.version} close={close} busy={busy}>
     {viewed ? <section className="decision-section">
       <h3 ref={heading} tabIndex={-1}>{t('Previous decision')}</h3>
@@ -127,7 +127,7 @@ export function ValueRanker({ list, lists, path, close }: {
         <ComparisonBreakdown result={viewed.result} input={viewed.input} products={names} currency={list.currency} />}
       <ReviewDetails changes={viewed.review} currency={list.currency} />
       <button type="button" className="primary" onClick={() => go('choose')}>{t('Check again')}</button>
-    </section> : step === 'choose' ? <section className="decision-section">
+    </section> : step === 'choose' ? <section className="decision-section priority-choose">
       <h3 ref={heading} tabIndex={-1}>{t('What are you deciding between?')}</h3>
       <p className="hint">{t('Choose up to {n} items from your wishlists. One item is fine, too.', { n: number(priorityLimit) })}</p>
       {lists.length > 1 && <label><span id={wishlistLabel}>{t('Wishlist')}</span><select
@@ -152,7 +152,7 @@ export function ValueRanker({ list, lists, path, close }: {
         })}
       </div>
       {choices.length > 0 && <p className="hint">{t('Selected: {items}', { items: choices.map(({ name }) => name).join(', ') })}</p>}
-      <button type="button" className="primary" disabled={!choices.length} onClick={() => go('rate')}>{t('Set priorities')}</button>
+      <div className="priority-choose-actions"><button type="button" className="primary" disabled={!choices.length} onClick={() => go('rate')}>{t('Set priorities')}</button></div>
     </section> : step === 'rate' ? <form className="decision-section" onSubmit={(event) => { event.preventDefault(); go('result'); }}>
       <h3 ref={heading} tabIndex={-1}>{t('How does each item fit?')}</h3>
       {choices.map((item) => <fieldset className="priority-item" key={item.id}>
