@@ -126,3 +126,50 @@ describe('Marketplace price metadata', () => {
       .resolves.toMatchObject({ price: null });
   });
 });
+
+describe('Optional Shopee provider', () => {
+  it('uses a server-side API key and validates provider data', async () => {
+    const previous = process.env.ZAPI_API_KEY;
+    process.env.ZAPI_API_KEY = 'test-only-secret';
+    try {
+      const fetcher = vi.fn<typeof fetch>(async (input) => {
+        expect(String(input)).toContain('api.zapi.ink/v1/marketplace:shopee/product');
+        return new Response(JSON.stringify({ data: {
+          name: 'Sample Shopee product',
+          defaultImage: 'https://down-id.img.susercontent.com/file/sample',
+          price: 125000,
+        } }), { headers: { 'content-type': 'application/json' } });
+      });
+      await expect(previewProductMetadata(new URL('https://s.shopee.co.id/4LL2l34ZNP'), fetcher))
+        .resolves.toMatchObject({ title: 'Sample Shopee product',
+          image: 'https://down-id.img.susercontent.com/file/sample',
+          price: { priceMinor: 12500000, currency: 'IDR' } });
+      expect(fetcher).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({
+        headers: expect.objectContaining({ 'x-api-key': 'test-only-secret' }),
+      }));
+    } finally {
+      if (previous === undefined) delete process.env.ZAPI_API_KEY;
+      else process.env.ZAPI_API_KEY = previous;
+    }
+  });
+  it('falls back to public metadata if the provider rejects the request', async () => {
+    const previous = process.env.ZAPI_API_KEY;
+    process.env.ZAPI_API_KEY = 'test-only-secret';
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const fetcher = vi.fn<typeof fetch>(async (input) =>
+        String(input).includes('api.zapi.ink') ?
+          new Response(null, { status: 401 }) :
+          new Response('<head><meta property="og:title" content="Fallback"></head>',
+            { headers: { 'content-type': 'text/html' } }));
+      await expect(previewProductMetadata(new URL('https://s.shopee.co.id/4LL2l34ZNP'), fetcher))
+        .resolves.toMatchObject({ title: 'Fallback' });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('test-only-secret');
+    } finally {
+      log.mockRestore();
+      if (previous === undefined) delete process.env.ZAPI_API_KEY;
+      else process.env.ZAPI_API_KEY = previous;
+    }
+  });
+});
