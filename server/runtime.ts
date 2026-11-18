@@ -11,6 +11,7 @@ import { prismaIntelligence } from './prisma-intelligence.js';
 import { prismaPrices } from './prisma-prices.js';
 import { prismaWishlists } from './prisma-wishlists.js';
 import { createProductMedia } from './product-media.js';
+import { createImageStorage } from './image-storage.js';
 import { previewProduct, previewProductMetadata } from './product-preview.js';
 
 const runtimeConfig = z.object({
@@ -85,6 +86,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
       return metadata && { ...metadata, price: env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted' ? metadata.price : null };
     } : undefined,
     productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
+    imageStorage: createImageStorage(environment),
     secret: env.SESSION_SECRET,
     secureCookies: production || environment.AUTH_PUBLIC_ORIGIN?.startsWith('https://') === true,
     trustedProxy: options.vercel ? 1 : env.NANTI_TRUST_PROXY,
