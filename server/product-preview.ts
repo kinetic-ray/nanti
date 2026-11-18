@@ -114,7 +114,7 @@ const shopeeHosts = new Set([
   'shopee.com.my', 'shopee.co.th', 'shopee.vn', 'shopee.ph',
   'shopee.com.br', 'shope.ee', 'www.shopee.co.id',
 ]);
-function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase()); }
+function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase().replace(/^www\./u, '')); }
 
 function isMarketplaceHost(host: string, merchant: 'shopee' | 'tokopedia') {
   return merchant === 'shopee' ? isShopeeHost(host) :
