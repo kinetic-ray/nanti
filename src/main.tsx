@@ -28,7 +28,7 @@ type Editor =
   | { kind: 'delete'; list: WishlistSummary; item?: Item };
 
 function App() {
-  const { t, error, money, number } = useLocale();
+  const { t, error, money, number, language } = useLocale();
   const [lists, setLists] = useState<WishlistSummary[] | null>(null);
   const [sessionError, setSessionError] = useState('');
   const [sessionAttempt, setSessionAttempt] = useState(0);
@@ -187,16 +187,25 @@ function App() {
           <div className="brand">nanti<span>.</span></div>
         </div>
         <div className="masthead-controls">
-          <a className="creator-nav-entry" href="/creator">{'Kreator'}</a>
-          <LanguagePicker />
           <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
             title={t('Price alerts')} disabled={!lists} onClick={() => setAlertsOpen(true)}>
             <Icon name="bell" />{activeId && unreadAlerts > 0 && <span aria-hidden="true">{number(Math.min(99, unreadAlerts))}</span>}
           </button>
-          <button type="button" className="account-entry" disabled={!lists} onClick={() => {
-            setShowAccount(true);
-            void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
-          }}><Icon name="person" />{t(account ? 'Account' : 'Sign in')}</button>
+          <details className="masthead-menu">
+            <summary className="icon-button masthead-menu-toggle" aria-label={language === 'id' ? 'Buka menu' : 'Open menu'}
+              title={language === 'id' ? 'Menu' : 'Menu'} aria-haspopup="true">
+              <span className="masthead-hamburger" aria-hidden="true"><span /><span /><span /></span>
+            </summary>
+            <div className="masthead-menu-panel">
+              <button type="button" disabled={!lists} onClick={() => {
+                document.querySelector<HTMLDetailsElement>('.masthead-menu')?.removeAttribute('open');
+                setShowAccount(true);
+                void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
+              }}><Icon name="person" />{t(account ? 'Account' : 'Sign in')}</button>
+              <a href="/creator"><span className="masthead-menu-symbol" aria-hidden="true">✳</span>{language === 'id' ? 'Kreator' : 'Creator'}</a>
+            </div>
+          </details>
+          <LanguagePicker />
         </div>
       </header>
       <div className={`workspace${selected ? ' workspace-collection' : ''}`}>

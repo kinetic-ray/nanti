@@ -754,3 +754,19 @@ body:has(.consumer) { background: #f8f6fc; }
 .consumer .creator-nav-entry{display:inline-flex;align-items:center;min-height:44px;padding:.45rem .75rem;border:1px solid var(--line);border-radius:var(--radius);font-size:.85rem;font-weight:750;text-decoration:none;color:var(--accent-strong)}
 .consumer .creator-nav-entry:hover{background:var(--wash)}
 @media(max-width:430px){.consumer .creator-nav-entry{font-size:.72rem;padding-inline:.4rem}}
+
+/* Compact header: alerts, navigation menu, then language at the far right. */
+.consumer .masthead-controls{display:flex;align-items:center}
+.consumer .masthead-menu{position:relative;flex:none}
+.consumer .masthead-menu-toggle{display:grid;place-items:center;width:44px;min-height:44px;cursor:pointer;list-style:none}
+.consumer .masthead-menu-toggle::-webkit-details-marker{display:none}
+.consumer .masthead-menu-toggle::marker{content:""}
+.consumer .masthead-hamburger{display:grid;gap:4px;width:18px}
+.consumer .masthead-hamburger span{display:block;height:2px;border-radius:2px;background:currentColor}
+.consumer .masthead-menu[open] .masthead-menu-toggle{background:var(--wash);color:var(--accent-strong)}
+.consumer .masthead-menu-panel{position:absolute;z-index:30;right:0;top:calc(100% + .55rem);width:min(15rem,calc(100vw - 2rem));padding:.4rem;border:1px solid var(--line);border-radius:1rem;background:var(--paper);box-shadow:0 14px 40px #30214e25}
+.consumer .masthead-menu-panel button,.consumer .masthead-menu-panel a{display:flex;align-items:center;gap:.75rem;width:100%;min-height:44px;padding:.7rem .75rem;border:0;border-radius:.65rem;background:transparent;color:var(--ink);text-align:left;text-decoration:none;font-size:.875rem;font-weight:700}
+.consumer .masthead-menu-panel button:hover:not(:disabled),.consumer .masthead-menu-panel a:hover{background:var(--wash)}
+.consumer .masthead-menu-symbol{display:grid;place-items:center;width:1.25rem;font-size:1.1rem;color:var(--accent)}
+.consumer .masthead-controls>.language-picker{margin-left:.15rem}
+@media(max-width:430px){.consumer .masthead-menu-toggle{width:44px}.consumer .masthead-controls>.language-picker{margin-left:0}}
