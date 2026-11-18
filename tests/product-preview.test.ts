@@ -77,3 +77,24 @@ describe('Marketplace shortlink redirects', () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 });
+
+describe('Tokopedia redirect diagnostics', () => {
+  it('identifies destination timeout without exposing the affiliate URL', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const fetcher = vi.fn<typeof fetch>(async (url) => {
+        if (new URL(String(url)).hostname === 'tk.tokopedia.com') return new Response(null, {
+          status: 302, headers: { location: 'https://www.tokopedia.com/example/product?affiliate=secret' },
+        });
+        throw new DOMException('The operation timed out', 'TimeoutError');
+      });
+      await expect(previewProductMetadata(new URL('https://tk.tokopedia.com/ZSp76BWQL/'), fetcher))
+        .resolves.toBeNull();
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(log).toHaveBeenCalledWith('[product-import]', {
+        merchant: 'tokopedia', host: 'www.tokopedia.com', reason: 'destination_timeout',
+      });
+      expect(JSON.stringify(log.mock.calls)).not.toContain('secret');
+    } finally { log.mockRestore(); }
+  });
+});
