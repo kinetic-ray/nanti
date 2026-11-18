@@ -1,3 +1,2 @@
--- Product images are stored as bounded, client-compressed data URIs.
--- No external storage credentials are required.
-ALTER TABLE `Item` ADD COLUMN `imageData` MEDIUMTEXT NULL;
+-- Store object-storage references, not binary image data in TiDB.
+ALTER TABLE `Item` ADD COLUMN `imageKey` VARCHAR(255) NULL;
