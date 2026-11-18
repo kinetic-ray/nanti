@@ -135,15 +135,16 @@ export function ListForm({ list, close, save }: {
   );
 }
 
-export function ItemForm({ item, listId, currency, close, save }: {
+export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
   item?: Item;
+  initialUrl?: string;
   listId: string;
   currency: Currency;
   close: () => void;
   save: (data: ItemWriteInput) => Promise<void>;
 }) {
   const { t, decimal, money, language, error: localError } = useLocale();
-  const [url, setUrl] = useState(item?.url ?? '');
+  const [url, setUrl] = useState(item?.url ?? initialUrl ?? '');
   const [name, setName] = useState(item?.name ?? '');
   const [price, setPrice] = useState(item?.priceMinor == null ? '' : (item.priceMinor / 100).toFixed(2));
   const [quantity, setQuantity] = useState(item?.quantity.toString() ?? '1');
