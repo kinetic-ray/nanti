@@ -18,6 +18,7 @@ import './consumer.css';
 
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
+const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
 
 type Editor =
@@ -186,6 +187,7 @@ function App() {
           <div className="brand">nanti<span>.</span></div>
         </div>
         <div className="masthead-controls">
+          <a className="creator-nav-entry" href="/creator">{'Kreator'}</a>
           <LanguagePicker />
           <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
             title={t('Price alerts')} disabled={!lists} onClick={() => setAlertsOpen(true)}>
@@ -345,5 +347,7 @@ if (root) {
   if (/^\/admin\/?$/u.test(location.pathname)) {
     document.documentElement.lang = 'en';
     createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening Affiliate Center…</p>}><AdminCenter /></Suspense>);
+  } else if (/^\/creator\/?$/u.test(location.pathname)) {
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening Nanti Kreator…</p>}><CreatorLanding /></Suspense></LocaleProvider>);
   } else createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
 }

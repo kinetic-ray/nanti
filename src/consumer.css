@@ -750,3 +750,7 @@ body:has(.consumer) { background: #f8f6fc; }
   .consumer .decision.tool-dialog.decision-wide .priority-choose-actions .primary { width: 100%; }
   .consumer .decision.tool-dialog.decision-wide .priority-choose { padding-top: 1rem; }
 }
+
+.consumer .creator-nav-entry{display:inline-flex;align-items:center;min-height:44px;padding:.45rem .75rem;border:1px solid var(--line);border-radius:var(--radius);font-size:.85rem;font-weight:750;text-decoration:none;color:var(--accent-strong)}
+.consumer .creator-nav-entry:hover{background:var(--wash)}
+@media(max-width:430px){.consumer .creator-nav-entry{font-size:.72rem;padding-inline:.4rem}}
