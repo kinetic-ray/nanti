@@ -253,7 +253,7 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
         setPrice(language === 'id' ? value.replace('.', ',') : value);
         setImportedPrice(true);
       }
-      setLookup(result.status === 'manual_required' ? 'The link is ready to save. Add a name to finish.'
+      setLookup(result.status === 'manual_required' ? 'Product details could not be retrieved automatically. You can still save the link by entering a name.'
         : 'Review the product details before saving.');
     } catch (failure) {
       setLookup(errorMessage(failure));
@@ -349,6 +349,12 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
               <p className="hint">{t('The store uses {currency}. Enter a price in your wishlist’s currency if you want to save one.',
                 { currency: preview.price.currency })}</p>}
           </div>
+        </div>}
+        {preview?.diagnostic && <div className="import-diagnostic" role="status">
+          <strong>{t('Link preview diagnostic')}</strong>
+          <p>{t('The marketplace did not provide usable product metadata. This is not a wishlist save error.')}</p>
+          <code>{preview.diagnostic.code} · {preview.diagnostic.host}{preview.diagnostic.httpStatus ? ` · HTTP ${preview.diagnostic.httpStatus}` : ''}</code>
+          <p>{t('Try opening the link in your browser, then paste the full product URL and check again. If the store blocks automated access, enter details manually.')}</p>
         </div>}
         {showDetails && <>
           <div className="product-image-editor">
