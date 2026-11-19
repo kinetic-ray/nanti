@@ -27,3 +27,13 @@
  .studio-next{padding:1rem 1.2rem}
 }
 @media(max-width:390px){.studio-tabs button{font-size:.6rem}.studio-tabs button span{width:22px;height:22px}}
+
+
+.studio-field{display:grid;gap:.65rem}.studio-field>strong{font-size:.82rem}
+.studio-column-icon{display:grid;width:62px;height:44px;gap:3px}
+.studio-column-icon i{display:block;background:#d4c7e9;border-radius:3px}
+.studio-corner-icon{width:56px;height:44px;border:2px solid #7953b0;background:#eae3f6}
+.studio-advanced{border:1px solid var(--studio-line);border-radius:.7rem;padding:.85rem}
+.studio-advanced summary{font-size:.82rem;font-weight:750;cursor:pointer}
+.studio-advanced[open]{display:grid;gap:1rem}
+.studio-advanced[open] summary{margin-bottom:.2rem}
