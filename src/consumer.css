@@ -816,3 +816,5 @@ body:has(.consumer) { background: #f8f6fc; }
   flex: none;
   color: var(--accent-strong);
 }
+
+.consumer .language-switch{background:var(--wash);border:1px solid var(--line);color:var(--accent-strong);border-radius:.75rem}
