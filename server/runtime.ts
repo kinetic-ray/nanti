@@ -87,10 +87,10 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     // Marketplace previews use their own strict domain allowlist; IKEA remains opt-in.
     preview: async (url) => (ikeaMetadataAllowed || ['shopee', 'tokopedia'].includes(productMerchant(url.hostname)))
       ? previewProduct(url) : null,
-    lookupMetadata: async (url) => {
+    lookupMetadata: async (url, request, onDiagnostic) => {
       const merchant = productMerchant(url.hostname);
       if (!ikeaMetadataAllowed && merchant !== 'shopee' && merchant !== 'tokopedia') return null;
-      const metadata = await previewProductMetadata(url);
+      const metadata = await previewProductMetadata(url, request, onDiagnostic);
       return metadata && { ...metadata, price: merchant === 'ikea' &&
         env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted' ? metadata.price : null };
     },
