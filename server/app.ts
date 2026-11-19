@@ -103,7 +103,14 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
     try {
       await checkDatabase?.();
       res.json({ service: 'nanti', status: 'ready' });
-    } catch {
+    } catch (error) {
+      // Log only structured error identifiers; never log SQL, connection URLs or credentials.
+      const failure = error && typeof error === 'object' ? error as {
+        code?: unknown; errorCode?: unknown; cause?: { code?: unknown; kind?: unknown };
+      } : {};
+      const identifier = [failure.code, failure.errorCode, failure.cause?.code, failure.cause?.kind]
+        .find((value): value is string => typeof value === 'string' && /^[A-Za-z0-9_]{2,48}$/u.test(value));
+      console.error('Database readiness check failed', { code: identifier ?? 'unknown' });
       res.status(503).json({ service: 'nanti', ...databaseProblem });
     }
   });
