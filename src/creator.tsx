@@ -12,9 +12,7 @@ export function CreatorLanding() {
     </header>
     <main>
       <section className="creator-hero" aria-labelledby="creator-title">
-        <div className="creator-hero-meta"><span>NANTI CREATOR</span><span>{id ? 'LINK PRODUK, KOLEKSI, DAN ETALASE' : 'PRODUCT LINKS, COLLECTIONS, AND STOREFRONTS'}</span><span>NANTI / CREATOR</span></div>
         <div className="creator-hero-copy">
-          <p className="creator-eyebrow"><span className="creator-dot" aria-hidden="true"/> {id ? 'SEMUA LINK PRODUKMU, LEBIH MUDAH DICARI' : 'MAKE EVERY PRODUCT LINK EASY TO FIND'}</p>
           <h1 id="creator-title">{id ? <>Semua link.<br/><em>Satu etalase</em><span className="creator-period">.</span></> : <>Every link.<br/><em>One storefront</em><span className="creator-period">.</span></>}</h1>
           <div className="creator-hero-bottom"><p>{id ? 'Kumpulkan link produk afiliasi dalam satu halaman. Kelompokkan per koleksi agar pengikutmu bisa mencari produk dari postingan Instagram tanpa membuka satu per satu link.' : 'Keep your affiliate product links on one page. Organize them into collections so followers can find products from your Instagram posts without opening links one by one.'}</p><div className="creator-hero-actions"><a className="creator-primary" href="/creator/studio">{id ? 'Rancang etalasemu' : 'Design your storefront'} <span aria-hidden="true">↗</span></a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat contoh etalase' : 'View sample storefront'} <span aria-hidden="true">↗</span></a></div></div>
         </div>
