@@ -163,3 +163,23 @@ describe('Marketplace preview fallback coverage', () => {
     ))).resolves.toMatchObject({ title: 'Lamp', price: null });
   });
 });
+
+
+describe('Safe import diagnostics', () => {
+  it('reports an HTTP block without leaking the product link or affiliate query', async () => {
+    const report = vi.fn();
+    const target = new URL('https://s.shopee.co.id/8AXmF9lYur?affiliate=private');
+    await expect(previewProductMetadata(target, async () => new Response(null, { status: 403 }), report))
+      .resolves.toBeNull();
+    expect(report).toHaveBeenCalledWith('http_failure', 's.shopee.co.id', 403);
+    expect(JSON.stringify(report.mock.calls)).not.toContain('affiliate');
+    expect(JSON.stringify(report.mock.calls)).not.toContain('8AXmF9lYur');
+  });
+  it('reports missing public metadata without guessing a product title', async () => {
+    const report = vi.fn();
+    await expect(previewProductMetadata(new URL('https://www.shopee.co.id/example-i.123.456'),
+      async () => new Response('<html><head></head></html>', { headers: { 'content-type': 'text/html' } }), report))
+      .resolves.toBeNull();
+    expect(report).toHaveBeenCalledWith('metadata_missing', 'www.shopee.co.id', 200);
+  });
+});

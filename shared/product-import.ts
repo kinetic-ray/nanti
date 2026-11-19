@@ -10,6 +10,7 @@ export type ProductImport = {
   status: 'name_available' | 'details_available' | 'manual_required';
   price?: { priceMinor: number; currency: Currency };
   imagePath?: string;
+  diagnostic?: { code: string; host: string; httpStatus?: number };
 };
 
 export function isIkeaMetadataLink(url: URL) {

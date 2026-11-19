@@ -54,7 +54,7 @@ type Options = {
   admin?: AdminCredentials;
   consumer?: { accounts: Accounts; providers: OAuthProviders };
   preview: (url: URL) => Promise<string | null>;
-  lookupMetadata?: (url: URL) => ReturnType<typeof previewProductMetadata>;
+  lookupMetadata?: (url: URL, request?: typeof fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) => ReturnType<typeof previewProductMetadata>;
   productMedia?: ReturnType<typeof createProductMedia>;
   imageStorage?: ReturnType<typeof createImageStorage>;
   secret: string;
@@ -265,7 +265,10 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const merchant = productMerchant(url.hostname);
     const canLookUp = isIkeaMetadataLink(url) || merchant === 'shopee' || merchant === 'tokopedia';
-    const meta = canLookUp && lookupMetadata ? await lookupMetadata(url) : null;
+    let diagnostic: { code: string; host: string; httpStatus?: number } | null = null;
+    const meta = canLookUp && lookupMetadata ? await lookupMetadata(url, fetch, (code, host, httpStatus) => {
+      diagnostic = { code, host, ...(httpStatus === undefined ? {} : { httpStatus }) };
+    }) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
     const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
     const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
@@ -274,6 +277,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
       merchant, hostname: url.hostname, originalUrl: url.href, name,
       ...(imagePath && { imagePath }),
       ...(meta?.price && { price: meta.price }),
+      ...(!meta && !name && canLookUp && { diagnostic: diagnostic ?? { code: 'metadata_unavailable', host: url.hostname } }),
       status: imagePath || meta?.price ? 'details_available' : name ? 'name_available' : 'manual_required',
     };
     res.json(result);
