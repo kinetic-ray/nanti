@@ -37,3 +37,12 @@
 .studio-advanced summary{font-size:.82rem;font-weight:750;cursor:pointer}
 .studio-advanced[open]{display:grid;gap:1rem}
 .studio-advanced[open] summary{margin-bottom:.2rem}
+
+/* Typeface choices render in the actual families used by the storefront preview. */
+.studio .studio-font-choice{min-height:126px;justify-content:center;gap:.35rem;padding:.85rem .35rem;text-transform:none}
+.studio .studio-font-sample{font-size:2.3rem;line-height:1.15;font-weight:650}
+.studio .studio-font-name{font-size:.8rem;font-weight:700}
+.studio .studio-font-choice small{font-family:Inter,Arial,sans-serif;font-size:.62rem;font-weight:450;color:var(--studio-muted);text-align:center}
+.studio .studio-font-sans{font-family:Inter,Arial,Helvetica,sans-serif}
+.studio .studio-font-serif{font-family:Georgia,'Times New Roman',serif}
+.studio .studio-font-mono{font-family:'Courier New',Courier,monospace}
