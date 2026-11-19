@@ -204,7 +204,7 @@ function App() {
                 setShowAccount(true);
                 void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
               }}><Icon name="person" />{t(account ? 'Account' : 'Sign in')}</button>
-              <a href="/creator"><span className="masthead-menu-symbol" aria-hidden="true">✳</span>{language === 'id' ? 'Kreator' : 'Creator'}</a>
+              <a href="/creator"><Icon name="sparkles" />{language === 'id' ? 'Kreator' : 'Creator'}</a>
             </div>
           </details>
           <LanguagePicker />
