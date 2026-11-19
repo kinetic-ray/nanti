@@ -126,3 +126,40 @@ describe('Marketplace price metadata', () => {
       .resolves.toMatchObject({ price: null });
   });
 });
+
+
+describe('Marketplace preview fallback coverage', () => {
+  const target = new URL('https://www.tokopedia.com/shop/product');
+  const html = (head: string) => async () => new Response('<html><head>' + head + '</head></html>',
+    { headers: { 'content-type': 'text/html' } });
+
+  it('uses a safe secondary image when the primary Open Graph image is disallowed', async () => {
+    const result = await previewProductMetadata(target, html(
+      '<meta property="og:title" content="Lamp">' +
+      '<meta property="og:image" content="https://example.com/unsafe.jpg">' +
+      '<meta property="og:image:secure_url" content="https://images.tokopedia.net/img/lamp.jpg">',
+    ));
+    expect(result).toMatchObject({ title: 'Lamp', image: 'https://images.tokopedia.net/img/lamp.jpg' });
+  });
+
+  it('reads an ImageObject and a single Offer in an array from Product JSON-LD', async () => {
+    const json = JSON.stringify({ '@type': 'Product', name: 'Reading Lamp',
+      image: [{ '@type': 'ImageObject', url: 'https://images.tokopedia.net/img/lamp.jpg' }],
+      offers: [{ '@type': 'Offer', price: '95000', priceCurrency: 'IDR' }] });
+    await expect(previewProductMetadata(target, html(
+      '<script type="application/ld+json">' + json + '</script>',
+    ))).resolves.toMatchObject({
+      title: 'Reading Lamp', image: 'https://images.tokopedia.net/img/lamp.jpg',
+      price: { priceMinor: 9500000, currency: 'IDR' },
+    });
+  });
+
+  it('does not guess a price from multiple variant offers', async () => {
+    const json = JSON.stringify({ '@type': 'Product', name: 'Lamp',
+      offers: [{ '@type': 'Offer', price: '10', priceCurrency: 'IDR' },
+        { '@type': 'Offer', price: '20', priceCurrency: 'IDR' }] });
+    await expect(previewProductMetadata(target, html(
+      '<script type="application/ld+json">' + json + '</script>',
+    ))).resolves.toMatchObject({ title: 'Lamp', price: null });
+  });
+});
