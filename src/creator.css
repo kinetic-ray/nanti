@@ -47,3 +47,15 @@ body:has(.creator-page){background:#f6f5fc}
  .creator-hero-actions{display:flex;flex-direction:column;align-items:stretch;gap:.65rem;width:100%}
  .creator-hero-actions>a{flex:0 0 auto;width:100%;height:auto;min-height:54px;padding:1rem 1.15rem;justify-content:space-between;align-items:center}
 }
+
+/* Hero starts with the actual headline, not redundant editorial labels. */
+.creator-hero{min-height:0;gap:2.5rem}
+.creator-hero-copy{margin:0;padding:clamp(3rem,7vw,6rem) 0 clamp(2.5rem,5vw,4rem)}
+.creator-hero h1{margin:0 0 clamp(2rem,4vw,3rem)}
+.creator-hero-index{top:7%}
+@media(max-width:700px){
+ .creator-hero{min-height:0;gap:2rem}
+ .creator-hero-copy{margin:0;padding:clamp(2.25rem,8vw,3.5rem) 0 2rem}
+ .creator-hero h1{margin:0 0 2rem}
+ .creator-hero-index{top:7%}
+}
