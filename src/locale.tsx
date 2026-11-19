@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { formatPrice } from '../shared/wishlist.js';
 import type { Currency } from '../shared/wishlist.js';
-import { idMessages, languages, translate } from './messages.js';
+import { idMessages, translate } from './messages.js';
 import type { Interpolation, Language, Message } from './messages.js';
 
 const storageKey = 'nanti.language';
@@ -41,11 +41,10 @@ export function useLocale() {
 }
 
 export function LanguagePicker() {
-  const { language, setLanguage, t } = useLocale();
-  return <div className="language-picker" role="group" aria-label={t('Language')}>
-    {languages.map((option) => <button key={option} type="button" aria-pressed={language === option}
-      aria-label={option === 'id' ? 'Bahasa Indonesia' : 'English'} lang={option} onClick={() => setLanguage(option)}>
-      {option.toUpperCase()}
-    </button>)}
-  </div>;
+  const { language, setLanguage } = useLocale();
+  const next = language === 'id' ? 'en' : 'id';
+  return <button className="language-switch" type="button"
+    aria-label={language === 'id' ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'}
+    title={language === 'id' ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'}
+    onClick={() => setLanguage(next)}>{next.toUpperCase()}</button>;
 }
