@@ -248,3 +248,21 @@ textarea { display: block; width: 100%; color: inherit; font: inherit; padding: 
 .account-signin-shell .account-provider-status { font-size: .72rem; font-weight: 650; white-space: nowrap; color: var(--muted); }
 .account-signin-shell .account-signin-note { font-size: .82rem; line-height: 1.5; }
 @media (max-width: 370px) { .account-signin-shell .account-provider { gap: .5rem; padding-inline: .6rem; } }
+
+/* Nanti app — editorial visual system shared with Creator, without changing app flows. */
+body:has(.site:not(.admin-site)){background:#f6f5fc;color:#211b37}
+.site:not(.admin-site){font-family:"Plus Jakarta Sans",Aptos,"Segoe UI",system-ui,sans-serif;max-width:88rem;padding-inline:clamp(1rem,4vw,4rem)}
+.site:not(.admin-site) .masthead{border-bottom:1px solid #211b37;padding-block:1.35rem;margin-bottom:clamp(1.5rem,4vw,3.5rem);gap:1rem}
+.site:not(.admin-site) .brand{font-size:clamp(1.75rem,3vw,2.25rem);font-weight:850;letter-spacing:-.085em}
+.site:not(.admin-site) h1{font-size:clamp(2.4rem,5.7vw,5.2rem);line-height:1.06;letter-spacing:-.07em;font-weight:850}
+.site:not(.admin-site) h2{letter-spacing:-.035em;font-weight:780}
+.site:not(.admin-site) .masthead-controls{gap:.65rem}
+.site:not(.admin-site) .masthead-controls>a,.site:not(.admin-site) .masthead-controls>button{border-radius:0;font-weight:750}
+.site:not(.admin-site) button.primary,.site:not(.admin-site) .buy-action{background:#4834b9;border-color:#4834b9;color:white;font-weight:800}
+.site:not(.admin-site) button.primary:hover,.site:not(.admin-site) .buy-action:hover{background:#372694}
+.site:not(.admin-site) .brand-symbol{background:#4834b9;border-radius:.55rem}
+.site:not(.admin-site) .language-picker{background:#fff;border-color:#ded9ed}
+.site:not(.admin-site) .language-picker button[aria-pressed=true]{background:#eee9ff;color:#372694}
+.site:not(.admin-site) .card,.site:not(.admin-site) .panel,.site:not(.admin-site) .product-card{border-color:#ded9ed}
+.site:not(.admin-site) .hint,.site:not(.admin-site) .optional{color:#5b536e}
+@media(max-width:600px){.site:not(.admin-site) .masthead{align-items:flex-start}.site:not(.admin-site) h1{font-size:clamp(2.15rem,9vw,3.5rem)}}
