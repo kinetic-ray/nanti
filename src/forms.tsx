@@ -351,10 +351,10 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
           </div>
         </div>}
         {preview?.diagnostic && <div className="import-diagnostic" role="status">
-          <strong>{t('Link preview diagnostic')}</strong>
-          <p>{t('The marketplace did not provide usable product metadata. This is not a wishlist save error.')}</p>
+          <strong>{(language === 'id' ? 'Diagnostik pratinjau tautan' : 'Link preview diagnostic')}</strong>
+          <p>{(language === 'id' ? 'Marketplace tidak menyediakan metadata produk yang bisa dibaca. Ini bukan kegagalan menyimpan wishlist.' : 'The marketplace did not provide usable product metadata. This is not a wishlist save error.')}</p>
           <code>{preview.diagnostic.code} · {preview.diagnostic.host}{preview.diagnostic.httpStatus ? ` · HTTP ${preview.diagnostic.httpStatus}` : ''}</code>
-          <p>{t('Try opening the link in your browser, then paste the full product URL and check again. If the store blocks automated access, enter details manually.')}</p>
+          <p>{(language === 'id' ? 'Buka tautan di browser, salin URL produk lengkap, lalu periksa lagi. Jika marketplace membatasi akses otomatis, isi detail secara manual.' : 'Open the link in your browser, paste the full product URL and check again. If automated access is blocked, enter details manually.')}</p>
         </div>}
         {showDetails && <>
           <div className="product-image-editor">
