@@ -46,3 +46,41 @@
 .studio .studio-font-sans{font-family:Inter,Arial,Helvetica,sans-serif}
 .studio .studio-font-serif{font-family:Georgia,'Times New Roman',serif}
 .studio .studio-font-mono{font-family:'Courier New',Courier,monospace}
+
+/* Nanti Creator editorial studio — same brand, quieter tools. */
+.studio{--studio-line:#ded9ed;--studio-ink:#211b37;--studio-muted:#5b536e;--studio-brand:#4834b9;--studio-brand-deep:#372694;--studio-wash:#eee9ff;background:#f6f5fc;color:var(--studio-ink);font-family:"Plus Jakarta Sans",Aptos,"Segoe UI",system-ui,sans-serif}
+.studio-header{height:76px;background:#f6f5fc;border-bottom:1px solid #211b37;padding:0 clamp(1rem,3vw,2.5rem)}
+.studio-header>a{font-size:1.6rem;letter-spacing:-.085em;font-weight:900}.studio-header>a span{color:var(--studio-brand)}.studio-header>a small{margin-left:.45rem;font-size:.62rem;letter-spacing:.09em;text-transform:uppercase}
+.studio-status{color:var(--studio-muted);letter-spacing:.1em}
+.studio-header>div a,.studio-header>div button{border-radius:0;border-color:var(--studio-ink);background:transparent;font-weight:800;min-height:42px}
+.studio-header>div button:first-of-type{background:var(--studio-brand);color:#fff;border-color:var(--studio-brand)}
+.studio-workspace{grid-template-columns:minmax(330px,390px) minmax(0,1fr);min-height:calc(100vh - 76px)}
+.studio-panel{background:#fff;border-right:1px solid var(--studio-line)}
+.studio-panel-heading{padding:2rem 1.7rem 1.2rem;border-bottom:1px solid var(--studio-line)}
+.studio-panel-heading>span{font-size:.65rem;color:var(--studio-brand);letter-spacing:.15em;font-weight:850}
+.studio-panel-heading h1{font-size:clamp(2rem,3vw,3rem);font-weight:850;line-height:1.06;letter-spacing:-.075em;margin:.8rem 0 1rem}
+.studio-panel-heading p{font-size:.83rem;line-height:1.7;max-width:340px}
+.studio-progress{color:var(--studio-brand);margin:1.2rem 1.7rem .25rem;font-size:.72rem;letter-spacing:.04em}
+.studio-tabs{padding:1rem 1.3rem;gap:.35rem;border-bottom:1px solid var(--studio-line)}
+.studio-tabs button{border-radius:0;min-height:68px;font-size:.7rem;font-weight:750}
+.studio-tabs button span{border-radius:0;border-color:var(--studio-line);width:26px;height:26px}
+.studio-tabs button[aria-current=step],.studio-tabs button[aria-current=page]{background:var(--studio-wash);color:var(--studio-brand-deep)}
+.studio-tabs button[aria-current=step] span{background:var(--studio-brand);border-color:var(--studio-brand);color:white}
+.studio-step-hint{padding:1rem 1.7rem 0;color:var(--studio-muted)}
+.studio-settings{padding:1.5rem 1.7rem;gap:1.35rem}
+.studio-settings h2{font-size:1.25rem;letter-spacing:-.045em}
+.studio-preset-grid button,.studio-choice-grid button{border-radius:0;border-color:var(--studio-line);padding:.85rem .45rem;transition:border-color .15s ease,background .15s ease}
+.studio-preset-grid button:hover,.studio-choice-grid button:hover{border-color:var(--studio-brand)}
+.studio-preset-grid button[aria-pressed=true],.studio-choice-grid button[aria-pressed=true]{border:2px solid var(--studio-brand);background:#f3efff}
+.studio-advanced,.studio-settings select,.studio-section-list li,.studio-section-list button{border-radius:0}
+.studio-column-icon i{background:#c9baf3}.studio-corner-icon{border-color:var(--studio-brand);background:#eee9ff}
+.studio-next{padding:1rem 1.7rem}.studio-next button{border-radius:0;border-color:var(--studio-line);font-weight:800}.studio-next button:last-child{background:var(--studio-brand);color:white;border-color:var(--studio-brand)}
+.studio-panel-footer{padding:1rem 1.7rem}
+.studio-preview-area{background:#eeeaf7;padding:clamp(1rem,2.5vw,2.5rem)}
+.studio-preview-toolbar{border-bottom:1px solid #c9c1dc;padding-bottom:1rem;margin-bottom:1.5rem}
+.studio-preview-toolbar strong{font-size:.85rem;letter-spacing:.04em;text-transform:uppercase}
+.studio-viewports{border-radius:0;background:#ded8ed}.studio-viewports button{border-radius:0}
+.studio-preview-frame{border-radius:0;border:1px solid #c8bfdc;box-shadow:14px 16px 0 #d8d0eb}
+.studio .studio-font-choice{min-height:136px}
+.studio button:focus-visible,.studio a:focus-visible,.studio input:focus-visible,.studio select:focus-visible{outline-color:#4834b9}
+@media(max-width:900px){.studio-workspace{grid-template-columns:1fr}.studio-header{height:70px}.studio-mobile-switch{background:#f6f5fc}.studio-mobile-switch button{border-radius:0;border-color:var(--studio-line)}.studio-mobile-switch button[aria-pressed=true]{background:var(--studio-brand);color:#fff}.studio-preview-area{padding:1.25rem}.studio-panel-heading{padding:1.5rem 1.2rem}.studio-progress{margin:1rem 1.2rem .25rem}.studio-step-hint{padding:.8rem 1.2rem 0}.studio-settings{padding:1.3rem 1.2rem}.studio-next,.studio-panel-footer{padding:1rem 1.2rem}}
