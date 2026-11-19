@@ -369,7 +369,7 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
               metadata_unavailable: ['Adapter tidak menghasilkan detail maupun alasan spesifik.', 'The adapter returned no details or specific failure reason.'],
             };
             const message = messages[preview.diagnostic!.code] ?? messages.metadata_unavailable;
-            return message[language === 'id' ? 0 : 1];
+            return (message ?? ['Alasan tidak tersedia.', 'Reason unavailable.'])[language === 'id' ? 0 : 1];
           })()}</p>
           <code style={{ overflowWrap: 'anywhere' }}>{preview.diagnostic.code} · {preview.diagnostic.host}{preview.diagnostic.httpStatus ? ` · HTTP ${preview.diagnostic.httpStatus}` : ''}</code>
           <p>{(language === 'id' ? 'Buka tautan di browser, salin URL produk lengkap, lalu periksa lagi. Jika marketplace membatasi akses otomatis, isi detail secara manual.' : 'Open the link in your browser, paste the full product URL and check again. If automated access is blocked, enter details manually.')}</p>
