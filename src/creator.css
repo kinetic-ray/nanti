@@ -34,3 +34,9 @@ body:has(.creator-page){background:#f6f5fc}
  .creator-hero-actions>a{flex:1 1 180px}
 }
 @media(max-width:400px){.creator-hero h1{font-size:clamp(2.6rem,10vw,3.3rem)}.creator-hero-actions>a{width:100%}}
+
+/* One-tap language toggle; display only the language available to switch to. */
+.creator-language-toggle{display:inline-grid;place-items:center;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border:1px solid #ded9ed;border-radius:0;background:#eee9ff;color:#372694;font-size:.78rem;font-weight:850;letter-spacing:.08em;cursor:pointer}
+.creator-language-toggle:hover{background:#ddd3ff;border-color:#4834b9}
+.creator-language-toggle:focus-visible{outline:3px solid #4834b9;outline-offset:3px}
+@media(max-width:700px){.creator-header{gap:.7rem}.creator-header-actions{gap:.5rem}.creator-language-toggle{width:40px;min-width:40px;height:44px}.creator-back{min-height:44px}}
