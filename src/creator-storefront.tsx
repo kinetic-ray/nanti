@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { defaultDesign } from './creator-design.js';
 import type { CreatorDesign, CreatorSection } from './creator-design.js';
@@ -25,6 +25,18 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false }: 
   const id = language === 'id';
   const [active, setActive] = useState<CollectionId | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [compactSearch, setCompactSearch] = useState(false);
+  const searchRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (embedded) return;
+    const onScroll = () => {
+      const top = searchRef.current?.getBoundingClientRect().top ?? 0;
+      setCompactSearch(top < 12);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [embedded]);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const activeCollection = collections.find(item => item.id === active);
   const normalized = (value: string) => value.toLocaleLowerCase().normalize('NFKC').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -52,14 +64,14 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false }: 
     </header>}
     <main className="storefront-main">
       <div className="storefront-demo-notice" style={{order:-2}} role="status">{id ? 'DEMO · Profil, produk, dan harga di halaman ini hanya contoh. Belum ada tautan pembelian.' : 'DEMO · This profile, products, and prices are examples. Purchase links are not available.'}</div>
-      <section className="storefront-search" style={{order:0}} role="search" aria-label={id ? 'Cari produk dan etalase' : 'Search products and collections'}>
+      <section ref={searchRef} className={`storefront-search ${compactSearch ? "storefront-search-compact" : ""}`} style={{order:0}} role="search" aria-label={id ? 'Cari produk dan etalase' : 'Search products and collections'}>
         <label htmlFor={embedded ? 'creator-preview-search' : 'creator-storefront-search'}>{id ? 'Cari dari kode di Instagram' : 'Find it from an Instagram post'}</label>
         <div className="storefront-search-control"><span aria-hidden="true">⌕</span><input id={embedded ? 'creator-preview-search' : 'creator-storefront-search'} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder={id ? 'Kode PRD-003, Etalase 3, atau nama koleksi' : 'Code PRD-003, Showcase 3, or collection name'} autoComplete="off" />{search && <button type="button" onClick={()=>{setSearch('');setActive('all');}} aria-label={id?'Hapus pencarian':'Clear search'}>×</button>}</div>
         <p aria-live="polite">{query ? (id ? `${visible.length} produk ditemukan` : `${visible.length} products found`) : (id ? 'Coba: PRD-003 · Etalase 3 · Desk setup' : 'Try: PRD-003 · Showcase 3 · Desk setup')}</p>
       </section>
       {has("profile") && <section className="storefront-profile" style={{order:sections.indexOf("profile") + 1}}>
         <div className="storefront-avatar" aria-hidden="true">S.</div>
-        <div className="storefront-profile-copy"><span className="storefront-kicker">{id ? 'ETALASE KREATOR' : 'CREATOR STOREFRONT'}</span><h1>Studio Sore <span className="storefront-verified" aria-label={id ? 'Akun contoh' : 'Sample account'}>✳</span></h1><p className="storefront-handle">@studiosore · Jakarta</p><p>{id ? 'Barang-barang yang bikin hari terasa lebih nyaman. Dipilih dengan teliti, dibagikan dengan senang hati.' : 'Thoughtfully picked things for easier, brighter days. Curated with care, shared with joy.'}</p><div className="storefront-profile-meta"><span>{collections.length} {id ? 'koleksi' : 'collections'}</span><span>{products.length} {id ? 'produk pilihan' : 'curated picks'}</span></div></div>
+        <div className="storefront-profile-copy"><h1>Studio Sore </h1><p className="storefront-handle">@studiosore · Jakarta</p><p>{id ? 'Hai, aku Sore! Di sini aku kumpulin barang-barang yang sering kalian tanyain. Tinggal cari koleksinya atau pakai kode dari caption, ya.' : 'Hey, I'm Sore! Here's everything you keep asking me about. Search a collection or use the code from my captions.'}</p><div className="storefront-profile-meta"><span><strong>{collections.length}</strong> {id ? 'koleksi' : 'collections'}</span><span><strong>{products.length}</strong> {id ? 'produk' : 'products'}</span></div></div>
       </section>}
       {has("hero") && <section className="storefront-featured" style={{order:sections.indexOf("hero") + 1}} aria-labelledby="storefront-featured-title"><div><span className="storefront-kicker">{id ? 'PILIHAN MINGGU INI' : 'THIS WEEK’S EDIT'}</span><h2 id="storefront-featured-title">{id ? 'Favorit kecil, dampak besar.' : 'Small favorites, big difference.'}</h2><p>{id ? 'Mulai dari meja kerja sampai gaya sehari-hari. Semua pilihan ada di sini.' : 'From your desk to your everyday style. Find everything in one place.'}</p><a href="#storefront-products">{id ? 'Jelajahi pilihan' : 'Explore picks'} ↗</a></div><div className="storefront-featured-art" aria-hidden="true"><span>✳</span><span>◒</span><span>✦</span></div></section>}
       {has("collections") && <section className="storefront-collections" style={{order:sections.indexOf("collections") + 1}} aria-labelledby="storefront-collections-title"><div className="storefront-section-heading"><div><span className="storefront-kicker">01 / {id ? 'KOLEKSI' : 'COLLECTIONS'}</span><h2 id="storefront-collections-title">{id ? 'Jelajahi koleksi' : 'Browse collections'}</h2></div><span>{collections.length} {id ? 'koleksi' : 'collections'}</span></div><div className="storefront-collection-grid">{collections.map(collection => <button type="button" key={collection.id} className={`storefront-collection-card storefront-tone-${collection.tone}`} onClick={() => { setSearch(''); setActive(collection.id); document.getElementById('storefront-products')?.scrollIntoView({ behavior: 'smooth' }); }}><span className="storefront-collection-symbol" aria-hidden="true">{collection.symbol}</span><span className="storefront-collection-title">{collection.name}</span><span className="storefront-collection-count">{products.filter(product => product.collection === collection.id).length} {id ? 'produk' : 'products'} <span aria-hidden="true">↗</span></span></button>)}</div></section>}
