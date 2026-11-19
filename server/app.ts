@@ -277,7 +277,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
       merchant, hostname: url.hostname, originalUrl: url.href, name,
       ...(imagePath && { imagePath }),
       ...(meta?.price && { price: meta.price }),
-      ...(!meta && !name && canLookUp && { diagnostic: diagnostic ?? { code: 'metadata_unavailable', host: url.hostname } }),
+      ...(!meta && !name && { diagnostic: diagnostic ?? { code: canLookUp ? (lookupMetadata ? 'metadata_unavailable' : 'adapter_disabled') : 'unsupported_url', host: url.hostname } }),
       status: imagePath || meta?.price ? 'details_available' : name ? 'name_available' : 'manual_required',
     };
     res.json(result);

@@ -352,8 +352,26 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
         </div>}
         {preview?.diagnostic && <div className="import-diagnostic" role="status">
           <strong>{(language === 'id' ? 'Diagnostik pratinjau tautan' : 'Link preview diagnostic')}</strong>
-          <p>{(language === 'id' ? 'Marketplace tidak menyediakan metadata produk yang bisa dibaca. Ini bukan kegagalan menyimpan wishlist.' : 'The marketplace did not provide usable product metadata. This is not a wishlist save error.')}</p>
-          <code>{preview.diagnostic.code} · {preview.diagnostic.host}{preview.diagnostic.httpStatus ? ` · HTTP ${preview.diagnostic.httpStatus}` : ''}</code>
+          <p>{(() => {
+            const messages: Record<string, [string, string]> = {
+              http_failure: ['Server toko menolak atau gagal memproses permintaan preview.', 'The store rejected or failed the preview request.'],
+              timeout: ['Server toko tidak merespons dalam batas waktu.', 'The store did not respond before the timeout.'],
+              destination_timeout: ['Tujuan redirect tidak merespons tepat waktu.', 'The redirect destination timed out.'],
+              request_error: ['Koneksi server ke toko gagal. Detail jaringan tidak tersedia.', 'The server could not connect to the store. Network details are unavailable.'],
+              redirect_disallowed: ['Redirect menuju domain atau protokol yang tidak diizinkan demi keamanan.', 'The redirect targets a domain or protocol that is not allowed for security.'],
+              redirect_missing_location: ['Server mengirim redirect tanpa alamat tujuan.', 'The store returned a redirect without a destination.'],
+              redirect_limit: ['Terlalu banyak redirect sehingga pemeriksaan dihentikan.', 'Too many redirects; the lookup was stopped.'],
+              not_html: ['Toko tidak mengembalikan halaman HTML.', 'The store did not return an HTML page.'],
+              empty_response: ['Toko mengembalikan respons tanpa isi halaman.', 'The store returned an empty page response.'],
+              metadata_missing: ['Halaman terbuka, tetapi metadata produk tidak ditemukan.', 'The page loaded, but no product metadata was found.'],
+              adapter_disabled: ['Pengambilan metadata otomatis belum tersedia untuk format tautan ini.', 'Automatic metadata lookup is not available for this link format.'],
+              unsupported_url: ['Toko dikenali, tetapi preview otomatis belum didukung untuk tautan ini.', 'The store was recognized, but automatic preview is not supported for this link.'],
+              metadata_unavailable: ['Adapter tidak menghasilkan detail maupun alasan spesifik.', 'The adapter returned no details or specific failure reason.'],
+            };
+            const message = messages[preview.diagnostic!.code] ?? messages.metadata_unavailable;
+            return (message ?? ['Alasan tidak tersedia.', 'Reason unavailable.'])[language === 'id' ? 0 : 1];
+          })()}</p>
+          <code style={{ overflowWrap: 'anywhere' }}>{preview.diagnostic.code} · {preview.diagnostic.host}{preview.diagnostic.httpStatus ? ` · HTTP ${preview.diagnostic.httpStatus}` : ''}</code>
           <p>{(language === 'id' ? 'Buka tautan di browser, salin URL produk lengkap, lalu periksa lagi. Jika marketplace membatasi akses otomatis, isi detail secara manual.' : 'Open the link in your browser, paste the full product URL and check again. If automated access is blocked, enter details manually.')}</p>
         </div>}
         {showDetails && <>

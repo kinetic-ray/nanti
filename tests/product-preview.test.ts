@@ -183,3 +183,29 @@ describe('Safe import diagnostics', () => {
     expect(report).toHaveBeenCalledWith('metadata_missing', 'www.shopee.co.id', 200);
   });
 });
+
+
+describe('Precise IKEA diagnostics', () => {
+  const product = new URL('https://www.ikea.com/us/en/p/lamp-12345678/');
+  it('identifies an unsupported IKEA URL before attempting a network call', async () => {
+    const report = vi.fn();
+    const fetcher = vi.fn();
+    await expect(previewProductMetadata(new URL('https://www.ikea.co.id/en/products/lamp'), fetcher, report))
+      .resolves.toBeNull();
+    expect(report).toHaveBeenCalledWith('adapter_disabled', 'www.ikea.co.id');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('reports a blocked IKEA response with its status', async () => {
+    const report = vi.fn();
+    await expect(previewProductMetadata(product, async () => new Response(null, { status: 403 }), report))
+      .resolves.toBeNull();
+    expect(report).toHaveBeenCalledWith('http_failure', 'www.ikea.com', 403);
+  });
+  it('reports missing IKEA metadata on an otherwise successful HTML response', async () => {
+    const report = vi.fn();
+    await expect(previewProductMetadata(product, async () =>
+      new Response('<html><head></head></html>', { headers: { 'content-type': 'text/html' } }), report))
+      .resolves.toBeNull();
+    expect(report).toHaveBeenCalledWith('metadata_missing', 'www.ikea.com', 200);
+  });
+});
