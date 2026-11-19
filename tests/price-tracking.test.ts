@@ -27,7 +27,7 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
   ] as const) {
     await guest.post('/api/products/import').set(mutation).send({ url }).expect(200, {
       merchant, hostname: new URL(url).hostname, originalUrl: url, name: null,
-      ...(merchant === 'tokopedia' ? { diagnostic: { code: 'adapter_disabled', host: 'tokopedia.link' } } : {}),
+      diagnostic: { code: merchant === 'tokopedia' ? 'adapter_disabled' : 'unsupported_url', host: new URL(url).hostname },
       status: 'manual_required',
     });
   }
