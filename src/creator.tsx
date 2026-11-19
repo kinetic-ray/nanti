@@ -8,15 +8,15 @@ export function CreatorLanding() {
     <header className="creator-header">
       <a className="creator-logo" href="/" aria-label="Nanti home">nanti<span>.</span><small>CREATOR</small></a>
       <nav aria-label={id ? 'Navigasi kreator' : 'Creator navigation'}><a href="#manifesto">{id ? 'Tentang' : 'About'}</a><a href="#cara-kerja">{id ? 'Cara kerja' : 'How it works'}</a><a href="/creator/demo">{id ? 'Etalase contoh' : 'Sample storefront'}</a></nav>
-      <div className="creator-header-actions"><LanguagePicker /><a className="creator-back" href="/creator/studio">{id ? 'Buka studio' : 'Open studio'} <span aria-hidden="true">↗</span></a></div>
+      <div className="creator-header-actions"><LanguagePicker /><a className="creator-back" href="/">{id ? 'Ke Nanti' : 'Open Nanti'} <span aria-hidden="true">↗</span></a></div>
     </header>
     <main>
       <section className="creator-hero" aria-labelledby="creator-title">
-        <div className="creator-hero-meta"><span>NANTI CREATOR</span><span>{id ? 'RUANG UNTUK SELERA YANG PUNYA CERITA' : 'A SPACE FOR TASTE WITH A STORY'}</span><span>BUAT PILIHANMU BERARTI</span></div>
+        <div className="creator-hero-meta"><span>NANTI CREATOR</span><span>{id ? 'LINK PRODUK, KOLEKSI, DAN ETALASE' : 'PRODUCT LINKS, COLLECTIONS, AND STOREFRONTS'}</span><span>NANTI / CREATOR</span></div>
         <div className="creator-hero-copy">
-          <p className="creator-eyebrow"><span className="creator-dot" aria-hidden="true"/> {id ? 'BUKAN SEKADAR LINK DI BIO' : 'MORE THAN A LINK IN BIO'}</p>
-          <h1 id="creator-title">{id ? <>Selera itu<br/><em>punya</em> tempat<span className="creator-period">.</span></> : <>Good taste<br/><em>deserves</em> a place<span className="creator-period">.</span></>}</h1>
-          <div className="creator-hero-bottom"><p>{id ? 'Dari barang kecil yang selalu kamu pakai sampai satu set outfit buat liburan. Bukan daftar link. Ini dunia pilihanmu.' : 'From the little things you use every day to a whole vacation outfit. Not a list of links. A world of your own picks.'}</p><div className="creator-hero-actions"><a className="creator-primary" href="/creator/studio">{id ? 'Rancang etalasemu' : 'Design your storefront'} <span aria-hidden="true">↗</span></a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat hasilnya' : 'See the example'} <span aria-hidden="true">↗</span></a></div></div>
+          <p className="creator-eyebrow"><span className="creator-dot" aria-hidden="true"/> {id ? 'SEMUA LINK PRODUKMU, LEBIH MUDAH DICARI' : 'MAKE EVERY PRODUCT LINK EASY TO FIND'}</p>
+          <h1 id="creator-title">{id ? <>Semua link.<br/><em>Satu etalase</em><span className="creator-period">.</span></> : <>Every link.<br/><em>One storefront</em><span className="creator-period">.</span></>}</h1>
+          <div className="creator-hero-bottom"><p>{id ? 'Kumpulkan link produk afiliasi dalam satu halaman. Kelompokkan per koleksi agar pengikutmu bisa mencari produk dari postingan Instagram tanpa membuka satu per satu link.' : 'Keep your affiliate product links on one page. Organize them into collections so followers can find products from your Instagram posts without opening links one by one.'}</p><div className="creator-hero-actions"><a className="creator-primary" href="/creator/studio">{id ? 'Rancang etalasemu' : 'Design your storefront'} <span aria-hidden="true">↗</span></a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat contoh etalase' : 'View sample storefront'} <span aria-hidden="true">↗</span></a></div></div>
         </div>
         <div className="creator-hero-index" aria-hidden="true">n<span>.</span></div>
         <div className="creator-hero-footer"><span>{id ? 'KONSEP PRODUK / DALAM PENGEMBANGAN' : 'PRODUCT CONCEPT / IN DEVELOPMENT'}</span><a href="#manifesto">{id ? 'GESER UNTUK JELAJAH' : 'SCROLL TO EXPLORE'} ↓</a></div>
@@ -24,11 +24,11 @@ export function CreatorLanding() {
 
       <section id="manifesto" className="creator-manifesto">
         <div className="creator-manifesto-label"><span>THE IDEA</span><span>↘</span></div>
-        <div><p className="creator-overline">{id ? 'KURASI, BUKAN KATALOG' : 'CURATION, NOT A CATALOG'}</p><h2>{id ? <>Orang datang karena <i>seleramu.</i><br/>Bukan karena seratus tombol beli.</> : <>They come for <i>your taste.</i><br/>Not a hundred buy buttons.</>}</h2><p>{id ? 'Beri konteks pada setiap rekomendasi. Satukan produk yang saling melengkapi. Biar audiens tahu kenapa sesuatu layak dipilih.' : 'Give each recommendation a point of view. Bring complementary products together. Show your audience why something is worth choosing.'}</p></div>
+        <div><p className="creator-overline">{id ? 'KENAPA PERLU ETALASE?' : 'WHY A STOREFRONT?'}</p><h2>{id ? <>Satu postingan.<br/><i>Banyak produk.</i><br/>Tetap mudah dicari.</> : <>One post.<br/><i>Many products.</i><br/>Easy to find.</>}</h2><p>{id ? 'Misalnya kamu membagikan outfit liburan. Simpan semua barangnya dalam satu koleksi, lalu tulis nama koleksi atau kode produk di caption. Pengikut tinggal cari di etalasemu.' : 'Sharing a vacation outfit? Put every item in one collection and add the collection name or product code to your caption. Followers can search your storefront directly.'}</p></div>
       </section>
 
       <section className="creator-showcase" aria-labelledby="creator-showcase-title">
-        <div className="creator-showcase-head"><span>IN PRACTICE</span><h2 id="creator-showcase-title">{id ? <>Satu unggahan.<br/><em>Satu tujuan.</em></> : <>One post.<br/><em>One destination.</em></>}</h2><p>{id ? 'Contoh perjalanan dari caption Instagram menuju pilihan produk yang tepat.' : 'An example of the journey from an Instagram caption to the right product.'}</p></div>
+        <div className="creator-showcase-head"><span>IN PRACTICE</span><h2 id="creator-showcase-title">{id ? <>Dari caption.<br/><em>Langsung ketemu.</em></> : <>From caption.<br/><em>To the right product.</em></>}</h2><p>{id ? 'Pengikut melihat kode produk di Instagram, mengetiknya di kolom pencarian, lalu menemukan barang yang dimaksud.' : 'Followers see a product code on Instagram, enter it in search, and find the item they came for.'}</p></div>
         <div className="creator-story-grid">
           <article className="creator-story creator-story-social"><div className="creator-story-top"><span>INSTAGRAM</span><span>↗</span></div><div className="creator-story-visual"><span className="creator-story-sun"/><span className="creator-story-horizon"/><strong>OFF<br/>DUTY.</strong><small>SUMMER EDIT — 03</small></div><div className="creator-story-caption"><strong>@studio.sore</strong><p>{id ? 'Set main ke pantai sudah aku kumpulin. Cari “Etalase 3” atau kode PRD-003 di link bio ☀' : 'My beach-day picks are all together. Search “Showcase 3” or PRD-003 in my bio ☀'}</p></div></article>
           <div className="creator-story-arrow" aria-hidden="true">↗</div>
@@ -46,7 +46,7 @@ export function CreatorLanding() {
         </div>
       </section>
 
-      <section className="creator-end"><span>YOUR SPACE</span><h2>{id ? <>Link boleh sama.<br/><em>Rasa jangan.</em></> : <>Same links.<br/><em>Different taste.</em></>}</h2><p>{id ? 'Coba bentuk halaman yang terasa seperti kamu. Design Studio tersedia sebagai sandbox; fitur publikasi dan afiliasi masih dikembangkan.' : 'Shape a page that feels like you. Design Studio is available as a sandbox; publishing and affiliate features are still in development.'}</p><div><a className="creator-primary" href="/creator/studio">{id ? 'Masuk Design Studio' : 'Enter Design Studio'} ↗</a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat etalase demo' : 'View demo storefront'} ↗</a></div></section>
+      <section className="creator-end"><span>YOUR SPACE</span><h2>{id ? <>Link produk rapi.<br/><em>Gampang dicari.</em></> : <>Organized links.<br/><em>Easy to find.</em></>}</h2><p>{id ? 'Coba atur tampilan etalasemu lewat Design Studio. Saat ini masih berupa pratinjau; publikasi halaman dan integrasi afiliasi belum tersedia.' : 'Try arranging your storefront in Design Studio. This is still a preview; publishing and affiliate integrations are not available yet.'}</p><div><a className="creator-primary" href="/creator/studio">{id ? 'Masuk Design Studio' : 'Enter Design Studio'} ↗</a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat etalase demo' : 'View demo storefront'} ↗</a></div></section>
     </main>
     <footer className="creator-footer"><span>nanti<span className="creator-purple">.</span> creator</span><span>© 2026 NANTI / {id ? 'MASIH DALAM PENGEMBANGAN' : 'WORK IN PROGRESS'}</span><a href="/">{id ? 'KEMBALI KE NANTI' : 'BACK TO NANTI'} ↗</a></footer>
   </div>;
