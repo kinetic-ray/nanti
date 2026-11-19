@@ -202,19 +202,21 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
               const photos = 'image' in value ? value.image : null;
               const photo = Array.isArray(photos) ? photos[0] : photos;
               if (typeof photo === 'string') structuredImage ??= photo;
+              else if (photo && typeof photo === 'object' && 'url' in photo && typeof photo.url === 'string') structuredImage ??= photo.url;
               // Only trust an explicit single Product Offer for the current listing.
               // Aggregate/variant price ranges must not become a fabricated exact price.
               const rawOffers = 'offers' in value ? value.offers : null;
+              const singleOffer = Array.isArray(rawOffers) ? (rawOffers.length === 1 ? rawOffers[0] : null) : rawOffers;
               const listingMatches = !('url' in value) || (typeof value.url === 'string' && (() => {
                 try {
                   const listed = new URL(value.url, current.origin);
                   return listed.origin === current.origin && listed.pathname.replace(/\/$/u, '') === current.pathname.replace(/\/$/u, '');
                 } catch { return false; }
               })());
-              if (listingMatches && rawOffers && !Array.isArray(rawOffers) && typeof rawOffers === 'object' &&
-                  '@type' in rawOffers && rawOffers['@type'] === 'Offer' &&
-                  'price' in rawOffers && 'priceCurrency' in rawOffers) {
-                const offer = parseOffer(rawOffers.price, rawOffers.priceCurrency);
+              if (listingMatches && singleOffer && typeof singleOffer === 'object' &&
+                  '@type' in singleOffer && singleOffer['@type'] === 'Offer' &&
+                  'price' in singleOffer && 'priceCurrency' in singleOffer) {
+                const offer = parseOffer(singleOffer.price, singleOffer.priceCurrency);
                 if (offer) offers.push(offer);
               }
             }
@@ -229,10 +231,11 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
       const price = !conflictingPrices && firstOffer ? firstOffer : null;
       const title = (tags.get('og:title') ?? tags.get('twitter:title') ??
         structuredTitle ?? '').slice(0, 160) || null;
-      const candidate = tags.get('og:image') ?? tags.get('twitter:image') ??
-        tags.get('twitter:image:src') ?? structuredImage;
+      const candidates = [tags.get('og:image'), tags.get('og:image:secure_url'),
+        tags.get('twitter:image'), tags.get('twitter:image:src'), structuredImage];
       let image: string | null = null;
-      if (candidate) {
+      for (const candidate of candidates) {
+        if (!candidate) continue;
         try {
           const parsed = new URL(candidate, current);
           // Only publicly hosted Shopee image-CDN URLs; no arbitrary image fetching.
@@ -243,6 +246,7 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
                (merchant === 'tokopedia' && (host === 'tokopedia.net' || host.endsWith('.tokopedia.net') ||
                  host === 'tokopedia.com' || host.endsWith('.tokopedia.com'))))) {
             image = parsed.href.slice(0, 2048);
+            break;
           }
         } catch { /* Invalid image URL. */ }
       }
