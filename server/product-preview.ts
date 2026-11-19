@@ -10,10 +10,10 @@ export async function previewProduct(url: URL, request = fetch): Promise<string 
   return (await previewProductMetadata(url, request))?.title ?? null;
 }
 
-export async function previewProductMetadata(url: URL, request = fetch) {
+export async function previewProductMetadata(url: URL, request = fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
   // Shopee short links and product pages may expose public Open Graph metadata.
   // Only follow redirects within explicitly allowed Shopee domains; never fetch arbitrary destinations.
-  if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') return previewMarketplaceMetadata(url, request);
+  if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') return previewMarketplaceMetadata(url, request, onDiagnostic);
   if (!isIkeaMetadataLink(url)) return null;
 
   try {
@@ -122,10 +122,11 @@ function isMarketplaceHost(host: string, merchant: 'shopee' | 'tokopedia') {
     host.endsWith('.tokopedia.com');
 }
 
-async function previewMarketplaceMetadata(initial: URL, request: typeof fetch) {
+async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
   const diagnostic = (reason: string, host: string, status?: number) => {
     // No full URLs, query strings, affiliate codes or product identifiers in logs.
     console.info('[product-import]', { merchant: productMerchant(initial.hostname), host, reason, ...(status === undefined ? {} : { status }) });
+    onDiagnostic?.(reason, host, status);
   };
   let current = new URL(initial.href);
   let hop = 0;
