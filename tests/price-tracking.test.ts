@@ -26,7 +26,9 @@ it('recognizes supported storefronts, preserves original destinations, and fetch
     [link, 'other'],
   ] as const) {
     await guest.post('/api/products/import').set(mutation).send({ url }).expect(200, {
-      merchant, hostname: new URL(url).hostname, originalUrl: url, name: null, status: 'manual_required',
+      merchant, hostname: new URL(url).hostname, originalUrl: url, name: null,
+      ...(merchant === 'tokopedia' ? { diagnostic: { code: 'metadata_unavailable', host: 'tokopedia.link' } } : {}),
+      status: 'manual_required',
     });
   }
   expect(preview).toHaveBeenCalledTimes(1);
