@@ -1,14 +1,14 @@
-import { useLocale, LanguagePicker } from './locale.js';
+import { useLocale } from './locale.js';
 import './creator.css';
 
 export function CreatorLanding() {
-  const { language } = useLocale();
+  const { language, setLanguage } = useLocale();
   const id = language === 'id';
   return <div className="creator-page">
     <header className="creator-header">
       <a className="creator-logo" href="/" aria-label="Nanti home">nanti<span>.</span><small>CREATOR</small></a>
       <nav aria-label={id ? 'Navigasi kreator' : 'Creator navigation'}><a href="#manifesto">{id ? 'Tentang' : 'About'}</a><a href="#cara-kerja">{id ? 'Cara kerja' : 'How it works'}</a><a href="/creator/demo">{id ? 'Etalase contoh' : 'Sample storefront'}</a></nav>
-      <div className="creator-header-actions"><LanguagePicker /><a className="creator-back" href="/">{id ? 'Ke Nanti' : 'Open Nanti'} <span aria-hidden="true">↗</span></a></div>
+      <div className="creator-header-actions"><button className="creator-language-toggle" type="button" onClick={() => setLanguage(id ? 'en' : 'id')} aria-label={id ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'} title={id ? 'English' : 'Bahasa Indonesia'}>{id ? 'EN' : 'ID'}</button><a className="creator-back" href="/">{id ? 'Ke Nanti' : 'Open Nanti'} <span aria-hidden="true">↗</span></a></div>
     </header>
     <main>
       <section className="creator-hero" aria-labelledby="creator-title">
