@@ -40,3 +40,10 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-language-toggle:hover{background:#ddd3ff;border-color:#4834b9}
 .creator-language-toggle:focus-visible{outline:3px solid #4834b9;outline-offset:3px}
 @media(max-width:700px){.creator-header{gap:.7rem}.creator-header-actions{gap:.5rem}.creator-language-toggle{width:40px;min-width:40px;height:44px}.creator-back{min-height:44px}}
+
+/* Fix: mobile flex-basis was applied on the column's vertical axis,
+   turning 54px CTA links into ~180px tall blocks. */
+@media(max-width:700px){
+ .creator-hero-actions{display:flex;flex-direction:column;align-items:stretch;gap:.65rem;width:100%}
+ .creator-hero-actions>a{flex:0 0 auto;width:100%;height:auto;min-height:54px;padding:1rem 1.15rem;justify-content:space-between;align-items:center}
+}
