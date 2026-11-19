@@ -14,7 +14,10 @@ export async function previewProductMetadata(url: URL, request = fetch, onDiagno
   // Shopee short links and product pages may expose public Open Graph metadata.
   // Only follow redirects within explicitly allowed Shopee domains; never fetch arbitrary destinations.
   if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') return previewMarketplaceMetadata(url, request, onDiagnostic);
-  if (!isIkeaMetadataLink(url)) return null;
+  if (!isIkeaMetadataLink(url)) {
+    onDiagnostic?.('adapter_disabled', url.hostname);
+    return null;
+  }
 
   try {
     // Rebuild the request from a fixed origin, dropping user-supplied query and fragment.
@@ -24,10 +27,11 @@ export async function previewProductMetadata(url: URL, request = fetch, onDiagno
       headers: { accept: 'text/html' },
     });
     if (!response.ok || !/^text\/html\b/i.test(response.headers.get('content-type') ?? '')) {
+      onDiagnostic?.(!response.ok ? 'http_failure' : 'not_html', url.hostname, response.status);
       await response.body?.cancel();
       return null;
     }
-    if (!response.body) return null;
+    if (!response.body) { onDiagnostic?.('empty_response', url.hostname, response.status); return null; }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -75,8 +79,13 @@ export async function previewProductMetadata(url: URL, request = fetch, onDiagno
     const firstOffer = offers[0];
     const price = !inconsistent && firstOffer && offers.every((entry) =>
       entry.priceMinor === firstOffer.priceMinor && entry.currency === firstOffer.currency) ? firstOffer : null;
-    return { title: tags.get('og:title')?.slice(0, 160) ?? null, image: tags.get('og:image')?.slice(0, 2048) ?? null, price };
-  } catch {
+    const title = tags.get('og:title')?.slice(0, 160) ?? null;
+    const image = tags.get('og:image')?.slice(0, 2048) ?? null;
+    if (!title && !image && !price) { onDiagnostic?.('metadata_missing', url.hostname, response.status); return null; }
+    return { title, image, price };
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    onDiagnostic?.(timeout ? 'timeout' : 'request_error', url.hostname);
     return null;
   }
 }
@@ -152,7 +161,7 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
         continue;
       }
       if (!response.ok || !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ||
-          !response.body) { diagnostic(!response.ok ? 'http_failure' : 'not_html', current.hostname, response.status); await response.body?.cancel(); return null; }
+          !response.body) { diagnostic(!response.ok ? 'http_failure' : !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ? 'not_html' : 'empty_response', current.hostname, response.status); await response.body?.cancel(); return null; }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let html = '';
