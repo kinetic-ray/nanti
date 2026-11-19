@@ -20,3 +20,17 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-manifesto{background:var(--brand-deep)}.creator-manifesto h2 i,.creator-overline{color:#e2d7ff}
 .creator-end{background:#e8e1ff}.creator-story-store>a{background:var(--brand);color:white}
 .creator-hero-index{font-family:Georgia,serif;font-style:italic;letter-spacing:-.11em}
+
+/* Mobile headline: preserve editorial hierarchy without collisions. */
+.creator-hero h1{overflow-wrap:normal;word-break:normal;letter-spacing:-.065em;line-height:1.04}
+.creator-hero h1 em{letter-spacing:-.055em}
+@media(max-width:700px){
+ .creator-hero h1{font-size:clamp(2.7rem,10.2vw,5rem);line-height:1.08;letter-spacing:-.055em;margin:1.25rem 0 2rem;overflow-wrap:normal}
+ .creator-hero h1 em{display:inline;letter-spacing:-.05em}
+ .creator-hero-index{opacity:.35;top:21%;right:-.2rem;z-index:0}
+ .creator-hero-copy{padding:3rem 0 2rem}
+ .creator-hero-bottom>p{font-size:1rem;line-height:1.65}
+ .creator-hero-actions{width:100%}
+ .creator-hero-actions>a{flex:1 1 180px}
+}
+@media(max-width:400px){.creator-hero h1{font-size:clamp(2.6rem,10vw,3.3rem)}.creator-hero-actions>a{width:100%}}
