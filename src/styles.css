@@ -266,3 +266,8 @@ body:has(.site:not(.admin-site)){background:#f6f5fc;color:#211b37}
 .site:not(.admin-site) .card,.site:not(.admin-site) .panel,.site:not(.admin-site) .product-card{border-color:#ded9ed}
 .site:not(.admin-site) .hint,.site:not(.admin-site) .optional{color:#5b536e}
 @media(max-width:600px){.site:not(.admin-site) .masthead{align-items:flex-start}.site:not(.admin-site) h1{font-size:clamp(2.15rem,9vw,3.5rem)}}
+
+/* Shared one-tap language switch across Nanti. */
+.language-switch{display:inline-grid;place-items:center;flex:none;width:48px;min-width:48px;height:48px;min-height:48px;padding:0;border:1px solid var(--line,#ded9ed);border-radius:12px;background:var(--wash,#eee9ff);color:var(--accent-strong,#372694);font:inherit;font-size:.82rem;font-weight:800;letter-spacing:.03em;cursor:pointer}
+.language-switch:focus-visible{outline:3px solid #4834b9;outline-offset:2px}
+@media(max-width:480px){.language-switch{width:44px;min-width:44px;height:44px;min-height:44px}}
