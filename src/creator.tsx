@@ -77,14 +77,14 @@ function CreatorJourney({ id }: { id: boolean }) {
     <div className="creator-journey-intro">
       <span className="creator-journey-eyebrow">{id ? 'COBA ALURNYA' : 'TRY THE JOURNEY'}</span>
       <h3>{id ? 'Rasain sendiri, dari konten sampai ketemu barang.' : 'See how a post becomes a product find.'}</h3>
-      <p>{id ? 'Ketuk bagian yang disorot, seperti yang dilakukan orang saat melihat kontenmu.' : 'Tap the highlighted actions, just like your audience would.'}</p>
+      <p>{id ? 'Ikuti empat langkah sederhana untuk menemukan produk dari sebuah postingan.' : 'Follow four simple steps to find a product from a post.'}</p>
       <div className="creator-journey-progress" aria-label={id ? 'Tahapan simulasi' : 'Demo steps'}>
         {stages.map((stage, index) => <button type="button" key={stage} className={index === step ? 'is-current' : index < step ? 'is-done' : ''} aria-current={index === step ? 'step' : undefined} onClick={() => setStep(index)}><span>{String(index + 1).padStart(2, '0')}</span><span>{stage}</span></button>)}
       </div>
       <div className="creator-journey-help" aria-live="polite"><strong>{stages[step]}</strong><p>{[
-        id ? 'Ketuk username studio.sore untuk melihat profilnya.' : 'Tap studio.sore to visit the profile.',
-        id ? 'Sekarang ketuk link Nanti di profil.' : 'Now tap the Nanti link in the profile.',
-        id ? 'Ketik kode dari caption, lalu tekan Cari.' : 'Enter the code from the caption and search.',
+        id ? 'Ketuk nama studio.sore pada postingan.' : 'Tap studio.sore on the post.',
+        id ? 'Ketuk link Nanti yang ada di bio.' : 'Tap the Nanti link in the bio.',
+        id ? 'Kode PRD-003 sudah siap. Tekan Cari untuk melihat produknya.' : 'PRD-003 is ready. Tap Search to find the product.',
         id ? 'Itu dia! Produk yang dimaksud langsung muncul.' : 'Found it! The product appears right away.'
       ][step]}</p></div>
       <button className="creator-journey-reset" type="button" onClick={() => { setStep(0); setQuery('PRD-003'); }}>{id ? '↺ Ulangi simulasi' : '↺ Replay demo'}</button>
@@ -95,7 +95,7 @@ function CreatorJourney({ id }: { id: boolean }) {
         {step === 0 && <div className="creator-ig-screen">
           <div className="creator-ig-appbar"><strong>Instagram</strong><span aria-hidden="true">♡　✉</span></div>
           <div className="creator-ig-stories" aria-hidden="true"><span>✦</span><span>◒</span><span>✳</span><span>◈</span></div>
-          <button type="button" className="creator-ig-user" onClick={advance} aria-label={id ? 'Buka profil studio.sore' : 'Open studio.sore profile'}><span className="creator-ig-avatar">s.</span><span><strong>studio.sore</strong><small>{id ? 'Konten outfit & rekomendasi' : 'Outfits and daily finds'}</small></span><span className="creator-ig-dots" aria-hidden="true">•••</span></button>
+          <button type="button" className="creator-ig-user creator-journey-hotspot" onClick={advance} aria-label={id ? 'Buka profil studio.sore' : 'Open studio.sore profile'}><span className="creator-ig-avatar">s.</span><span><strong>studio.sore</strong><small>{id ? 'Konten outfit & rekomendasi' : 'Outfits and daily finds'}</small></span><span className="creator-ig-dots" aria-hidden="true">•••</span></button>
           <div className="creator-ig-post"><span className="creator-story-sun"/><span className="creator-story-horizon"/><strong>OFF<br/>DUTY.</strong><small>SUMMER EDIT — 03</small></div>
           <div className="creator-ig-actions" aria-hidden="true"><span>♡</span><span>▢</span><span>➤</span><span className="creator-ig-bookmark">♧</span></div>
           <p className="creator-ig-caption"><strong>studio.sore</strong> {id ? 'Outfit pantai kemarin ☀ Semua link ada di bio. Cari PRD-003, ya.' : 'Beach outfit ☀ Links in bio. Search PRD-003.'}</p>
@@ -105,7 +105,7 @@ function CreatorJourney({ id }: { id: boolean }) {
           <div className="creator-ig-profilebar"><button type="button" onClick={() => setStep(0)} aria-label={id ? 'Kembali' : 'Back'}>‹</button><strong>studio.sore</strong><span>☰</span></div>
           <div className="creator-ig-profile-info"><span className="creator-ig-avatar">s.</span><div><strong>24</strong><small>posts</small></div><div><strong>12.4K</strong><small>followers</small></div><div><strong>380</strong><small>following</small></div></div>
           <div className="creator-ig-bio"><strong>studio.sore</strong><p>{id ? 'Outfit harian, rekomendasi, dan semua barang favoritku ✦' : 'Daily outfits, recommendations, and favorite finds ✦'}</p></div>
-          <button type="button" className="creator-ig-biolink" onClick={advance}>↗　nanti.id/@studio.sore <span>›</span></button>
+          <button type="button" className="creator-ig-biolink creator-journey-hotspot" onClick={advance}>↗　nanti.id/@studio.sore <span>›</span></button>
           <div className="creator-ig-profile-buttons"><span>{id ? 'Mengikuti' : 'Following'}</span><span>{id ? 'Pesan' : 'Message'}</span></div>
           <div className="creator-ig-profile-tiles" aria-hidden="true"><span>OFF<br/>DUTY.</span><span>SUMMER<br/>EDIT</span><span>DAILY<br/>FINDS</span></div>
         </div>}
@@ -113,7 +113,7 @@ function CreatorJourney({ id }: { id: boolean }) {
           <div className="creator-browser-bar"><span aria-hidden="true">‹</span><span>⌁　nanti.id/@studio.sore</span><span aria-hidden="true">⋮</span></div>
           <div className="creator-web-brand">nanti<span>.</span></div>
           <div className="creator-web-content"><span className="creator-web-eyebrow">STUDIO.SORE / {id ? 'ETALASE' : 'STOREFRONT'}</span><h4>{id ? 'Yang tadi kamu lihat, ada di sini.' : 'Find what caught your eye.'}</h4>
-            <form className="creator-web-search" onSubmit={event => { event.preventDefault(); setStep(3); }}><label htmlFor="creator-journey-search" className="sr-only">{id ? 'Cari kode produk' : 'Search product code'}</label><input id="creator-journey-search" value={query} onChange={event => { setQuery(event.target.value); if (step === 3) setStep(2); }} placeholder={id ? 'Cari kode produk' : 'Search product code'}/><button type="submit">{id ? 'Cari' : 'Search'} ↗</button></form>
+            <form className="creator-web-search creator-journey-hotspot" onSubmit={event => { event.preventDefault(); setStep(3); }}><label htmlFor="creator-journey-search" className="sr-only">{id ? 'Cari kode produk' : 'Search product code'}</label><input id="creator-journey-search" value={query} onChange={event => { setQuery(event.target.value); if (step === 3) setStep(2); }} placeholder={id ? 'Cari kode produk' : 'Search product code'}/><button type="submit">{id ? 'Cari' : 'Search'} ↗</button></form>
             {step === 3 && query.trim().toUpperCase() === 'PRD-003' ? <div className="creator-web-result" role="status"><span>{id ? 'PRODUK DITEMUKAN' : 'PRODUCT FOUND'}</span><div className="creator-web-result-card"><span aria-hidden="true">✳</span><div><small>PRD-003</small><strong>{id ? 'Item dari Summer Edit' : 'Summer Edit essential'}</strong><p>{id ? 'Dari postingan OFF DUTY.' : 'From the OFF DUTY. post'}</p></div></div></div> : <p className="creator-web-tip">{step === 3 ? (id ? 'Kode belum ditemukan dalam demo ini. Coba PRD-003.' : 'Code not found in this demo. Try PRD-003.') : (id ? 'Coba cari kode PRD-003 dari caption Instagram tadi.' : 'Try searching PRD-003 from the Instagram caption.')}</p>}
           </div>
         </div>}
