@@ -48,3 +48,23 @@ body:has(.storefront){background:#faf9fc}.storefront{--sf-ink:#251a3b;--sf-muted
  .storefront-search-control input{font-size:16px}
 }
 @media(prefers-reduced-motion:reduce){.storefront-search{transition:none}}
+
+
+/* Search: compact only after the section reaches its sticky boundary. */
+.storefront-search-sentinel{height:1px;flex:none;pointer-events:none}
+.storefront-search{margin-top:0}
+.storefront-search-compact{padding:.55rem .7rem}
+.storefront-search-compact label,.storefront-search-compact>p{display:none!important}
+.storefront-search-compact .storefront-search-control{min-height:48px}
+.storefront-search-compact .storefront-search-control input{min-height:42px}
+@media(max-width:480px){.storefront-search-compact{padding:.45rem .6rem}}
+
+/* Card anatomy: fixed text slots keep price and CTA on a shared baseline. */
+.storefront-product-grid{align-items:stretch}
+.storefront-product{display:flex;flex-direction:column;min-width:0;height:100%}
+.storefront-product-copy{display:flex;flex-direction:column;flex:1;min-width:0}
+.storefront-product-category{display:block;min-height:1.5em;line-height:1.5}
+.storefront-product-copy h3{min-height:2.8em;line-height:1.4;margin:.35rem 0}
+.storefront-product-code{display:block;min-height:1.6em;line-height:1.6;margin-top:.25rem}
+.storefront-product-copy>strong{min-height:1.5em;line-height:1.5;margin-top:.15rem}
+.storefront-product-copy>button{margin-top:auto;min-height:44px}
