@@ -194,3 +194,29 @@ body:has(.creator-page){background:#f6f5fc}
  .creator-post-caption{font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){.creator-post-viewport{animation:none}}
+
+
+/* Three-step walkthrough and search-field geometry */
+.creator-stepper{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:1.75rem 0 1.5rem}
+.creator-stepper button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-width:0;min-height:78px;padding:9px 4px;border:1px solid #d9d3e6;border-radius:12px;background:transparent;color:#686078;font:inherit;cursor:pointer;transition:background .18s,border-color .18s}
+.creator-stepper button>span{display:grid;place-items:center;width:34px;height:34px;border:1px solid #c7bfd9;border-radius:50%;font-size:14px;font-weight:850}
+.creator-stepper button small{font-size:clamp(10px,.9vw,12px);line-height:1.3;font-weight:700;text-align:center}
+.creator-stepper button.is-active{background:#eee9ff;border-color:#8773d3;color:#392a79}
+.creator-stepper button.is-active>span{background:#4834b9;border-color:#4834b9;color:white}
+.creator-stepper button.is-complete>span{background:#e4def8;border-color:#b6a8e9;color:#392a79}
+.creator-stepper button:focus-visible{outline:3px solid #4834b9;outline-offset:3px}
+.creator-post-store-body .creator-product-search{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;width:100%;min-width:0;min-height:52px;margin:22px 0 0;padding:0;border:1px solid #bfb5d5;border-radius:10px;overflow:hidden;background:#fff}
+.creator-post-store-body .creator-product-search input{display:block;box-sizing:border-box;min-width:0;width:100%;height:52px;min-height:52px;margin:0;padding:0 14px;border:0;border-radius:0;outline:none;background:#fff;color:#211b37;font:400 16px/1.3 "Plus Jakarta Sans",Arial,sans-serif;letter-spacing:0;appearance:none;-webkit-appearance:none}
+.creator-post-store-body .creator-product-search input:focus{box-shadow:inset 0 0 0 2px #4834b9}
+.creator-post-store-body .creator-product-search button{display:grid;place-items:center;box-sizing:border-box;height:52px;min-height:52px;min-width:82px;margin:0;padding:0 16px;border:0;border-left:1px solid #ded7ee;border-radius:0;background:#4834b9;color:#fff;font:800 14px/1 "Plus Jakarta Sans",Arial,sans-serif;cursor:pointer}
+.creator-post-result>div{align-items:center}
+.creator-post-result>div>img{display:block;flex:none;width:92px;height:92px;object-fit:cover;border-radius:6px;background:#f2eff7}
+.creator-post-result section p{margin:6px 0 0}
+@media(max-width:780px){
+ .creator-stepper{gap:7px;margin:1.2rem 0}
+ .creator-stepper button{min-height:72px;padding:8px 3px}
+ .creator-stepper button small{font-size:11px}
+ .creator-post-actions{margin-bottom:2px}
+ .creator-post-store-body .creator-product-search{margin-top:18px}
+}
+@media(max-width:370px){.creator-stepper button small{font-size:10px}.creator-post-result>div>img{width:76px;height:76px}}
