@@ -84,3 +84,11 @@ body:has(.storefront){background:#faf9fc}.storefront{--sf-ink:#251a3b;--sf-muted
  .storefront-product-copy>strong{margin-bottom:.85rem}
  .storefront-product-copy>button{padding:.7rem .65rem;font-size:clamp(.72rem,3vw,.85rem)}
 }
+
+
+/* CDN product photography in both catalog cards and product detail. */
+.storefront-product-art,.storefront-modal-art{position:relative;overflow:hidden}
+.storefront-product-art>img,.storefront-modal-art>img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;object-position:center;z-index:1}
+.storefront-product-art>.storefront-photo-fallback,.storefront-modal-art>.storefront-photo-fallback{display:none}
+.storefront-product-art.is-image-fallback>.storefront-photo-fallback,.storefront-modal-art.is-image-fallback>.storefront-photo-fallback{display:grid;place-items:center;width:100%;height:100%}
+.storefront-product-art.is-image-fallback>img,.storefront-modal-art.is-image-fallback>img{display:none}
