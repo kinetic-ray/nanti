@@ -5,6 +5,7 @@ import './creator.css';
 export function CreatorLanding() {
   const { language, setLanguage } = useLocale();
   const id = language === 'id';
+  const [coffeeOpen, setCoffeeOpen] = useState(false);
   useEffect(() => {
     const nodes = document.querySelectorAll<HTMLElement>('.creator-page [data-reveal]');
     if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -59,8 +60,13 @@ export function CreatorLanding() {
         </div>
       </section>
 
+      <section className="creator-free-support" aria-labelledby="creator-free-title" data-reveal>
+        <div className="creator-free-support-copy"><span className="creator-free-tag">FREE PLAN</span><h2 id="creator-free-title">{id ? 'Mulai gratis. Berkarya sesukamu.' : 'Start free. Create your way.'}</h2><p>{id ? 'Nanti bisa dicoba tanpa harus traktir siapa pun. Kalau suatu hari kamu merasa terbantu, boleh dukung pengembangnya.' : 'Try Nanti without paying or tipping. If it helps, you can support the developer voluntarily.'}</p></div>
+        <button type="button" className="creator-coffee-trigger" onClick={() => setCoffeeOpen(true)}><span aria-hidden="true">☕</span> {id ? 'Traktir kopi developer' : 'Buy the developer a coffee'} <span aria-hidden="true">↗</span></button>
+      </section>
       <section className="creator-end" data-reveal><h2>{id ? <>Biar link-nya rapi.<br/><em>Yang nanya juga happy.</em></> : <>Organized links.<br/><em>Easy to find.</em></>}</h2><p>{id ? 'Penasaran kalau etalasemu punya gaya sendiri? Coba utak-atik tampilannya dulu. Ini masih demo — belum bisa terbitkan halaman atau sambungkan afiliasi.' : 'Try arranging your storefront in Design Studio. This is still a preview; publishing and affiliate integrations are not available yet.'}</p><div><a className="creator-primary" href="/creator/studio">{id ? 'Coba Design Studio' : 'Enter Design Studio'} ↗</a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat etalase demo' : 'View demo storefront'} ↗</a></div></section>
     </main>
+    {coffeeOpen && <div className="creator-coffee-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setCoffeeOpen(false); }}><section className="creator-coffee-dialog" role="dialog" aria-modal="true" aria-labelledby="creator-coffee-title"><button type="button" className="creator-coffee-close" onClick={() => setCoffeeOpen(false)} aria-label={id ? 'Tutup' : 'Close'}>×</button><span className="creator-free-tag">{id ? 'DUKUNGAN SUKARELA' : 'OPTIONAL SUPPORT'}</span><h2 id="creator-coffee-title">{id ? 'Mau traktir kopi?' : 'Coffee for the developer?'}</h2><p>{id ? 'Makasih sudah mencoba Nanti. Dukungan ini sepenuhnya opsional dan tidak memengaruhi fitur gratis.' : 'Thanks for trying Nanti. Supporting is completely optional and does not affect free features.'}</p><div className="creator-coffee-methods"><div className="creator-coffee-method"><span className="creator-coffee-method-icon" aria-hidden="true">▦</span><div><strong>QRIS</strong><p>{id ? 'Bayar dengan nominal pilihanmu.' : 'Choose any amount to contribute.'}</p></div><span className="creator-coffee-unavailable">{id ? 'Segera hadir' : 'Coming soon'}</span></div><div className="creator-coffee-method"><span className="creator-coffee-method-icon" aria-hidden="true">↗</span><div><strong>{id ? 'Buka link sponsor' : 'Visit a sponsor link'}</strong><p>{id ? 'Dukung tanpa mengeluarkan uang.' : 'Support without spending money.'}</p></div><span className="creator-coffee-unavailable">{id ? 'Segera hadir' : 'Coming soon'}</span></div></div><button type="button" className="creator-coffee-dismiss" onClick={() => setCoffeeOpen(false)}>{id ? 'Nanti saja' : 'Maybe later'}</button></section></div>}
     <footer className="creator-footer"><span>nanti<span className="creator-purple">.</span> creator</span><span>© 2026 NANTI / {id ? 'MASIH DALAM PENGEMBANGAN' : 'WORK IN PROGRESS'}</span><a href="/">{id ? 'KEMBALI KE NANTI' : 'BACK TO NANTI'} ↗</a></footer>
   </div>;
 }
