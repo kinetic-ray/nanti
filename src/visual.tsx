@@ -3,7 +3,7 @@ import { safeProductUrl } from '../shared/wishlist.js';
 import type { Item } from '../shared/wishlist.js';
 import { isIkeaMetadataLink } from '../shared/product-import.js';
 
-type Glyph = 'plus' | 'edit' | 'trash' | 'arrow' | 'person' | 'privacy' | 'compare' | 'clock' | 'check' | 'close' | 'bookmark' | 'bell';
+type Glyph = 'plus' | 'edit' | 'trash' | 'arrow' | 'person' | 'privacy' | 'compare' | 'clock' | 'check' | 'close' | 'bookmark' | 'bell' | 'sparkles';
 
 export function Icon({ name }: { name: Glyph }) {
   return <span className={`icon icon-${name}`} aria-hidden="true" />;

@@ -818,3 +818,26 @@ body:has(.consumer) { background: #f8f6fc; }
 }
 
 .consumer .language-switch{background:var(--wash);border:1px solid var(--line);color:var(--accent-strong);border-radius:.75rem}
+
+/* Mobile polish: equal-size header actions and optical centering. */
+.consumer .masthead-controls{gap:.5rem}
+.consumer .masthead-controls>.language-switch,
+.consumer .masthead-controls>.masthead-menu>.masthead-menu-toggle,
+.consumer .masthead-controls>.price-alert-entry{box-sizing:border-box;display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;min-width:44px;min-height:44px;margin:0;padding:0;line-height:1;border-radius:.7rem}
+.consumer .masthead-controls>.language-switch{font-size:.85rem;font-weight:800;letter-spacing:0;text-align:center}
+.consumer .masthead-menu-toggle{border:1px solid transparent}
+.consumer .masthead-hamburger{margin:0 auto}
+.consumer .masthead-menu-panel .icon-sparkles{display:grid;place-items:center}
+.consumer .masthead-menu-panel .icon-sparkles::before{content:"✦";font-size:1.3rem;line-height:1;color:var(--accent-strong)}
+/* Keep the decorative bookmarks clipped to the right/bottom with no hairline gap. */
+@media(max-width:649px){
+ .home-hero .bookmark-art{right:-2.1rem;bottom:-4.1rem;width:min(90%,32rem)}
+ .home-hero .bookmark-art span:nth-child(3){left:57%}
+}
+/* Interaction feedback: subtle, fast, and respectful of reduced-motion. */
+.consumer button:not(:disabled),.consumer .masthead-menu-toggle,.consumer .masthead-menu-panel a{transition:background-color 180ms ease,color 180ms ease,box-shadow 180ms ease,transform 160ms cubic-bezier(.2,.8,.2,1)}
+@media(hover:hover){.consumer button:not(:disabled):hover,.consumer .masthead-menu-panel a:hover{transform:translateY(-1px)}}
+.consumer button:not(:disabled):active,.consumer .masthead-menu-toggle:active,.consumer .masthead-menu-panel a:active{transform:scale(.96)}
+.consumer .home-hero button.primary:not(:disabled):active{transform:scale(.975)}
+.consumer button:focus-visible,.consumer .masthead-menu-toggle:focus-visible,.consumer .masthead-menu-panel a:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.consumer button,.consumer .masthead-menu-toggle,.consumer .masthead-menu-panel a{transition:none!important;transform:none!important}}
