@@ -31,29 +31,31 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false }: 
   useEffect(() => {
     const sentinel = searchSentinelRef.current;
     if (!sentinel) return;
-    let parent = sentinel.parentElement;
-    let scrollRoot: Element | null = null;
-    while (parent) {
-      const overflow = getComputedStyle(parent).overflowY;
-      if (/(auto|scroll)/.test(overflow) && parent.scrollHeight > parent.clientHeight) {
-        scrollRoot = parent;
-        break;
-      }
-      parent = parent.parentElement;
-    }
+    const preview = embedded ? sentinel.closest('.studio-preview-frame') : null;
+    const root = preview ?? null;
     const onScroll = () => {
-      const rootTop = scrollRoot ? scrollRoot.getBoundingClientRect().top : 0;
-      setCompactSearch(sentinel.getBoundingClientRect().top <= rootTop + 1);
+      const rootTop = root ? root.getBoundingClientRect().top + root.clientTop : 0;
+      const crossedBoundary = sentinel.getBoundingClientRect().top < rootTop + 8;
+      // In the editor the viewport is independently scrollable; preserve compact
+      // mode across design changes, including when the search changes height.
+      const previewScrolled = root ? root.scrollTop > 24 : window.scrollY > 24;
+      setCompactSearch(crossedBoundary && previewScrolled);
     };
-    const target: Element | Window = scrollRoot ?? window;
-    target.addEventListener('scroll', onScroll, { passive: true });
+    const scrollTarget: Element | Window = root ?? window;
+    scrollTarget.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
+    const observer = new ResizeObserver(onScroll);
+    observer.observe(sentinel);
+    if (root) observer.observe(root);
     onScroll();
     return () => {
-      target.removeEventListener('scroll', onScroll);
+      scrollTarget.removeEventListener('scroll', onScroll);
+      window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
+      observer.disconnect();
     };
-  }, [embedded]);
+  }, [embedded, design]);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const activeCollection = collections.find(item => item.id === active);
   const normalized = (value: string) => value.toLocaleLowerCase().normalize('NFKC').replace(/[^a-z0-9]+/g, ' ').trim();
