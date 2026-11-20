@@ -68,3 +68,19 @@ body:has(.storefront){background:#faf9fc}.storefront{--sf-ink:#251a3b;--sf-muted
 .storefront-product-code{display:block;min-height:1.6em;line-height:1.6;margin-top:.25rem}
 .storefront-product-copy>strong{min-height:1.5em;line-height:1.5;margin-top:.15rem}
 .storefront-product-copy>button{margin-top:auto;min-height:44px}
+
+
+/* Keep search compact across editor theme changes and avoid a tall sticky overlay. */
+.studio-preview-frame .storefront-search-compact{padding:.45rem .6rem!important}
+.studio-preview-frame .storefront-search-compact>label,
+.studio-preview-frame .storefront-search-compact>p{display:none!important}
+.studio-preview-frame .storefront-search-compact .storefront-search-control{min-height:48px}
+
+/* Price and CTA need a deliberate rhythm, not adjacent baselines. */
+.storefront-product-copy>strong{margin-top:.3rem;margin-bottom:1rem}
+.storefront-product-copy>button{margin-top:auto;min-height:48px;gap:.5rem;line-height:1.35}
+.storefront-product-copy>button>span{flex:none}
+@media(max-width:480px){
+ .storefront-product-copy>strong{margin-bottom:.85rem}
+ .storefront-product-copy>button{padding:.7rem .65rem;font-size:clamp(.72rem,3vw,.85rem)}
+}
