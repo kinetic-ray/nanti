@@ -27,15 +27,32 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false }: 
   const [search, setSearch] = useState('');
   const [compactSearch, setCompactSearch] = useState(false);
   const searchRef = useRef<HTMLElement>(null);
+  const searchSentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (embedded) return;
+    const sentinel = searchSentinelRef.current;
+    if (!sentinel) return;
+    let parent = sentinel.parentElement;
+    let scrollRoot: Element | null = null;
+    while (parent) {
+      const overflow = getComputedStyle(parent).overflowY;
+      if (/(auto|scroll)/.test(overflow) && parent.scrollHeight > parent.clientHeight) {
+        scrollRoot = parent;
+        break;
+      }
+      parent = parent.parentElement;
+    }
     const onScroll = () => {
-      const top = searchRef.current?.getBoundingClientRect().top ?? 0;
-      setCompactSearch(top < 12);
+      const rootTop = scrollRoot ? scrollRoot.getBoundingClientRect().top : 0;
+      setCompactSearch(sentinel.getBoundingClientRect().top <= rootTop + 1);
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
+    const target: Element | Window = scrollRoot ?? window;
+    target.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
     onScroll();
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      target.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
   }, [embedded]);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const activeCollection = collections.find(item => item.id === active);
@@ -64,6 +81,7 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false }: 
     </header>}
     <main className="storefront-main">
       <div className="storefront-demo-notice" style={{order:-2}} role="status">{id ? 'DEMO · Profil, produk, dan harga di halaman ini hanya contoh. Belum ada tautan pembelian.' : 'DEMO · This profile, products, and prices are examples. Purchase links are not available.'}</div>
+      <div ref={searchSentinelRef} className="storefront-search-sentinel" style={{order:0}} aria-hidden="true" />
       <section ref={searchRef} className={`storefront-search ${compactSearch ? "storefront-search-compact" : ""}`} style={{order:0}} role="search" aria-label={id ? 'Cari produk dan etalase' : 'Search products and collections'}>
         <label htmlFor={embedded ? 'creator-preview-search' : 'creator-storefront-search'}>{id ? 'Cari dari kode di Instagram' : 'Find it from an Instagram post'}</label>
         <div className="storefront-search-control"><span aria-hidden="true">⌕</span><input id={embedded ? 'creator-preview-search' : 'creator-storefront-search'} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder={id ? 'Kode PRD-003, Etalase 3, atau nama koleksi' : 'Code PRD-003, Showcase 3, or collection name'} autoComplete="off" />{search && <button type="button" onClick={()=>{setSearch('');setActive('all');}} aria-label={id?'Hapus pencarian':'Clear search'}>×</button>}</div>
