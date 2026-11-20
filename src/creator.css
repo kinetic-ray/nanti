@@ -244,3 +244,39 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-coffee-unavailable{grid-column:2;justify-self:start;font-size:.72rem;font-weight:800;color:#766e86}
 .creator-coffee-dismiss{display:block;width:100%;min-height:46px;border:1px solid #ded8e9;border-radius:10px;background:white;color:#332a46;font:inherit;font-size:.85rem;font-weight:750;cursor:pointer}
 @media(max-width:750px){.creator-free-support{flex-direction:column;align-items:flex-start;gap:1.2rem;padding:1.5rem 0;margin:1.5rem auto 0}.creator-coffee-trigger{font-size:.8rem}.creator-coffee-dialog{border-radius:15px}}
+
+
+/* Mobile QA pass: predictable button geometry, media fallback and modal rhythm. */
+.creator-post-result>div{display:grid;grid-template-columns:92px minmax(0,1fr);gap:14px;align-items:center}
+.creator-post-result>div>img{display:block;width:92px;height:92px;max-width:100%;object-fit:cover;aspect-ratio:1;background:#eee6e2;border-radius:8px;color:transparent;font-size:0}
+.creator-post-result section{min-width:0;overflow-wrap:break-word}
+.creator-post-result section strong{display:block;font-size:14px;line-height:1.4}
+.creator-post-result section p{font-size:12px;line-height:1.55;margin:6px 0 0}
+.creator-coffee-method{grid-template-columns:42px minmax(0,1fr);grid-template-rows:auto auto;align-items:start;row-gap:4px;min-height:0}
+.creator-coffee-method>div{min-width:0}
+.creator-coffee-method p{margin:4px 0 0}
+.creator-coffee-unavailable{grid-column:2;grid-row:2;margin-top:2px}
+.creator-coffee-dialog{padding:clamp(22px,5vw,32px)}
+.creator-coffee-dialog>p{margin:12px 0 0}
+.creator-coffee-methods{margin:22px 0;gap:10px}
+.creator-coffee-dismiss{background:#f0eaff;min-height:48px}
+.creator-end>div{display:grid;grid-template-columns:repeat(2,minmax(0,max-content));gap:12px;align-items:stretch}
+.creator-end>div>a{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:52px;padding:14px 20px;text-align:center;line-height:1.35}
+@media(max-width:700px){
+ .creator-end>div{grid-template-columns:minmax(0,1fr);max-width:360px;gap:12px}
+ .creator-end>div>a{width:100%;min-height:56px;justify-content:center;padding:15px 18px}
+ .creator-coffee-dialog{width:min(100%,460px);padding:24px 20px}
+ .creator-coffee-dialog h2{line-height:1.15}
+ .creator-coffee-method{padding:13px}
+ .creator-post-result>div{grid-template-columns:80px minmax(0,1fr);gap:12px}
+ .creator-post-result>div>img{width:80px;height:80px}
+}
+@media(max-width:360px){.creator-post-result>div{grid-template-columns:70px minmax(0,1fr)}.creator-post-result>div>img{width:70px;height:70px}}
+
+
+/* Clear and reachable exit control for the coffee dialog. */
+.creator-coffee-close{position:absolute;top:14px;right:14px;z-index:2;display:grid;place-items:center;box-sizing:border-box;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:1px solid #e4deeb;border-radius:50%;background:#f5f2f9;color:#241b38;line-height:1;font-family:Arial,sans-serif;font-size:30px;font-weight:400;cursor:pointer;touch-action:manipulation}
+.creator-coffee-close:hover{background:#e9e1f6;border-color:#cfc3e7}
+.creator-coffee-close:active{transform:scale(.96)}
+.creator-coffee-dialog>.creator-free-tag{display:block;padding-right:54px}
+@media(max-width:700px){.creator-coffee-close{top:12px;right:12px;width:46px;height:46px}.creator-coffee-dialog>.creator-free-tag{padding-right:52px}}
