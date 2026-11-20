@@ -112,3 +112,81 @@ body:has(.creator-page){background:#f6f5fc}
  .creator-page [data-reveal]{opacity:1;translate:none;transition:none}
  .creator-story-connector,.creator-story-social,.creator-story-store{transition:none!important;transform:none!important}
 }
+
+
+/* Interactive creator journey — a single continuous, touch-friendly experience. */
+.creator-journey{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);align-items:center;gap:clamp(2rem,6vw,6rem);max-width:1080px;margin:0 auto}
+.creator-journey-intro{min-width:0}.creator-journey-eyebrow,.creator-web-eyebrow{font-size:.7rem;font-weight:850;letter-spacing:.12em;color:var(--brand)}
+.creator-journey-intro h3{max-width:520px;font-size:clamp(1.8rem,3.4vw,3rem);line-height:1.12;letter-spacing:-.055em;margin:1rem 0}
+.creator-journey-intro>p{max-width:470px;color:var(--muted);line-height:1.7}
+.creator-journey-progress{display:grid;gap:.55rem;margin:2rem 0}
+.creator-journey-progress button{display:flex;align-items:center;gap:.9rem;width:100%;padding:.85rem 1rem;border:1px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:.9rem;font-weight:750;text-align:left;cursor:pointer;border-radius:.75rem;transition:background .2s ease,color .2s ease}
+.creator-journey-progress button>span:first-child{display:grid;place-items:center;width:2rem;height:2rem;flex:none;border:1px solid #cbc3df;border-radius:50%;font-size:.65rem}
+.creator-journey-progress button.is-current{background:#e9e3ff;border-color:#d4c9f7;color:var(--brand-deep)}
+.creator-journey-progress button.is-current>span:first-child,.creator-journey-progress button.is-done>span:first-child{background:var(--brand);border-color:var(--brand);color:#fff}
+.creator-journey-help{min-height:85px;border-left:3px solid var(--brand);padding:.2rem 0 .2rem 1rem}
+.creator-journey-help strong{font-size:1rem}.creator-journey-help p{font-size:.85rem;line-height:1.55;color:var(--muted);margin:.4rem 0}
+.creator-journey-reset{margin-top:1rem;background:transparent;border:0;color:var(--brand-deep);font-size:.8rem;font-weight:800;cursor:pointer;padding:.7rem 0}
+.creator-journey-device{width:100%;max-width:400px;justify-self:center;overflow:hidden;border:7px solid #241b39;border-radius:2.3rem;background:#fff;box-shadow:0 24px 65px #211b3722;aspect-ratio:9/17.5;display:flex;flex-direction:column;color:#16151a;font-family:Arial,Helvetica,sans-serif}
+.creator-device-status{height:29px;display:flex;justify-content:space-between;align-items:center;padding:0 1.25rem;font-size:.7rem;font-weight:700;background:white;flex:none}
+.creator-device-stage{flex:1;min-height:0;overflow:auto;animation:creator-screen-enter .28s cubic-bezier(.2,.7,.2,1)}
+@keyframes creator-screen-enter{from{opacity:.5;transform:translateX(12px)}to{opacity:1;transform:none}}
+.creator-device-bottom{height:20px;flex:none;display:grid;place-items:center;background:white}.creator-device-bottom span{width:32%;height:4px;border-radius:99px;background:#1b1b1b}
+.creator-ig-screen{background:#fff;min-height:100%;font-size:.8rem}
+.creator-ig-appbar{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;font-size:1.35rem;letter-spacing:-.07em}.creator-ig-appbar>span{font-size:1.3rem;letter-spacing:0}
+.creator-ig-stories{display:flex;justify-content:space-around;padding:.4rem .5rem .8rem;border-bottom:1px solid #eee}
+.creator-ig-stories span{display:grid;place-items:center;width:clamp(43px,11vw,61px);aspect-ratio:1;border:3px solid #d43a9a;border-radius:50%;background:#e8e0fa;font-size:1.4rem}
+.creator-ig-user{display:flex;align-items:center;gap:.6rem;width:100%;border:0;background:white;text-align:left;padding:.65rem .8rem;cursor:pointer}
+.creator-ig-user>span:nth-child(2){display:flex;flex-direction:column;gap:.1rem}.creator-ig-user strong{font-size:.8rem}.creator-ig-user small{font-size:.65rem;color:#555}
+.creator-ig-avatar{display:grid;place-items:center;width:36px;height:36px;flex:none;border:2px solid #d83a9a;border-radius:50%;background:#e8dfff;color:#392674;font-weight:900;font-size:1.1rem}
+.creator-ig-dots{margin-left:auto;font-size:1rem}
+.creator-ig-post{position:relative;isolation:isolate;overflow:hidden;aspect-ratio:1;background:linear-gradient(145deg,#d8c8fb,#a28ad5);display:flex;flex-direction:column;justify-content:center;padding:10%}
+.creator-ig-post .creator-story-sun{position:absolute;z-index:-1;right:8%;top:7%;width:65%;aspect-ratio:1;border-radius:50%;background:#f2e4ff}
+.creator-ig-post .creator-story-horizon{position:absolute;z-index:-1;left:-10%;bottom:-12%;width:125%;height:39%;background:#6e60ad;border-radius:50% 50% 0 0}
+.creator-ig-post>strong{font-family:Georgia,serif;font-style:italic;font-size:clamp(3.3rem,10vw,5.5rem);line-height:.8;letter-spacing:-.09em;color:#251a3c}
+.creator-ig-post>small{font-weight:900;letter-spacing:.16em;color:#51436e;font-size:.57rem;margin-top:1.7rem}
+.creator-ig-actions{display:flex;gap:1rem;align-items:center;padding:.6rem .8rem .25rem;font-size:1.8rem;line-height:1}
+.creator-ig-bookmark{margin-left:auto}.creator-ig-caption{padding:.2rem .85rem;margin:0;font-size:.78rem;line-height:1.5}.creator-ig-muted{color:#888;padding:.3rem .85rem;font-size:.7rem}
+.creator-ig-profilebar{display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;font-size:1rem}
+.creator-ig-profilebar button{background:transparent;border:0;font-size:1.7rem;cursor:pointer;padding:0}
+.creator-ig-profile-info{display:flex;align-items:center;justify-content:space-around;padding:1.2rem .7rem}
+.creator-ig-profile-info .creator-ig-avatar{width:64px;height:64px;font-size:1.8rem}
+.creator-ig-profile-info>div{display:flex;flex-direction:column;text-align:center;gap:.25rem}.creator-ig-profile-info small{font-size:.65rem}
+.creator-ig-bio{padding:0 1rem;font-size:.8rem}.creator-ig-bio p{line-height:1.5;margin:.35rem 0}
+.creator-ig-biolink{display:flex;justify-content:space-between;width:calc(100% - 2rem);margin:.65rem 1rem;padding:.8rem;border:1px solid #d8cde9;border-radius:.6rem;background:#f0ecfa;color:#372694;font-weight:800;text-align:left;cursor:pointer}
+.creator-ig-profile-buttons{display:flex;gap:.5rem;margin:1rem}.creator-ig-profile-buttons span{flex:1;padding:.6rem;text-align:center;background:#eee;border-radius:.4rem;font-weight:700}
+.creator-ig-profile-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:2rem}.creator-ig-profile-tiles span{display:grid;place-items:center;aspect-ratio:1;background:#bba9e5;color:#241b39;font-family:Georgia,serif;font-size:1rem;font-weight:900;text-align:center}
+.creator-web-screen{background:#f7f5fc;min-height:100%;color:#241b39;font-family:"Plus Jakarta Sans",Arial,sans-serif}
+.creator-browser-bar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.75rem;background:#fff;border-bottom:1px solid #e8e2f0;font-size:.7rem}
+.creator-browser-bar span:nth-child(2){padding:.5rem .9rem;border-radius:1rem;background:#f0eef4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.creator-web-brand{font-size:1.5rem;font-weight:900;padding:1.2rem 1.3rem}.creator-web-brand span{color:var(--brand)}
+.creator-web-content{padding:1.4rem 1.3rem}.creator-web-content h4{font-family:Georgia,serif;font-weight:500;line-height:1.1;letter-spacing:-.045em;font-size:clamp(1.8rem,6vw,2.5rem);margin:.9rem 0 1.6rem}
+.creator-web-search{display:flex;align-items:center;background:#fff;border:1px solid #bfb2da;border-radius:.6rem;overflow:hidden}
+.creator-web-search input{flex:1;min-width:0;width:100%;padding:.85rem .7rem;border:0;background:transparent;font:inherit;font-size:.85rem;outline-offset:-3px}
+.creator-web-search button{align-self:stretch;border:0;background:var(--brand);color:#fff;padding:.7rem;font:inherit;font-weight:800;cursor:pointer}
+.creator-web-tip{font-size:.8rem;line-height:1.6;color:var(--muted);margin:1.3rem 0}
+.creator-web-result{margin-top:1.5rem;animation:creator-screen-enter .3s ease}.creator-web-result>span{font-size:.65rem;color:var(--brand);font-weight:850;letter-spacing:.08em}
+.creator-web-result-card{display:flex;gap:.8rem;margin-top:.7rem;background:#fff;border:1px solid #e1d9ed;border-radius:.8rem;padding:.65rem}
+.creator-web-result-card>span{display:grid;place-items:center;width:38%;min-height:105px;border-radius:.5rem;background:#ddd5f6;font-size:2.7rem}
+.creator-web-result-card>div{display:flex;flex-direction:column;justify-content:center;gap:.4rem;min-width:0}.creator-web-result-card small{font-size:.65rem}.creator-web-result-card strong{font-size:.8rem}.creator-web-result-card p{font-size:.7rem;color:#777;margin:0}
+.creator-journey-mobile-controls{display:none}
+.creator-journey button:focus-visible{outline:3px solid #4834b9;outline-offset:3px}
+.creator-journey button:active:not(:disabled){transform:scale(.98)}
+@media(max-width:780px){
+ .creator-journey{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+ .creator-journey-intro h3{font-size:clamp(1.8rem,7vw,2.5rem)}
+ .creator-journey-intro>p{font-size:.9rem}
+ .creator-journey-progress{display:flex;gap:.4rem;margin:1rem 0}
+ .creator-journey-progress button{flex:1;display:grid;place-items:center;padding:.5rem;min-width:0}
+ .creator-journey-progress button>span:nth-child(2){display:none}
+ .creator-journey-help{min-height:0;margin-bottom:.5rem}
+ .creator-journey-reset{margin-top:0}
+ .creator-journey-device{width:min(100%,360px);aspect-ratio:9/15.5;border-width:5px;border-radius:1.8rem}
+ .creator-ig-stories{padding:.3rem .4rem .5rem}.creator-ig-stories span{width:45px}
+ .creator-ig-post>strong{font-size:clamp(3.2rem,13vw,5.2rem)}
+ .creator-journey-mobile-controls{display:flex;justify-content:center;gap:.7rem;width:min(100%,360px);margin:auto}
+ .creator-journey-mobile-controls button{flex:1;min-height:44px;padding:.65rem 1rem;border:1px solid #d8cde9;border-radius:.65rem;background:#fff;color:var(--brand-deep);font-weight:800;cursor:pointer}
+ .creator-journey-mobile-controls button:last-child{background:var(--brand);color:#fff}
+ .creator-journey-mobile-controls button:disabled{opacity:.4;cursor:not-allowed}
+}
+@media(prefers-reduced-motion:reduce){.creator-device-stage,.creator-web-result{animation:none}.creator-journey-progress button{transition:none}}
