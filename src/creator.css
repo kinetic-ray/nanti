@@ -272,3 +272,11 @@ body:has(.creator-page){background:#f6f5fc}
  .creator-post-result>div>img{width:80px;height:80px}
 }
 @media(max-width:360px){.creator-post-result>div{grid-template-columns:70px minmax(0,1fr)}.creator-post-result>div>img{width:70px;height:70px}}
+
+
+/* Clear and reachable exit control for the coffee dialog. */
+.creator-coffee-close{position:absolute;top:14px;right:14px;z-index:2;display:grid;place-items:center;box-sizing:border-box;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:1px solid #e4deeb;border-radius:50%;background:#f5f2f9;color:#241b38;line-height:1;font-family:Arial,sans-serif;font-size:30px;font-weight:400;cursor:pointer;touch-action:manipulation}
+.creator-coffee-close:hover{background:#e9e1f6;border-color:#cfc3e7}
+.creator-coffee-close:active{transform:scale(.96)}
+.creator-coffee-dialog>.creator-free-tag{display:block;padding-right:54px}
+@media(max-width:700px){.creator-coffee-close{top:12px;right:12px;width:46px;height:46px}.creator-coffee-dialog>.creator-free-tag{padding-right:52px}}
