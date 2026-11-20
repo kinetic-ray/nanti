@@ -45,7 +45,7 @@ export function CreatorLanding() {
       </section>
 
       <section className="creator-showcase" aria-labelledby="creator-showcase-title" data-reveal>
-        <div className="creator-showcase-head"><h2 id="creator-showcase-title">{id ? <>Dari caption.<br/><em>Ketemu barangnya.</em></> : <>From caption.<br/><em>To the right product.</em></>}</h2><p>{id ? 'Bayangin ada yang lihat postinganmu, suka salah satu barangnya, lalu buka link di bio. Ini alurnya — dari caption sampai barang yang dicari.' : 'Followers see a product code on Instagram, enter it in search, and find the item they came for.'}</p></div>
+        <div className="creator-showcase-head"><h2 id="creator-showcase-title">{id ? <>Dari caption.<br/><em>Ketemu barangnya.</em></> : <>From caption.<br/><em>To the right product.</em></>}</h2><p>{id ? 'Lihat contoh postingan Instagram, lalu buka etalase Nanti untuk mencari barang dari caption.' : 'Followers see a product code on Instagram, enter it in search, and find the item they came for.'}</p></div>
         <CreatorJourney id={id} />
         <p className="creator-showcase-note">{id ? 'Contoh alur, bukan postingan atau testimoni pengguna sungguhan. Etalase ini masih demo; fitur publikasi belum tersedia.' : '* Illustrative journey. Content and products are samples; creator publishing is not yet available.'}</p>
       </section>
@@ -66,60 +66,36 @@ export function CreatorLanding() {
 }
 
 
+type PostIconName = 'heart' | 'comment' | 'repost' | 'send' | 'bookmark' | 'more' | 'verified' | 'arrow' | 'back';
+function PostIcon({ name, size = 24 }: { name: PostIconName; size?: number }) {
+  const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const };
+  if (name === 'verified') return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path fill="#3897f0" d="m12 1.5 2.4 1.4 2.8-.1 1.4 2.4 2.4 1.4-.1 2.8 1.4 2.4-1.4 2.4.1 2.8-2.4 1.4-1.4 2.4-2.8-.1-2.4 1.4-2.4-1.4-2.8.1-1.4-2.4-2.4-1.4.1-2.8-1.4-2.4 1.4-2.4-.1-2.8 2.4-1.4 1.4-2.4 2.8.1z"/><path d="m8 12 2.5 2.5L16 9" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  return <svg {...common}>{name === 'heart' ? <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/> : name === 'comment' ? <path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.3 0-2.6-.3-3.7-.9L3 21l1.8-5.2A8.5 8.5 0 1 1 20.5 11.5Z"/> : name === 'repost' ? <><path d="M4 7h13l-3-3m3 3-3 3M20 17H7l3 3m-3-3 3-3"/><path d="M20 12v5M4 12V7"/></> : name === 'send' ? <path d="m22 2-7.5 20-4.1-8.4L2 9.5 22 2ZM10.4 13.6 22 2"/> : name === 'bookmark' ? <path d="M5 3h14v18l-7-5-7 5V3Z"/> : name === 'more' ? <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></> : name === 'back' ? <path d="m14 5-7 7 7 7"/> : <path d="M5 12h14m-6-6 6 6-6 6"/>}</svg>;
+}
 function CreatorJourney({ id }: { id: boolean }) {
-  const [step, setStep] = useState(0);
+  const [view, setView] = useState<'post' | 'store'>('post');
   const [query, setQuery] = useState('PRD-003');
-  const stages = id
-    ? ['Lihat postingan', 'Buka profil kreator', 'Ketuk link di bio', 'Temukan produknya']
-    : ['See the post', 'Open creator profile', 'Tap the bio link', 'Find the product'];
-  const advance = () => setStep(current => Math.min(current + 1, 3));
-  return <div className="creator-journey" data-reveal>
+  const [searched, setSearched] = useState(false);
+  const found = searched && query.trim().toUpperCase() === 'PRD-003';
+  return <div className="creator-journey creator-post-journey" data-reveal>
     <div className="creator-journey-intro">
-      <span className="creator-journey-eyebrow">{id ? 'COBA ALURNYA' : 'TRY THE JOURNEY'}</span>
-      <h3>{id ? 'Rasain sendiri, dari konten sampai ketemu barang.' : 'See how a post becomes a product find.'}</h3>
-      <p>{id ? 'Ikuti empat langkah sederhana untuk menemukan produk dari sebuah postingan.' : 'Follow four simple steps to find a product from a post.'}</p>
-      <div className="creator-journey-progress" aria-label={id ? 'Tahapan simulasi' : 'Demo steps'}>
-        {stages.map((stage, index) => <button type="button" key={stage} className={index === step ? 'is-current' : index < step ? 'is-done' : ''} aria-current={index === step ? 'step' : undefined} onClick={() => setStep(index)}><span>{String(index + 1).padStart(2, '0')}</span><span>{stage}</span></button>)}
-      </div>
-      <div className="creator-journey-help" aria-live="polite"><strong>{stages[step]}</strong><p>{[
-        id ? 'Ketuk nama studio.sore pada postingan.' : 'Tap studio.sore on the post.',
-        id ? 'Ketuk link Nanti yang ada di bio.' : 'Tap the Nanti link in the bio.',
-        id ? 'Kode PRD-003 sudah siap. Tekan Cari untuk melihat produknya.' : 'PRD-003 is ready. Tap Search to find the product.',
-        id ? 'Itu dia! Produk yang dimaksud langsung muncul.' : 'Found it! The product appears right away.'
-      ][step]}</p></div>
-      <button className="creator-journey-reset" type="button" onClick={() => { setStep(0); setQuery('PRD-003'); }}>{id ? '↺ Ulangi simulasi' : '↺ Replay demo'}</button>
+      <span className="creator-journey-eyebrow">{id ? 'DARI INSTAGRAM KE NANTI' : 'FROM INSTAGRAM TO NANTI'}</span>
+      <h3>{id ? 'Lihat postingannya. Temukan barangnya.' : 'See the post. Find the product.'}</h3>
+      <p>{id ? 'Contoh sederhana bagaimana followers menemukan rekomendasimu tanpa harus bertanya di komentar.' : 'A simple example of how followers find your picks without asking in the comments.'}</p>
+      <div className="creator-journey-help" aria-live="polite"><strong>{view === 'post' ? (id ? '01 / Lihat postingan' : '01 / See the post') : (id ? '02 / Cari di Nanti' : '02 / Search on Nanti')}</strong><p>{view === 'post' ? (id ? 'Baca kode PRD-003 di caption, lalu buka link bio lewat tombol di bawah postingan.' : 'Find PRD-003 in the caption, then use the bio-link button below the post.') : (id ? 'Tekan Cari untuk menemukan produk dengan kode PRD-003.' : 'Press Search to find product PRD-003.')}</p></div>
+      <div className="creator-post-actions"><button type="button" className="creator-post-main-cta" onClick={() => { if (view === 'post') { setView('store'); setSearched(false); } else { setView('post'); setQuery('PRD-003'); setSearched(false); } }}>{view === 'post' ? (id ? 'Buka link di bio' : 'Open link in bio') : (id ? 'Kembali ke postingan' : 'Back to post')} <PostIcon name={view === 'post' ? 'arrow' : 'back'} size={18}/></button><span>{id ? 'Simulasi interaktif' : 'Interactive preview'}</span></div>
     </div>
-    <div className="creator-journey-device" aria-label={id ? 'Simulasi Instagram menuju etalase Nanti' : 'Instagram to Nanti storefront simulation'}>
-      <div className="creator-device-status" aria-hidden="true"><span>9:41</span><span>●●● ▰</span></div>
-      <div className="creator-device-stage" key={step}>
-        {step === 0 && <div className="creator-ig-screen">
-          <div className="creator-ig-appbar"><strong>Instagram</strong><span aria-hidden="true">♡　✉</span></div>
-          <div className="creator-ig-stories" aria-hidden="true"><span>✦</span><span>◒</span><span>✳</span><span>◈</span></div>
-          <button type="button" className="creator-ig-user creator-journey-hotspot" onClick={advance} aria-label={id ? 'Buka profil studio.sore' : 'Open studio.sore profile'}><span className="creator-ig-avatar">s.</span><span><strong>studio.sore</strong><small>{id ? 'Konten outfit & rekomendasi' : 'Outfits and daily finds'}</small></span><span className="creator-ig-dots" aria-hidden="true">•••</span></button>
-          <div className="creator-ig-post"><span className="creator-story-sun"/><span className="creator-story-horizon"/><strong>OFF<br/>DUTY.</strong><small>SUMMER EDIT — 03</small></div>
-          <div className="creator-ig-actions" aria-hidden="true"><span>♡</span><span>▢</span><span>➤</span><span className="creator-ig-bookmark">♧</span></div>
-          <p className="creator-ig-caption"><strong>studio.sore</strong> {id ? 'Outfit pantai kemarin ☀ Semua link ada di bio. Cari PRD-003, ya.' : 'Beach outfit ☀ Links in bio. Search PRD-003.'}</p>
-          <p className="creator-ig-muted">{id ? 'Lihat semua komentar' : 'View all comments'}</p>
-        </div>}
-        {step === 1 && <div className="creator-ig-screen creator-ig-profile">
-          <div className="creator-ig-profilebar"><button type="button" onClick={() => setStep(0)} aria-label={id ? 'Kembali' : 'Back'}>‹</button><strong>studio.sore</strong><span>☰</span></div>
-          <div className="creator-ig-profile-info"><span className="creator-ig-avatar">s.</span><div><strong>24</strong><small>posts</small></div><div><strong>12.4K</strong><small>followers</small></div><div><strong>380</strong><small>following</small></div></div>
-          <div className="creator-ig-bio"><strong>studio.sore</strong><p>{id ? 'Outfit harian, rekomendasi, dan semua barang favoritku ✦' : 'Daily outfits, recommendations, and favorite finds ✦'}</p></div>
-          <button type="button" className="creator-ig-biolink creator-journey-hotspot" onClick={advance}>↗　nanti.id/@studio.sore <span>›</span></button>
-          <div className="creator-ig-profile-buttons"><span>{id ? 'Mengikuti' : 'Following'}</span><span>{id ? 'Pesan' : 'Message'}</span></div>
-          <div className="creator-ig-profile-tiles" aria-hidden="true"><span>OFF<br/>DUTY.</span><span>SUMMER<br/>EDIT</span><span>DAILY<br/>FINDS</span></div>
-        </div>}
-        {step >= 2 && <div className="creator-web-screen">
-          <div className="creator-browser-bar"><span aria-hidden="true">‹</span><span>⌁　nanti.id/@studio.sore</span><span aria-hidden="true">⋮</span></div>
-          <div className="creator-web-brand">nanti<span>.</span></div>
-          <div className="creator-web-content"><span className="creator-web-eyebrow">STUDIO.SORE / {id ? 'ETALASE' : 'STOREFRONT'}</span><h4>{id ? 'Yang tadi kamu lihat, ada di sini.' : 'Find what caught your eye.'}</h4>
-            <form className="creator-web-search creator-journey-hotspot" onSubmit={event => { event.preventDefault(); setStep(3); }}><label htmlFor="creator-journey-search" className="sr-only">{id ? 'Cari kode produk' : 'Search product code'}</label><input id="creator-journey-search" value={query} onChange={event => { setQuery(event.target.value); if (step === 3) setStep(2); }} placeholder={id ? 'Cari kode produk' : 'Search product code'}/><button type="submit">{id ? 'Cari' : 'Search'} ↗</button></form>
-            {step === 3 && query.trim().toUpperCase() === 'PRD-003' ? <div className="creator-web-result" role="status"><span>{id ? 'PRODUK DITEMUKAN' : 'PRODUCT FOUND'}</span><div className="creator-web-result-card"><span aria-hidden="true">✳</span><div><small>PRD-003</small><strong>{id ? 'Item dari Summer Edit' : 'Summer Edit essential'}</strong><p>{id ? 'Dari postingan OFF DUTY.' : 'From the OFF DUTY. post'}</p></div></div></div> : <p className="creator-web-tip">{step === 3 ? (id ? 'Kode belum ditemukan dalam demo ini. Coba PRD-003.' : 'Code not found in this demo. Try PRD-003.') : (id ? 'Coba cari kode PRD-003 dari caption Instagram tadi.' : 'Try searching PRD-003 from the Instagram caption.')}</p>}
-          </div>
-        </div>}
+    <div className="creator-post-preview" aria-label={id ? 'Simulasi postingan Instagram dan etalase Nanti' : 'Instagram post and Nanti storefront simulation'}>
+      <div className="creator-post-viewport" key={view}>
+        {view === 'post' ? <article className="creator-instagram-post" aria-label={id ? 'Contoh postingan Instagram' : 'Sample Instagram post'}>
+          <header className="creator-post-header"><div className="creator-post-avatar"><span>s.</span></div><div className="creator-post-account"><div><strong>studio.sore</strong><PostIcon name="verified" size={17}/></div><span>{id ? 'Rekomendasi outfit' : 'Outfit recommendations'}</span></div><span className="creator-post-more"><PostIcon name="more" size={22}/></span></header>
+          <div className="creator-post-media" role="img" aria-label={id ? 'Ilustrasi editorial outfit musim panas' : 'Summer outfit editorial illustration'}><span className="creator-post-media-sun"/><span className="creator-post-media-arc"/><div className="creator-post-media-copy"><small>STUDIO.SORE — SUMMER / 03</small><strong>OFF<br/>DUTY.</strong><span>THE WEEKEND EDIT</span></div></div>
+          <div className="creator-post-dots" aria-label={id ? 'Slide 1 dari 3' : 'Slide 1 of 3'}><i className="active"/><i/><i/></div>
+          <div className="creator-post-engagement"><span><PostIcon name="heart" size={29}/><b>37.3K</b></span><span><PostIcon name="comment" size={29}/><b>649</b></span><span><PostIcon name="repost" size={29}/><b>1,312</b></span><span><PostIcon name="send" size={29}/><b>14K</b></span><span className="creator-post-save"><PostIcon name="bookmark" size={29}/></span></div>
+          <p className="creator-post-caption"><strong>studio.sore</strong> {id ? 'Outfit pantai kemarin ☀ Semua detail ada di link bio. Cari kode ' : 'Weekend outfit ☀ Everything is in my bio link. Search for '}<b>PRD-003</b>.</p>
+          <p className="creator-post-time">{id ? '12 jam yang lalu' : '12 hours ago'}</p>
+        </article> : <div className="creator-post-store"><div className="creator-post-store-bar"><button type="button" onClick={() => setView('post')} aria-label={id ? 'Kembali ke Instagram' : 'Back to Instagram'}><PostIcon name="back" size={22}/></button><span>nanti.id/@studio.sore</span><span>•••</span></div><div className="creator-post-store-logo">nanti<span>.</span></div><div className="creator-post-store-body"><span className="creator-journey-eyebrow">STUDIO.SORE / STOREFRONT</span><h4>{id ? 'Yang kamu cari, ada di sini.' : 'Find what caught your eye.'}</h4><p>{id ? 'Cari kode barang dari caption Instagram.' : 'Search the product code from the Instagram caption.'}</p><form onSubmit={event => { event.preventDefault(); setSearched(true); }}><label className="sr-only" htmlFor="creator-post-product-code">{id ? 'Kode produk' : 'Product code'}</label><input id="creator-post-product-code" value={query} onChange={event => { setQuery(event.target.value); setSearched(false); }} placeholder="PRD-003"/><button type="submit">{id ? 'Cari' : 'Search'}</button></form>{found ? <div className="creator-post-result" role="status"><small>{id ? 'PRODUK DITEMUKAN' : 'PRODUCT FOUND'}</small><div><span>03</span><section><strong>{id ? 'Summer Edit — Item 03' : 'Summer Edit — Item 03'}</strong><p>{id ? 'Dari postingan OFF DUTY.' : 'From the OFF DUTY. post'}</p></section></div></div> : <p className="creator-post-store-hint" role="status">{searched ? (id ? 'Kode tidak ditemukan dalam demo. Coba PRD-003.' : 'Code not found in this demo. Try PRD-003.') : (id ? 'Contoh kode: PRD-003' : 'Example code: PRD-003')}</p>}</div></div>}
       </div>
-      <div className="creator-device-bottom" aria-hidden="true"><span/></div>
     </div>
-    <div className="creator-journey-mobile-controls"><button type="button" onClick={() => setStep(current => Math.max(0, current - 1))} disabled={step === 0}>{id ? 'Kembali' : 'Back'}</button><button type="button" onClick={() => step === 3 ? setStep(0) : advance()}>{step === 3 ? (id ? 'Ulangi ↺' : 'Replay ↺') : (id ? 'Lanjut →' : 'Next →')}</button></div>
   </div>;
 }
