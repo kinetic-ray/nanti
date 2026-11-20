@@ -31,31 +31,33 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false }: 
   useEffect(() => {
     const sentinel = searchSentinelRef.current;
     if (!sentinel) return;
-    const preview = embedded ? sentinel.closest('.studio-preview-frame') : null;
-    const root = preview ?? null;
-    const onScroll = () => {
-      const rootTop = root ? root.getBoundingClientRect().top + root.clientTop : 0;
-      const crossedBoundary = sentinel.getBoundingClientRect().top < rootTop + 8;
-      // In the editor the viewport is independently scrollable; preserve compact
-      // mode across design changes, including when the search changes height.
-      const previewScrolled = root ? root.scrollTop > 24 : window.scrollY > 24;
-      setCompactSearch(crossedBoundary && previewScrolled);
+    const root = embedded ? sentinel.closest<HTMLElement>('.studio-preview-frame') : null;
+    const scrollTarget: HTMLElement | Window = root ?? window;
+    // The threshold is fixed while scrolling: measuring the sticky element on
+    // every frame causes a resize/scroll feedback loop on mobile browsers.
+    const initialScroll = root ? root.scrollTop : window.scrollY;
+    const boundary = root
+      ? sentinel.getBoundingClientRect().top - root.getBoundingClientRect().top + initialScroll
+      : sentinel.getBoundingClientRect().top + initialScroll;
+    const enterAt = Math.max(24, boundary + 12);
+    const leaveAt = Math.max(0, enterAt - 28);
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const y = root ? root.scrollTop : window.scrollY;
+      setCompactSearch(previous => y > (previous ? leaveAt : enterAt));
     };
-    const scrollTarget: Element | Window = root ?? window;
+    const onScroll = () => {
+      if (!raf) raf = window.requestAnimationFrame(update);
+    };
     scrollTarget.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    const observer = new ResizeObserver(onScroll);
-    observer.observe(sentinel);
-    if (root) observer.observe(root);
     onScroll();
     return () => {
       scrollTarget.removeEventListener('scroll', onScroll);
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-      observer.disconnect();
+      if (raf) window.cancelAnimationFrame(raf);
     };
-  }, [embedded, design]);
+  }, [embedded]);
+
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const activeCollection = collections.find(item => item.id === active);
   const normalized = (value: string) => value.toLocaleLowerCase().normalize('NFKC').replace(/[^a-z0-9]+/g, ' ').trim();
