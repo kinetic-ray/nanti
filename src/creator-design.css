@@ -1,1 +1,62 @@
 .storefront{background:var(--sf-page,#fff9fb);color:var(--sf-ink);min-height:100vh}.storefront-main{display:flex;flex-direction:column}.storefront h1,.storefront h2,.storefront h3{font-family:var(--sf-heading-font,inherit)}.storefront-featured{border-radius:var(--sf-radius,18px);background:color-mix(in srgb,var(--sf-accent) 18%,var(--sf-page))}.storefront-featured a,.storefront-outro a,.storefront-modal-dismiss{background:var(--sf-accent)}.storefront-featured h2,.storefront-featured p,.storefront-featured .storefront-kicker{color:var(--sf-ink)}.storefront-profile .storefront-avatar{border-radius:var(--sf-radius,18px)}.storefront-collection-card,.storefront-product-art{border-radius:var(--sf-radius,18px)}.storefront-product-grid{grid-template-columns:repeat(var(--sf-columns,3),minmax(0,1fr))}.storefront-product-art{aspect-ratio:var(--sf-ratio,1/1)}.storefront-product-copy{color:var(--sf-ink)}.storefront-card-bordered .storefront-product{border:1px solid color-mix(in srgb,var(--sf-ink) 22%,transparent);border-radius:var(--sf-radius);overflow:hidden}.storefront-card-bordered .storefront-product-copy{padding:1rem}.storefront-card-solid .storefront-product{background:color-mix(in srgb,var(--sf-accent) 12%,var(--sf-page));border-radius:var(--sf-radius);overflow:hidden}.storefront-card-solid .storefront-product-copy{padding:1rem}.storefront-hero-center .storefront-featured{grid-template-columns:1fr;text-align:center}.storefront-hero-center .storefront-featured>div:first-child{margin:auto;max-width:720px}.storefront-hero-center .storefront-featured-art{display:none}.storefront-hero-compact .storefront-featured{min-height:220px;grid-template-columns:1fr 180px}.storefront-hero-compact .storefront-featured h2{font-size:clamp(1.5rem,3vw,2.5rem)}.storefront-hero-compact .storefront-featured-art{font-size:3rem}.storefront-theme-utility .storefront-demo-notice{background:#2d343e;color:#e2e7ee}.storefront-theme-utility .storefront-featured{border:1px solid #434a55}.storefront-theme-utility .storefront-featured a{color:#16191d}.storefront-theme-utility .storefront-collection-card{color:#232323}.storefront-theme-utility .storefront-product button{background:#292e36;color:#f4f4f4;border-color:#454b55}.storefront-theme-gallery .storefront-product-art{border-radius:0}.storefront-embedded{min-height:0}.storefront-embedded .storefront-main{width:min(100% - 32px,1160px)}.storefront-embedded .storefront-profile{padding:2rem 0}.storefront-embedded .storefront-collections,.storefront-embedded .storefront-products{padding:2rem 0 1rem}.storefront-embedded .storefront-demo-notice{font-size:.7rem}.storefront-embedded .storefront-featured{min-height:230px}.storefront-embedded .storefront-featured>div:first-child{padding:2rem}.storefront-embedded .storefront-featured h2{font-size:clamp(1.4rem,3vw,2.6rem)}@media(max-width:750px){.storefront-product-grid{grid-template-columns:repeat(min(var(--sf-columns,3),2),minmax(0,1fr))}.storefront-hero-compact .storefront-featured{grid-template-columns:1fr}.storefront-hero-compact .storefront-featured-art{display:none}}
+
+/* Layout personalities: structural composition, independent of color palettes. */
+.storefront-personality-minimalist .storefront-main{max-width:1040px}
+.storefront-personality-minimalist .storefront-profile{justify-content:center;text-align:center;flex-direction:column;gap:1rem;padding:4.5rem 0 3rem}
+.storefront-personality-minimalist .storefront-profile-copy{max-width:610px}
+.storefront-personality-minimalist .storefront-profile-copy>p:last-of-type{margin-inline:auto}
+.storefront-personality-minimalist .storefront-profile-meta{justify-content:center}
+.storefront-personality-minimalist .storefront-featured{min-height:240px;grid-template-columns:1fr;background:transparent;border-top:1px solid var(--sf-line);border-bottom:1px solid var(--sf-line);text-align:center}
+.storefront-personality-minimalist .storefront-featured>div:first-child{max-width:680px;margin:auto}
+.storefront-personality-minimalist .storefront-featured-art{display:none}
+.storefront-personality-minimalist .storefront-collection-card{min-height:150px}
+.storefront-personality-minimalist .storefront-collection-symbol{font-size:2.7rem}
+.storefront-personality-minimalist .storefront-product-grid{gap:2.5rem 1.25rem}
+.storefront-personality-minimalist .storefront-product-art{border-radius:0}
+.storefront-personality-minimalist .storefront-product-copy h3{font-size:1.05rem}
+.storefront-personality-minimalist .storefront-collections,.storefront-personality-minimalist .storefront-products{padding-top:5rem}
+
+.storefront-personality-editorial .storefront-profile h1{font-family:Georgia,'Times New Roman',serif;font-size:clamp(3rem,6vw,5.5rem);font-weight:500;letter-spacing:-.07em}
+.storefront-personality-editorial .storefront-featured{grid-template-columns:1.3fr .7fr;min-height:390px}
+.storefront-personality-editorial .storefront-featured h2{font-family:Georgia,'Times New Roman',serif;font-size:clamp(2.8rem,5vw,4.6rem);font-weight:500}
+.storefront-personality-editorial .storefront-section-heading h2{font-family:Georgia,'Times New Roman',serif;font-weight:500;font-size:clamp(2.3rem,4vw,3.6rem)}
+.storefront-personality-editorial .storefront-collection-grid{gap:.65rem}
+.storefront-personality-editorial .storefront-product-grid{column-gap:1.5rem;row-gap:2.5rem}
+
+.storefront-personality-brutalist .storefront-main{max-width:1200px}
+.storefront-personality-brutalist .storefront-profile{border-bottom:3px solid var(--sf-ink);padding-bottom:2rem}
+.storefront-personality-brutalist .storefront-profile h1{font-family:Arial,Helvetica,sans-serif;font-weight:950;text-transform:uppercase;letter-spacing:-.095em;font-size:clamp(3rem,8vw,7rem);line-height:.9}
+.storefront-personality-brutalist .storefront-avatar{border:3px solid var(--sf-ink);border-radius:0;box-shadow:7px 7px 0 var(--sf-ink)}
+.storefront-personality-brutalist .storefront-featured{border:3px solid var(--sf-ink);border-radius:0;min-height:320px;box-shadow:9px 9px 0 var(--sf-ink);transform:rotate(-.4deg)}
+.storefront-personality-brutalist .storefront-featured h2{font-family:Arial,Helvetica,sans-serif;font-weight:950;text-transform:uppercase;letter-spacing:-.065em}
+.storefront-personality-brutalist .storefront-featured a{border:2px solid var(--sf-ink);border-radius:0;box-shadow:4px 4px 0 var(--sf-ink)}
+.storefront-personality-brutalist .storefront-collection-grid{gap:12px}
+.storefront-personality-brutalist .storefront-collection-card{border:3px solid var(--sf-ink);border-radius:0;box-shadow:5px 5px 0 var(--sf-ink)}
+.storefront-personality-brutalist .storefront-product{border:2px solid var(--sf-ink);border-radius:0;overflow:hidden}
+.storefront-personality-brutalist .storefront-product-art{border-radius:0;border-bottom:2px solid var(--sf-ink)}
+.storefront-personality-brutalist .storefront-product-copy{padding:1rem}
+.storefront-personality-brutalist .storefront-product-copy h3{text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;font-weight:900}
+.storefront-personality-brutalist .storefront-product-copy button{border-radius:0;border:2px solid var(--sf-ink);box-shadow:3px 3px 0 var(--sf-ink)}
+.storefront-personality-brutalist .storefront-section-heading{border-bottom:3px solid var(--sf-ink);padding-bottom:1rem}
+
+.storefront-personality-gallery .storefront-profile{gap:1.5rem;padding:2rem 0}
+.storefront-personality-gallery .storefront-profile h1{font-size:clamp(2.5rem,5vw,4.5rem);font-weight:450}
+.storefront-personality-gallery .storefront-featured{grid-template-columns:1fr;min-height:260px;text-align:center}
+.storefront-personality-gallery .storefront-featured>div:first-child{max-width:680px;margin:auto}
+.storefront-personality-gallery .storefront-featured-art{display:none}
+.storefront-personality-gallery .storefront-collection-grid{gap:6px}
+.storefront-personality-gallery .storefront-collection-card{border-radius:0;min-height:240px}
+.storefront-personality-gallery .storefront-product-grid{gap:6px}
+.storefront-personality-gallery .storefront-product-art{border-radius:0;aspect-ratio:4/5}
+.storefront-personality-gallery .storefront-product-copy{padding:1rem .4rem 1.5rem}
+.storefront-personality-gallery .storefront-section-heading{margin-bottom:2rem}
+@media(max-width:750px){
+ .storefront-personality-minimalist .storefront-profile{display:flex;align-items:center;padding:2.5rem 0}
+ .storefront-personality-minimalist .storefront-profile-meta{justify-content:center}
+ .storefront-personality-editorial .storefront-featured{grid-template-columns:1fr;min-height:260px}
+ .storefront-personality-editorial .storefront-featured-art{display:none}
+ .storefront-personality-brutalist .storefront-profile h1{font-size:clamp(2.6rem,9vw,4rem)}
+ .storefront-personality-brutalist .storefront-featured{transform:none;box-shadow:5px 5px 0 var(--sf-ink)}
+ .storefront-personality-brutalist .storefront-collection-card{box-shadow:3px 3px 0 var(--sf-ink)}
+ .storefront-personality-gallery .storefront-collection-card{min-height:160px}
+}
