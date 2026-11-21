@@ -20,7 +20,7 @@ const servers = {
 type Attempt = { state: string; nonce: string; verifier: string | null };
 type Provider = {
   authorization(attempt: Attempt): Promise<URL>;
-  verify(response: URLSearchParams, attempt: Attempt): Promise<{ subject: string; displayName: string | null }>;
+  verify(response: URLSearchParams, attempt: Attempt): Promise<{ subject: string; displayName: string | null; verifiedEmail?: string | null }>;
 };
 
 function oidc(provider: AuthProvider, origin: string, clientId: string, secret: () => Promise<string>, fetch?: client.CustomFetch): Provider {
@@ -41,7 +41,7 @@ function oidc(provider: AuthProvider, origin: string, clientId: string, secret: 
         redirect_uri: callback.href,
         state,
         nonce,
-        ...(apple ? { response_mode: 'form_post' } : { scope: 'openid profile', prompt: 'select_account' }),
+        ...(apple ? { response_mode: 'form_post' } : { scope: 'openid profile email', prompt: 'select_account' }),
         ...(verifier ? {
           code_challenge_method: 'S256',
           code_challenge: await client.calculatePKCECodeChallenge(verifier),
@@ -59,7 +59,9 @@ function oidc(provider: AuthProvider, origin: string, clientId: string, secret: 
       if (!claims?.sub || claims.sub.length > 255) throw new Error('Invalid OAuth subject');
       const profileName = !apple && typeof claims.name === 'string'
         ? Array.from(claims.name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()).slice(0, 100).join('') : '';
-      return { subject: claims.sub, displayName: profileName || null };
+      const verifiedEmail = !apple && claims.email_verified === true && typeof claims.email === 'string' &&
+        claims.email.length <= 254 && /^[^\s@]+@[^\s@]+$/u.test(claims.email) ? claims.email : null;
+      return { subject: claims.sub, displayName: profileName || null, verifiedEmail };
     },
   };
 }

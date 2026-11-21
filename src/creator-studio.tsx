@@ -1,3 +1,4 @@
+import { api } from './api.js';
 import { useState } from 'react';
 import { CreatorStorefront } from './creator-storefront.js';
 import { presets, validateDesign } from './creator-design.js';
@@ -6,25 +7,33 @@ import { useLocale } from './locale.js';
 import './creator-studio.css';
 
 const storageKey = 'nanti.creator.design.draft.v1';
-function initialDesign(): CreatorDesign {
-  try { const saved = localStorage.getItem(storageKey); return saved ? validateDesign(JSON.parse(saved)) : presets.editorial; }
+function initialDesign(key: string): CreatorDesign {
+  try { const saved = localStorage.getItem(key); return saved ? validateDesign(JSON.parse(saved)) : presets.editorial; }
   catch { return presets.editorial; }
 }
 const sectionNames: Record<CreatorSection,string> = { profile:'Profil kreator', hero:'Sorotan utama', collections:'Koleksi', products:'Daftar produk' };
 const steps = ['theme','layout','cards','type','sections'] as const;
 const stepLabels = { id: ['Tema','Tata letak','Kartu produk','Huruf','Urutan konten'], en: ['Theme','Layout','Product cards','Typography','Sections'] };
 const stepHints = { id: ['Pilih gaya visual yang paling cocok.','Atur bagian atas dan jumlah kolom.','Atur cara produk ditampilkan.','Pilih gaya judul.','Tentukan urutan isi halaman.'], en: ['Pick a visual style.','Arrange the hero and columns.','Control product presentation.','Choose the heading style.','Order the page sections.'] };
-export function CreatorDesignStudio() {
+export function CreatorDesignStudio({ ownerId, draft }: { ownerId: string; draft: unknown }) {
+  const ownedKey = storageKey + '.' + ownerId;
   const { language } = useLocale();
   const id = language === 'id';
-  const [design, setDesign] = useState<CreatorDesign>(initialDesign);
+  const [design, setDesign] = useState<CreatorDesign>(() => draft === null ? initialDesign(ownedKey) : validateDesign(draft));
   const [viewport, setViewport] = useState<'desktop'|'mobile'>(window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop');
   const [tab, setTab] = useState<'theme'|'layout'|'cards'|'type'|'sections'>('theme');
   const [notice, setNotice] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'edit'|'preview'>('edit');
   const stepIndex = steps.indexOf(tab);
   const update = (patch: Partial<CreatorDesign>) => { setDesign(prev => ({ ...prev, ...patch })); setNotice(''); };
-  const persist = () => { try { localStorage.setItem(storageKey,JSON.stringify(design)); setNotice(id ? 'Draft disimpan di browser ini.' : 'Draft saved in this browser.'); } catch { setNotice(id ? 'Penyimpanan browser tidak tersedia.' : 'Browser storage unavailable.'); } };
+  const persist = async () => {
+    try {
+      await api('/account/creator/design', { method: 'PUT', data: { design } });
+      setNotice(id ? 'Draft disimpan di akunmu.' : 'Draft saved to your account.');
+    } catch {
+      setNotice(id ? 'Draft belum bisa disimpan. Coba lagi.' : 'Could not save your draft. Try again.');
+    }
+  };
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
     const url = URL.createObjectURL(blob);

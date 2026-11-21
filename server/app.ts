@@ -294,7 +294,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   app.use('/api', api);
 
   if (webRoot) {
-    app.get(['/admin', '/account'], (_req, res) => {
+    app.get(['/admin', '/account', '/creator', '/creator/studio', '/creator/demo'], (_req, res) => {
       res.set('Cache-Control', 'no-store').sendFile('index.html', { root: webRoot });
     });
     app.use(express.static(webRoot, { dotfiles: 'deny' }));

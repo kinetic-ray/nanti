@@ -1,3 +1,4 @@
+import { PasswordForm } from './password-form.js';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { loginProviders } from '../shared/account.js';
@@ -35,13 +36,17 @@ export function AccountDialog({ status, notice, close, update }: {
   const nextProvider = status?.available.filter(provider => !account?.providers.includes(provider)) ?? [];
   const verifyProvider = status?.available.filter(provider => account?.providers.includes(provider)) ?? [];
   const [displayName, setDisplayName] = useState(account?.displayName ?? '');
-  const [busy, setBusy] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [signingInWith, setSigningInWith] = useState<LoginProvider | null>(null);
+  const busy = working || signingInWith !== null;
   const [error, setError] = useState('');
   const [message, setMessage] = useState<Message | null>(null);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const creator = new URLSearchParams(location.search).get('next') === 'creator';
   const [deletion, setDeletion] = useState(false);
 
   async function run(operation: () => Promise<void>) {
-    setBusy(true);
+    setWorking(true);
     setError('');
     setMessage(null);
     try { await operation(); }
@@ -52,16 +57,22 @@ export function AccountDialog({ status, notice, close, update }: {
         const current = await api<AccountStatus>('/account').catch(() => null);
         if (current) update(current);
       }
-    } finally { setBusy(false); }
+    } finally { setWorking(false); }
   }
 
   async function start(provider: LoginProvider, purpose: AuthPurpose) {
-    const next = await api<{ url: string }>(`/account/${provider}/start`, { method: 'POST', data: { purpose } });
-    const url = new URL(next.url);
-    if (url.origin !== providerOrigins[provider] || url.username || url.password) {
-      throw new Error('This sign-in option is unavailable.');
+    setSigningInWith(provider);
+    try {
+      const next = await api<{ url: string }>(`/account/${provider}/start`, { method: 'POST', data: { purpose, ...(creator && purpose === 'signin' ? { destination: 'creator' } : {}) } });
+      const url = new URL(next.url);
+      if (url.origin !== providerOrigins[provider] || url.username || url.password) {
+        throw new Error('This sign-in option is unavailable.');
+      }
+      location.assign(url.href);
+    } catch (failure) {
+      setSigningInWith(null);
+      throw failure;
     }
-    location.assign(url.href);
   }
   async function transition(path: string, method: string, next: AuthNotice) {
     await api(path, { method, data: { confirm: true } });
@@ -78,7 +89,7 @@ export function AccountDialog({ status, notice, close, update }: {
     });
   }
   const providerButtons = (choices: LoginProvider[], purpose: AuthPurpose) => choices.map(provider =>
-    <button key={provider} type="button" disabled={busy} className={`account-provider provider-${provider}`}
+    <button key={provider} type="button" disabled={busy || passwordBusy} className={`account-provider provider-${provider}`}
       onClick={() => void run(() => start(provider, purpose))}>
       <span className="account-provider-mark" aria-hidden="true">{provider === 'google' ? 'G' : '●'}</span>
       <span className="account-provider-label">{t(purpose === 'signin' ? 'Continue with {provider}' : purpose === 'link' ?
@@ -88,20 +99,22 @@ export function AccountDialog({ status, notice, close, update }: {
   const signInShell = loginProviders.map(provider => {
     const enabled = status?.available.includes(provider) ?? false;
     return enabled ? providerButtons([provider], 'signin') : <button key={provider} type="button"
-      className={`account-provider provider-${provider} account-provider-pending`} disabled
-      aria-label={`${providerNames[provider]} sign-in is not configured`}>
+      className={`account-provider provider-${provider} account-provider-pending`} disabled>
       <span className="account-provider-mark" aria-hidden="true">{provider === 'google' ? 'G' : '●'}</span>
       <span className="account-provider-label">{t('Continue with {provider}', { provider: providerNames[provider] })}</span>
-      <span className="account-provider-status">Coming soon</span>
+      <span className="account-provider-status">{t('Unavailable')}</span>
     </button>;
   });
 
   return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
-    title={t(account ? 'Your account' : 'Sign in to Nanti')} busy={busy} close={close} focusHeading>
+    title={t(account ? new URLSearchParams(location.search).get('view') === 'settings' ? 'Account settings' : 'Your account' : 'Sign in to Nanti')} busy={busy || passwordBusy} close={close} focusHeading={Boolean(account)}
+    headerAction={!account && <button type="button" className="account-signin-close" aria-label={t('Close')}
+      disabled={busy || passwordBusy} onClick={close}><Icon name="close" /></button>}>
     {notice && <p className={notice === 'failed' ? 'error' : undefined}
       role={notice === 'failed' ? 'alert' : 'status'}>{t(authNotices[notice])}</p>}
     {error && <p role="alert" className="error">{translateError(error)}</p>}
-    {busy && <p role="status">{t('Working…')}</p>}
+    {signingInWith ? <p role="status">{t('Opening {provider} sign-in…', { provider: providerNames[signingInWith] })}</p>
+      : working && <p role="status">{t('Working…')}</p>}
     {message && <p role="status">{t(message)}</p>}
     {!status ? <>
       <p>{t('Could not load your account. Try again.')}</p>
@@ -112,14 +125,14 @@ export function AccountDialog({ status, notice, close, update }: {
       })}>{t('Try again')}</button>
     </> :
       !account ? <section className="account-signin-shell">
-        <div className="account-signin-emblem" aria-hidden="true">N</div>
-        <h3>Your wishlist, wherever you go.</h3>
+        <h3>{t('Your wishlist, wherever you go.')}</h3>
         <p>{t('Keep your wishlists and purchase decisions with you across devices.')}</p>
         <div className="account-providers">{signInShell}</div>
+        <PasswordForm delivery={Boolean(status.emailDelivery)} signedIn={false} creator={creator} busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />
         {!status.available.length && <p className="account-signin-note" role="status">
-          Google and Apple sign-in are being prepared. You can still use Nanti as a guest.
+          {t('Sign-in is currently unavailable.')}
         </p>}
-        <p className="account-signin-note">Your existing guest wishlists stay available on this device.</p>
+        <p className="account-signin-note">{t('Your existing guest wishlists stay available on this device.')}</p>
       </section> : <>
         {account.import && <section className="account-import" aria-labelledby="account-import-heading">
           <h3 id="account-import-heading">{t('Bring your guest data')}</h3>
@@ -132,6 +145,9 @@ export function AccountDialog({ status, notice, close, update }: {
             {t('Import guest data')}
           </button>
         </section>}
+        {account.email && <p>{account.email} · {account.emailVerified ? 'Email terverifikasi' : 'Email belum terverifikasi'}</p>}
+        {account.hasPassword && <PasswordForm delivery={false} signedIn creator={false}
+          busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />}
         <form className="account-section" onSubmit={profile}>
           <label>{t('Display name')}<input autoComplete="nickname" value={displayName} maxLength={100} disabled={busy}
             onChange={event => setDisplayName(event.target.value)} /></label>
