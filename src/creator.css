@@ -65,9 +65,17 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-manifesto>div:last-child{max-width:980px}
 .creator-manifesto h2{margin:0 0 1.75rem}
 .creator-showcase{padding:clamp(3.5rem,7vw,6rem) 0}
-.creator-showcase-head{grid-template-columns:minmax(0,1fr);gap:0;max-width:900px}
+.creator-showcase-head{grid-template-columns:minmax(0,1fr);gap:0;max-width:900px;container-type:inline-size}
 .creator-showcase h2{margin:0 0 1.2rem}
+.creator-showcase-head h2 em{font-size:min(1em,12cqi);white-space:nowrap}
 .creator-showcase-head>p{grid-column:1;max-width:650px;margin:0 0 2.5rem;font-size:1rem}
+@media(min-width:1024px){
+  .creator-showcase-head{max-width:none}
+  .creator-showcase-head h2{font-size:min(7.5rem,6.8cqi);white-space:nowrap}
+  .creator-showcase-head h2 br{display:none}
+  .creator-showcase-head h2 em{font-size:inherit;margin-inline-start:.18em}
+  .creator-showcase-head>p{max-width:none}
+}
 .creator-process{padding:clamp(3.5rem,7vw,6rem) 0;gap:clamp(2rem,5vw,4rem)}
 .creator-process h2{margin:0}
 .creator-end h2{margin:0 0 1.75rem}

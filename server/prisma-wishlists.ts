@@ -7,7 +7,7 @@ import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
 import { lockPriceItem, recordObservation } from './prisma-prices.js';
 
 const summary = { id: true, name: true, currency: true } as const;
-const item = { id: true, name: true, url: true, priceMinor: true, quantity: true, imageKey: true } as const;
+const item = { id: true, name: true, url: true, priceMinor: true, quantity: true, imageKey: true, sellerName: true } as const;
 
 function mapSummary<T extends { id: string; name: string; currency: string }>(row: T) {
   const currency = currencies.find((value) => value === row.currency);
@@ -44,16 +44,17 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
     async remove(ownerId, id) {
       return (await db.wishlist.deleteMany({ where: { id, dataOwner: authorizedOwner(ownerId) } })).count > 0;
     },
-    async addItem(ownerId, wishlistId, { priceSource, ...data }) {
+    async addItem(ownerId, wishlistId, { priceSource, ...data }, requestId) {
       try {
         return await db.$transaction(async (tx) => {
           const list = await tx.wishlist.findFirst({
             where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) }, select: { ownerId: true, currency: true },
           });
           if (!list || !await lockOwner(tx, list.ownerId, ownerId)) return false;
+          if (requestId && await tx.item.findUnique({ where: { id: requestId }, select: { id: true } })) return false;
           const productIdentityId = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
           const created = await tx.item.create({
-            data: { ownerId: list.ownerId, wishlistId, ...data, productIdentityId }, select: { id: true },
+            data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId }, select: { id: true },
           });
           if (data.priceMinor !== null) {
             await recordObservation(tx, { ownerId: list.ownerId, wishlistId, itemId: created.id }, data.priceMinor, list.currency,
@@ -79,6 +80,9 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
         }
         return true;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    },
+    async imageReferenced(imageKey) {
+      return Boolean(await db.item.findFirst({ where: { imageKey }, select: { id: true } }));
     },
     async removeItem(ownerId, wishlistId, id) {
       return (await db.item.deleteMany({ where: { wishlistId, id, wishlist: { dataOwner: authorizedOwner(ownerId) } } })).count > 0;

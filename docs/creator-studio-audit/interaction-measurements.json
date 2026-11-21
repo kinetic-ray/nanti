@@ -1,0 +1,165 @@
+{
+  "dense": {
+    "focus": "<button type=\"button\" aria-pressed=\"true\">Lihat hasil</button>",
+    "top": 0,
+    "preview": "storefront storefront-theme-editorial storefront-personality-editorial storefront-hero-split storefront-card-minimal storefront-embedded",
+    "font": "ui-monospace, monospace",
+    "radius": "18px",
+    "density": "4",
+    "effective": "150px 150px"
+  },
+  "preset": {
+    "focus": "<button type=\"button\" aria-pressed=\"true\">Lihat hasil</button>",
+    "top": 0,
+    "preview": "storefront storefront-theme-utility storefront-personality-editorial storefront-hero-compact storefront-card-bordered storefront-embedded",
+    "font": "ui-monospace, monospace",
+    "radius": "3px",
+    "density": "4",
+    "effective": "150px 150px"
+  },
+  "colors": {
+    ".storefront": [
+      "rgb(241, 242, 243)",
+      "rgb(23, 27, 32)"
+    ],
+    ".storefront-profile-copy p:last-of-type": [
+      "rgb(110, 100, 123)",
+      "rgba(0, 0, 0, 0)"
+    ],
+    ".storefront-profile-meta span": [
+      "rgb(110, 100, 123)",
+      "rgb(255, 255, 255)"
+    ],
+    ".storefront-profile-meta strong": [
+      "rgb(241, 242, 243)",
+      "rgba(0, 0, 0, 0)"
+    ],
+    ".storefront-filters button[aria-pressed=true]": [
+      "rgb(255, 255, 255)",
+      "rgb(241, 242, 243)"
+    ],
+    ".storefront-product-category": [
+      "rgb(110, 100, 123)",
+      "rgba(0, 0, 0, 0)"
+    ]
+  },
+  "wheelBefore": [
+    0,
+    0,
+    3178,
+    648
+  ],
+  "wheelAfter": [
+    160,
+    0,
+    3097,
+    648
+  ],
+  "modal": {
+    "active": "<button type=\"button\">Lihat produk <span aria-hidden=\"true\">↗</span></button>",
+    "role": "<section class=\"storefront-modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"storefront-modal-title\"><button class=\"storefront-modal-close\" type=\"button\" aria-label=\"Tutup\">×"
+  },
+  "escape": 1,
+  "result": {
+    "focus": "<body>\n    <div id=\"root\"><div class=\"studio\"><header class=\"studio-header\"><a href=\"/creator\">nanti<span>.</span> <small>creator studio</sm",
+    "top": 61,
+    "preview": "storefront storefront-theme-editorial storefront-personality-editorial storefront-hero-split storefront-card-minimal storefront-embedded",
+    "font": "Georgia, serif",
+    "radius": "18px",
+    "density": "3",
+    "effective": "150px 150px"
+  },
+  "nextTab": {
+    "focus": "<button type=\"button\" aria-pressed=\"false\">Desktop</button>",
+    "top": 61,
+    "preview": "storefront storefront-theme-editorial storefront-personality-editorial storefront-hero-split storefront-card-minimal storefront-embedded",
+    "font": "Georgia, serif",
+    "radius": "18px",
+    "density": "3",
+    "effective": "150px 150px"
+  },
+  "desktopTheme": {
+    ".studio-panel": [
+      76,
+      3002.015625,
+      3002,
+      3002,
+      "static",
+      "visible"
+    ],
+    ".studio-preview-toolbar": [
+      112,
+      67.375,
+      66,
+      66,
+      "static",
+      "visible"
+    ],
+    ".studio-preview-frame": [
+      203.375,
+      2838.640625,
+      2837,
+      2837,
+      "static",
+      "auto"
+    ],
+    ".studio-next": [
+      2922.828125,
+      78.1875,
+      77,
+      77,
+      "static",
+      "visible"
+    ],
+    ".studio-settings": [
+      515.21875,
+      2407.609375,
+      2408,
+      2408,
+      "static",
+      "visible"
+    ]
+  },
+  "desktopType": {
+    ".studio-panel": [
+      76,
+      3002.015625,
+      3002,
+      3002,
+      "static",
+      "visible"
+    ],
+    ".studio-preview-toolbar": [
+      112,
+      67.375,
+      66,
+      66,
+      "static",
+      "visible"
+    ],
+    ".studio-preview-frame": [
+      203.375,
+      2838.640625,
+      2837,
+      2837,
+      "static",
+      "auto"
+    ],
+    ".studio-next": [
+      2922.828125,
+      78.1875,
+      77,
+      77,
+      "static",
+      "visible"
+    ],
+    ".studio-settings": [
+      515.21875,
+      2407.609375,
+      2408,
+      2408,
+      "static",
+      "visible"
+    ]
+  }
+}

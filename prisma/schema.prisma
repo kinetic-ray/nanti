@@ -31,6 +31,7 @@ model Item {
   priceMinor   Int?
   quantity     Int
   imageKey     String?  @db.VarChar(255)
+  sellerName   String?  @db.VarChar(160)
   createdAt    DateTime @default(now())
   wishlist     Wishlist @relation(fields: [ownerId, wishlistId], references: [ownerId, id], onDelete: Cascade)
   assessments  Assessment[]

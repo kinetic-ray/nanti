@@ -1,0 +1,1 @@
+ALTER TABLE `Item` ADD COLUMN `sellerName` VARCHAR(160) NULL;

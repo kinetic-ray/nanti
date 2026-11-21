@@ -100,3 +100,15 @@ it('requires the scheduler credential before triggering retention and keeps gues
   await request(app).post('/api/session').set('X-Nanti-Request', '1').send({})
     .expect('Set-Cookie', /^__Host-nanti=.*; Path=\/; .*HttpOnly; Secure; SameSite=Strict/u).expect(200);
 });
+
+it('rejects an invalid credential-bearing database URL without exposing it', () => {
+  const canary = 'fixture-password-canary';
+  const url = 'mysql://fixture:' + canary + '@[invalid/nanti_test';
+  let failure: unknown;
+  try { connectDatabase(url); } catch (error) { failure = error; }
+  expect(failure instanceof Error).toBe(true);
+  expect((failure as Error).message.includes('DATABASE_URL')).toBe(true);
+  expect(JSON.stringify(failure).includes(canary)).toBe(false);
+  expect((failure as Error).stack?.includes(canary)).toBe(false);
+  expect((failure as Error).cause).toBeUndefined();
+});

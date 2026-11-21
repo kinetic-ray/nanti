@@ -4,17 +4,17 @@ This branch replaces the earlier TiDB Base64 image design with a portable S3-com
 
 ## Setup
 
-Create a **private** Cloudflare R2 bucket (or an S3-compatible bucket on a server). Set `NANTI_S3_ENDPOINT` to its HTTPS S3 API endpoint, `NANTI_S3_BUCKET` to the bucket name, `NANTI_S3_REGION` to the region (R2 uses `auto`), and set `NANTI_S3_ACCESS_KEY_ID` and `NANTI_S3_SECRET_ACCESS_KEY` to credentials restricted to this bucket. Never put secrets in `VITE_*` variables or the frontend.
-
-The bucket needs CORS for browser `PUT` from the actual Nanti web origin, allowing the `Content-Type` header. Do not use wildcard origins for production. `GET` is via short-lived signed URL, generated after wishlist ownership checks.
+Create a **private** Cloudflare R2 bucket. Configure `R2_ACCOUNT_ID`, `R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` in the backend environment. Use the account's HTTPS S3 endpoint and bucket-scoped object read/write credentials. The adapter uses the `auto` signing region. Leave `R2_PUBLIC_BASE_URL` blank for private images. A configured legacy `NANTI_S3_*` backend takes precedence so existing object references continue to use their original bucket.
 
 ## Data flow
 
-1. Browser compresses the selected image into JPEG, maximum 195 KB.
-2. Authenticated/guest owner requests a five-minute presigned PUT URL from `POST /api/uploads/product-image`.
-3. Browser PUTs JPEG directly to object storage; backend credentials are never sent to browser.
-4. Saving a product supplies the object key. API verifies owner namespace and a bounded HEAD response before saving the key.
-5. Wishlist JSON contains the key, not the image bytes. Private GET requests redirect to a two-minute presigned URL.
+1. The browser compresses a selected photo into JPEG and sends it to Nanti's authenticated same-origin endpoint. The server checks the JPEG structure, dimensions and 195 KB size limit before uploading.
+2. Nanti stores the photo in a private owner-scoped object. The client receives only the object key.
+3. When the product is saved, Nanti checks the key's owner and verifies the stored object before persisting the reference.
+4. The wishlist photo endpoint checks ownership and serves bounded bytes using a server-side signed GET. R2 needs no browser CORS or public bucket URL for this flow.
+5. Removing or replacing an item photo attempts to delete the old R2 object once no item references it.
+
+For Tokopedia, **Save product** copies the previewed listing photo automatically when storage is configured and no image was selected manually. Nanti uses its existing DNS-pinned HTTPS fetch, validates the retailer JPEG, and stores only the object key. If copying fails, the product can still be saved without the photo.
 
 ## Release gate
 

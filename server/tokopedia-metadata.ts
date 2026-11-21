@@ -1,0 +1,431 @@
+import { resolve4 } from 'node:dns/promises';
+import { request } from 'node:https';
+import { BlockList } from 'node:net';
+import { Readable } from 'node:stream';
+import { parse, type DefaultTreeAdapterTypes } from 'parse5';
+
+type Price = { amount: number; currency: 'IDR' };
+type Diagnostic = (reason: string, host: string, status?: number) => void;
+type PageRequest = (url: URL, signal: AbortSignal) => Promise<Response>;
+
+export interface ProductMetadata {
+  source: 'tokopedia';
+  originalUrl: string;
+  productUrl: string;
+  title: string | null;
+  price: Price | null;
+  imageUrl: string | null;
+  storeName: string | null;
+}
+
+const listingHosts = new Set(['www.tokopedia.com', 'tokopedia.com']);
+const shortHosts = new Set(['tokopedia.link', 'www.tokopedia.link', 'tk.tokopedia.com', 'vt.tokopedia.com']);
+const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+const maxBytes = 1024 * 1024;
+const imageHosts = /(^|\.)(tokopedia\.net|tokopedia-static\.net|tokopedia\.com|tiktokcdn\.com|ibytedtos\.com)$/;
+const maxImageBytes = 195_000;
+const privateAddresses = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+  ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24],
+  ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24],
+  ['203.0.113.0', 24], ['224.0.0.0', 3],
+] as const) privateAddresses.addSubnet(network, prefix);
+
+async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
+  const addresses = await resolve4(url.hostname);
+  signal.throwIfAborted();
+  const address = addresses[0];
+  if (!address || addresses.some((ip) => privateAddresses.check(ip))) throw new Error('Non-public DNS answer');
+  // Pin the checked address while retaining the original hostname for TLS and Host.
+  return new Promise((resolve, reject) => {
+    const outgoing = request(url, {
+      agent: false, hostname: address, servername: url.hostname, signal,
+      headers: { Host: url.hostname, Accept: accept, 'Accept-Encoding': 'identity', 'User-Agent': 'Nanti/1.0' },
+    }, (incoming) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(incoming.headers)) {
+        if (typeof value === 'string') headers.set(key, value);
+      }
+      const status = incoming.statusCode ?? 502;
+      if (status !== 200) {
+        incoming.destroy();
+        resolve(new Response(null, { status, headers }));
+        return;
+      }
+      const body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+      resolve(new Response(body, { status, headers }));
+    });
+    outgoing.on('error', reject);
+    outgoing.end();
+  });
+}
+
+function safeHttps(value: string, base?: URL): URL | null {
+  try {
+    const url = new URL(value, base);
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function listingKey(url: URL): string | null {
+  const path = url.pathname.replace(/\/$/, '');
+  if (!listingHosts.has(url.hostname) || !/^\/[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_-]*$/i.test(path)) return null;
+  return path;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : undefined;
+}
+
+function text(value: unknown): string | null {
+  return typeof value === 'string' ? value.trim() || null : null;
+}
+
+function tagged(value: unknown, type: string): boolean {
+  return [value].flat().some((entry) => entry === type || entry === 'https://schema.org/' + type);
+}
+
+function exactPrice(value: unknown, currency: unknown): Price | null {
+  if (currency !== 'IDR' || (typeof value !== 'number' && typeof value !== 'string') ||
+      !/^\d+(?:\.0+)?$/.test(String(value))) return null;
+  const amount = Number(value);
+  return Number.isSafeInteger(amount) && amount > 0 ? { amount, currency } : null;
+}
+
+function image(value: unknown, base: URL): string | null {
+  for (const entry of [value].flat()) {
+    const candidate = text(entry) ?? text(record(entry)?.contentUrl) ?? text(record(entry)?.url);
+    const url = candidate && safeHttps(candidate, base);
+    if (url && imageHosts.test(url.hostname) &&
+        !/placeholder|default[-_]?image/i.test(url.pathname)) return url.href;
+  }
+  return null;
+}
+
+// Tokopedia's desktop PDP publishes a normalized cache as a JSON assignment.
+function parsePdpCache(script: string, url: URL) {
+  const json = /^[ \t]*window\.__cache[ \t]*=[ \t]*(\{[^\r\n]*\});[ \t]*\r?$/m.exec(script)?.[1];
+  const path = listingKey(url);
+  if (!json || !path) return null;
+  const cache = record(JSON.parse(json));
+  const query = record(cache?.ROOT_QUERY);
+  if (!cache || !query) return null;
+  const [, shop, slug] = path.split('/');
+  const resolve = (value: unknown, typename: string) => {
+    const ref = record(value);
+    const id = text(ref?.id);
+    if (ref?.type !== 'id' || ref.typename !== typename || !id || !Object.hasOwn(cache, id)) return undefined;
+    const entity = record(cache[id]);
+    return entity?.__typename === typename ? entity : undefined;
+  };
+
+  const queries = Object.keys(query).filter((key) => {
+    if (!key.startsWith('pdpMainInfo(') || !key.endsWith(')')) return false;
+    const args = record(JSON.parse(key.slice('pdpMainInfo('.length, -1)));
+    return args?.shopDomain === shop && args?.productKey === slug;
+  });
+  if (queries.length !== 1 || !queries[0]) return null;
+  const entry = resolve(query[queries[0]], 'pdpMainInfo');
+  const data = resolve(entry?.data, 'pdpMainInfoData');
+  const basic = resolve(data?.basicInfo, 'pdpBasicInfo');
+  const reference = text(basic?.url);
+  const listing = reference && safeHttps(reference, url);
+  if (!listing || listingKey(listing) !== path) return null;
+
+  const components = Array.isArray(entry?.components)
+    ? entry.components.map((ref) => resolve(ref, 'pdpComponent')) : [];
+  const rows = (name: string) => components.flatMap((component) =>
+    component?.name === name && Array.isArray(component.data) ? component.data : []);
+  const contentRows = rows('product_content');
+  const content = contentRows.length === 1 ? resolve(contentRows[0], 'pdpDataProductContent') : undefined;
+  const variant = resolve(content?.variant, 'pdpContentSnapshotVariant');
+  const variantOptions = components.filter((component) => component?.name === 'variant_options');
+  const ambiguousPrice = variant?.isVariant === true || rows('variant_options').length > 0;
+  const cachedPrice = resolve(content?.price, 'pdpContentSnapshotPrice');
+  const formatted = /^Rp\s*(\d{1,3}(?:\.\d{3})+|\d+)$/u.exec(text(cachedPrice?.priceFmt) ?? '')?.[1];
+  const amount = exactPrice(cachedPrice?.value, 'IDR');
+  const price = !ambiguousPrice && variant?.isVariant === false && variantOptions.length === 1 &&
+    Array.isArray(variantOptions[0]?.data) && formatted && amount?.amount === Number(formatted.replace(/\./g, '')) &&
+    (cachedPrice?.currency === 'UNKNOWN' || cachedPrice?.currency === 'IDR') ? amount : null;
+  const media = rows('product_media').flatMap((ref) => {
+    const gallery = resolve(ref, 'pdpDataProductMedia')?.media;
+    return Array.isArray(gallery) ? gallery : [];
+  });
+  const photos = media.map((ref) => resolve(ref, 'pdpContentSnapshotMedia'))
+    .filter((item) => item?.type === 'image').map((item) => item?.URLOriginal);
+
+  return { title: text(content?.name), storeName: text(basic?.shopName), imageUrl: image(photos, url), price, ambiguousPrice };
+}
+
+function parseMetadata(html: string, url: URL, originalUrl: string): ProductMetadata | null {
+  const identity = listingKey(url);
+  const matches = (candidate: string) => {
+    const reference = safeHttps(candidate, url);
+    return reference !== null && listingKey(reference) === identity;
+  };
+  const tags = new Map<string, string[]>();
+  const pageUrls: string[] = [];
+  const products: Record<string, unknown>[] = [];
+  let state: Record<string, unknown> | undefined;
+  let hydration: ReturnType<typeof parsePdpCache> = null;
+  let hasReferencedProduct = false;
+  const nodes: DefaultTreeAdapterTypes.ChildNode[] = [...parse(html).childNodes];
+  while (nodes.length) {
+    const node = nodes.pop()!;
+    if ('childNodes' in node) {
+      for (const child of [...node.childNodes].reverse()) nodes.push(child);
+    }
+    if (!('tagName' in node)) continue;
+    const attr = (name: string) => node.attrs.find((entry) => entry.name === name)?.value;
+    const inHead = node.parentNode && 'tagName' in node.parentNode && node.parentNode.tagName === 'head';
+    if (node.tagName === 'meta' && inHead) {
+      const key = (attr('property') ?? attr('name'))?.toLowerCase();
+      const value = text(attr('content'));
+      if (key && value) {
+        const values = tags.get(key) ?? [];
+        values.push(value);
+        tags.set(key, values);
+      }
+    }
+    if (node.tagName === 'link' && inHead && attr('rel')?.toLowerCase().split(/\s+/).includes('canonical')) {
+      const href = text(attr('href'));
+      if (href) pageUrls.push(href);
+    }
+    if (node.tagName !== 'script') continue;
+    const jsonLd = attr('type')?.toLowerCase() === 'application/ld+json';
+    const nextData = attr('id') === '__NEXT_DATA__' && attr('type')?.toLowerCase() === 'application/json';
+    const data = node.childNodes[0];
+    if (!data || !('value' in data)) continue;
+    try {
+      if (!jsonLd && !nextData) {
+        if (attr('type')?.toLowerCase() === 'text/javascript') hydration ??= parsePdpCache(data.value, url);
+        continue;
+      }
+      const parsed: unknown = JSON.parse(data.value);
+      if (nextData) {
+        const props = record(record(parsed)?.props);
+        const page = record(record(props?.pageProps)?.data);
+        const layout = record(page?.pdpGetLayout);
+        const basic = record(layout?.basicInfo);
+        const productUrl = text(basic?.url);
+        if (productUrl && matches(productUrl)) state = layout;
+      } else {
+        for (const root of [parsed].flat()) {
+          const graph = record(root)?.['@graph'];
+          for (const entry of [root, ...(Array.isArray(graph) ? graph : [])]) {
+            const product = record(entry);
+            const reference = text(product?.url) ?? text(product?.['@id']);
+            if (!product || !tagged(product['@type'], 'Product') || !reference) continue;
+            hasReferencedProduct = true;
+            if (matches(reference)) products.push(product);
+          }
+        }
+      }
+    } catch {
+      // A malformed metadata script does not invalidate other sources.
+    }
+  }
+
+  pageUrls.push(...(tags.get('og:url') ?? []));
+  if (pageUrls.some((value) => !matches(value)) ||
+      (!products.length && !state && !hydration && (!pageUrls.length || hasReferencedProduct))) return null;
+  const firstTag = (key: string) => tags.get(key)?.[0];
+  const basic = record(state?.basicInfo);
+  const title = products.map((product) => text(product.name)).find(Boolean) ?? text(firstTag('og:title')) ?? text(firstTag('twitter:title')) ?? text(basic?.name) ?? hydration?.title ?? null;
+  const imageUrl = image(tags.get('og:image'), url) ?? image(tags.get('og:image:secure_url'), url) ??
+    image(tags.get('twitter:image'), url) ?? image(tags.get('twitter:image:src'), url) ??
+    products.map((product) => image(product.image, url)).find(Boolean) ?? image(basic?.image, url) ?? hydration?.imageUrl ?? null;
+
+  const prices: Price[] = [];
+  const sellers = new Set<string>();
+  let ambiguous = hydration?.ambiguousPrice ?? false;
+  if (hydration?.price) prices.push(hydration.price);
+  if (hydration?.storeName) sellers.add(hydration.storeName);
+  for (const product of products) {
+    if (product.offers == null) continue;
+    const offers = [product.offers].flat();
+    if (offers.length !== 1) ambiguous = true;
+    for (const entry of offers) {
+      const offer = record(entry);
+      const reference = text(offer?.url);
+      if (reference && !matches(reference)) { ambiguous = true; continue; }
+      const price = offer && tagged(offer['@type'], 'Offer') && offer.lowPrice == null && offer.highPrice == null
+        ? exactPrice(offer.price, offer.priceCurrency) : null;
+      if (price) prices.push(price);
+      else ambiguous = true;
+      const seller = text(record(offer?.seller)?.name);
+      if (seller) sellers.add(seller);
+    }
+  }
+  const amounts = tags.get('product:price:amount') ?? [];
+  const currencies = tags.get('product:price:currency') ?? [];
+  if (amounts.length || currencies.length) {
+    const currency = currencies[0] === 'Rp' && hydration?.price ? 'IDR' : currencies[0];
+    const price = amounts.length === 1 && currencies.length === 1 ? exactPrice(amounts[0], currency) : null;
+    if (price) prices.push(price);
+    else ambiguous = true;
+  }
+  const stateSeller = text(record(record(state?.shopInfo)?.shopCore)?.name);
+  if (stateSeller) sellers.add(stateSeller);
+  const price = !ambiguous && prices.every((candidate) => candidate.amount === prices[0]?.amount) ? prices[0] ?? null : null;
+  const storeName = sellers.size === 1 ? [...sellers][0] ?? null : null;
+  if (!title && !price && !imageUrl && !storeName) return null;
+  return { source: 'tokopedia', originalUrl, productUrl: 'https://www.tokopedia.com' + identity, title, price, imageUrl, storeName };
+}
+
+async function readHtml(response: Response): Promise<string | null> {
+  const encoding = response.headers.get('content-encoding');
+  if (response.status !== 200 || !/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ||
+      (encoding && encoding.toLowerCase() !== 'identity') || Number(response.headers.get('content-length')) > maxBytes ||
+      !response.body) {
+    void response.body?.cancel().catch(() => {});
+    return null;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let html = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return html + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > maxBytes) return null;
+      html += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    void reader.cancel().catch(() => {});
+  }
+}
+
+/** Extract from an authorized public listing. An optional transport is for trusted callers and fixtures. */
+export async function extractTokopediaMetadata(originalUrl: string, transport: PageRequest = requestPublicPage,
+  onDiagnostic?: Diagnostic): Promise<ProductMetadata | null> {
+  if (originalUrl.length > 4096) return null;
+  let current = safeHttps(originalUrl);
+  let identity = current && listingKey(current);
+  const controller = new AbortController();
+  let host = current?.hostname ?? '';
+  let hop = 0;
+  const fail = (reason: string, status?: number) => {
+    onDiagnostic?.(reason, host, status);
+    return null;
+  };
+  const timeoutReason = () => hop > 0 ? 'destination_timeout' : 'timeout';
+  const extract = async () => {
+    if (!current) return fail('redirect_disallowed');
+    const visited = new Set<string>();
+    for (; current && hop <= 4; hop++) {
+      controller.signal.throwIfAborted();
+      host = current.hostname;
+      current.hash = '';
+      const key = listingKey(current);
+      if (identity ? key !== identity : !key && !shortHosts.has(host)) return fail('redirect_disallowed');
+      identity ??= key;
+      if (visited.has(current.href)) return fail('redirect_limit');
+      if (current.href.length > 4096) return fail('redirect_disallowed');
+      visited.add(current.href);
+      const response = await transport(current, controller.signal);
+      if (redirectStatuses.has(response.status)) {
+        const location = response.headers.get('location');
+        void response.body?.cancel().catch(() => {});
+        if (!location) return fail('redirect_missing_location', response.status);
+        current = safeHttps(location, current);
+        if (!current) return fail('redirect_disallowed');
+        continue;
+      }
+      const issue = response.status !== 200 ? 'http_failure' :
+        !/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ? 'not_html' :
+        !response.body ? 'empty_response' : !key ? 'metadata_missing' : null;
+      if (issue) {
+        void response.body?.cancel().catch(() => {});
+        return fail(issue, response.status);
+      }
+      const html = await readHtml(response);
+      const metadata = html === null ? null : parseMetadata(html, current, originalUrl);
+      return metadata ?? fail('metadata_missing', response.status);
+    }
+    return fail('redirect_limit');
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(fail(timeoutReason()));
+    }, 5000);
+  });
+  try {
+    return await Promise.race([extract().catch((error: unknown) => controller.signal.aborted ? null :
+      fail(error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name) ? timeoutReason() : 'request_error')), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function boundedJpeg(bytes: Buffer) {
+  if (bytes.length < 4 || bytes.readUInt16BE(0) !== 0xffd8 ||
+      bytes.readUInt16BE(bytes.length - 2) !== 0xffd9) return false;
+
+  let frame = false;
+  for (let offset = 2; offset + 4 < bytes.length;) {
+    if (bytes[offset] !== 0xff) return false;
+    const marker = bytes[offset + 1];
+    const length = bytes.readUInt16BE(offset + 2);
+    const end = offset + 2 + length;
+    if (length < 2 || end >= bytes.length) return false;
+    if (marker === 0xda) return frame && length >= 8 && end < bytes.length - 2;
+    if (marker === 0xc0 || marker === 0xc2) {
+      if (frame || length < 11 || bytes[offset + 4] !== 8) return false;
+      const height = bytes.readUInt16BE(offset + 5);
+      const width = bytes.readUInt16BE(offset + 7);
+      if (!width || !height || width > 1600 || height > 1600) return false;
+      frame = true;
+    }
+    offset = end;
+  }
+  return false;
+}
+
+export async function downloadTokopediaImage(value: string, transport: PageRequest =
+  (url, signal) => requestPublicPage(url, signal, 'image/jpeg')): Promise<Buffer | null> {
+  const url = value.length <= 2048 ? safeHttps(value) : null;
+  if (!url || !imageHosts.test(url.hostname)) return null;
+
+  const signal = AbortSignal.timeout(4000);
+  try {
+    const response = await Promise.race([
+      transport(url, signal),
+      new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+    ]);
+    // CDN URLs are expected to be final. Never fetch an image redirect.
+    if (response.status !== 200 || !/^image\/jpeg(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ||
+        Number(response.headers.get('content-length')) > maxImageBytes || !response.body) {
+      void response.body?.cancel().catch(() => {});
+      return null;
+    }
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    const reader = response.body.getReader();
+    try {
+      while (true) {
+        const { value: chunk, done } = await reader.read();
+        signal.throwIfAborted();
+        if (done) break;
+        size += chunk.byteLength;
+        if (size > maxImageBytes) return null;
+        chunks.push(chunk);
+      }
+    } finally {
+      void reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+    const bytes = Buffer.concat(chunks, size);
+    return boundedJpeg(bytes) ? bytes : null;
+  } catch {
+    return null;
+  }
+}

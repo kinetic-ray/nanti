@@ -112,15 +112,15 @@ describe('Marketplace price metadata', () => {
       '<script type="application/ld+json">' + json + '</script>')))
       .resolves.toMatchObject({ title: 'Product', price: { priceMinor: 12900000, currency: 'IDR' } });
   });
-  it('withholds conflicting prices and ignores unrelated listings', async () => {
+  it('withholds conflicting prices and rejects a page with only unrelated listing metadata', async () => {
     const json = JSON.stringify({ '@type': 'Product', url: 'https://www.tokopedia.com/other/item',
       offers: { '@type': 'Offer', price: '1', priceCurrency: 'IDR' } });
     const fragment = '<meta property="product:price:amount" content="100"><meta property="product:price:currency" content="IDR">' +
       '<script type="application/ld+json">' + json + '</script>';
     await expect(previewProductMetadata(target, fetchHtml(fragment)))
-      .resolves.toMatchObject({ price: { priceMinor: 10000, currency: 'IDR' } });
+      .resolves.toBeNull();
     const conflict = '<meta property="product:price:amount" content="200"><meta property="product:price:currency" content="IDR">' +
-      '<script type="application/ld+json">' + JSON.stringify({ '@type': 'Product',
+      '<script type="application/ld+json">' + JSON.stringify({ '@type': 'Product', url: target.href,
         offers: { '@type': 'Offer', price: '300', priceCurrency: 'IDR' } }) + '</script>';
     await expect(previewProductMetadata(target, fetchHtml(conflict)))
       .resolves.toMatchObject({ price: null });
@@ -135,7 +135,7 @@ describe('Marketplace preview fallback coverage', () => {
 
   it('uses a safe secondary image when the primary Open Graph image is disallowed', async () => {
     const result = await previewProductMetadata(target, html(
-      '<meta property="og:title" content="Lamp">' +
+      '<link rel="canonical" href="/shop/product"><meta property="og:title" content="Lamp">' +
       '<meta property="og:image" content="https://example.com/unsafe.jpg">' +
       '<meta property="og:image:secure_url" content="https://images.tokopedia.net/img/lamp.jpg">',
     ));
@@ -143,7 +143,7 @@ describe('Marketplace preview fallback coverage', () => {
   });
 
   it('reads an ImageObject and a single Offer in an array from Product JSON-LD', async () => {
-    const json = JSON.stringify({ '@type': 'Product', name: 'Reading Lamp',
+    const json = JSON.stringify({ '@type': 'Product', url: target.href, name: 'Reading Lamp',
       image: [{ '@type': 'ImageObject', url: 'https://images.tokopedia.net/img/lamp.jpg' }],
       offers: [{ '@type': 'Offer', price: '95000', priceCurrency: 'IDR' }] });
     await expect(previewProductMetadata(target, html(
@@ -155,7 +155,7 @@ describe('Marketplace preview fallback coverage', () => {
   });
 
   it('does not guess a price from multiple variant offers', async () => {
-    const json = JSON.stringify({ '@type': 'Product', name: 'Lamp',
+    const json = JSON.stringify({ '@type': 'Product', url: target.href, name: 'Lamp',
       offers: [{ '@type': 'Offer', price: '10', priceCurrency: 'IDR' },
         { '@type': 'Offer', price: '20', priceCurrency: 'IDR' }] });
     await expect(previewProductMetadata(target, html(

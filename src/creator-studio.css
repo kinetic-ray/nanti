@@ -80,7 +80,9 @@
 .studio-preview-toolbar{border-bottom:1px solid #c9c1dc;padding-bottom:1rem;margin-bottom:1.5rem}
 .studio-preview-toolbar strong{font-size:.85rem;letter-spacing:.04em;text-transform:uppercase}
 .studio-viewports{border-radius:0;background:#ded8ed}.studio-viewports button{border-radius:0}
-.studio-preview-frame{border-radius:0;border:1px solid #c8bfdc;box-shadow:14px 16px 0 #d8d0eb}
+/* Compact search changes the content height during scrolling. Anchoring the
+   preview to its previous content position can undo the wheel movement. */
+.studio-preview-frame{border-radius:0;border:1px solid #c8bfdc;box-shadow:14px 16px 0 #d8d0eb;overflow-anchor:none}
 .studio .studio-font-choice{min-height:136px}
 .studio button:focus-visible,.studio a:focus-visible,.studio input:focus-visible,.studio select:focus-visible{outline-color:#4834b9}
 @media(max-width:900px){.studio-workspace{grid-template-columns:1fr}.studio-header{height:70px}.studio-mobile-switch{background:#f6f5fc}.studio-mobile-switch button{border-radius:0;border-color:var(--studio-line)}.studio-mobile-switch button[aria-pressed=true]{background:var(--studio-brand);color:#fff}.studio-preview-area{padding:1.25rem}.studio-panel-heading{padding:1.5rem 1.2rem}.studio-progress{margin:1rem 1.2rem .25rem}.studio-step-hint{padding:.8rem 1.2rem 0}.studio-settings{padding:1.3rem 1.2rem}.studio-next,.studio-panel-footer{padding:1rem 1.2rem}}

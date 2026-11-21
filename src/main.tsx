@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
 import { sharedProductLink } from './share-target.js';
-import type { Currency, Item, ItemWriteInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
+import type { Currency, Item, ItemSaveInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { DeleteForm, ItemForm, ListForm, PrivacyForm } from './forms.js';
 import { LanguagePicker, LocaleProvider, useLocale } from './locale.js';
@@ -157,13 +157,16 @@ function App() {
     finish('Wishlist created.');
   }
 
-  async function saveItem(data: ItemWriteInput) {
+  async function saveItem(data: ItemSaveInput, requestKey?: string) {
     if (editor?.kind !== 'item') return;
     const { item, list } = editor;
     const endpoint = `/wishlists/${list.id}/items`;
-    await api(item ? `${endpoint}/${item.id}` : endpoint, { method: item ? 'PUT' : 'POST', data });
+    const result = await api<{ photoStatus: 'saved' | 'unavailable' } | undefined>(
+      item ? `${endpoint}/${item.id}` : endpoint, { method: item ? 'PUT' : 'POST', data, requestKey },
+    );
     refresh();
-    finish(item ? 'Product updated.' : 'Product added.');
+    finish(result?.photoStatus === 'unavailable' ? 'Product added without its store photo.' :
+      item ? 'Product updated.' : 'Product added.');
   }
 
   async function remove() {
@@ -297,6 +300,7 @@ function App() {
                             <span className="sr-only"> ({t('opens in a new tab')})</span>
                           </a>}
                           <h3>{item.name}</h3>
+                          {item.sellerName && <span className="hint">{t('Seller: {seller}', { seller: item.sellerName })}</span>}
                           <div className="product-price">
                             <strong className={item.priceMinor === null ? 'price-missing' : undefined}>
                               {item.priceMinor === null ? t('No price') : money(item.priceMinor * item.quantity, list.currency)}
@@ -330,6 +334,7 @@ function App() {
       </div>
       {editor?.kind === 'list' && <ListForm list={editor.list} close={() => setEditor(null)} save={saveList} />}
       {editor?.kind === 'item' && <ItemForm item={editor.item} initialUrl={!editor.item ? sharedDraft ?? undefined : undefined} listId={editor.list.id} currency={editor.list.currency}
+        existingItems={detail?.id === editor.list.id ? detail.items : undefined}
         close={() => { setSharedDraft(null); setEditor(null); }} save={saveItem} />}
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}

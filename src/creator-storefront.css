@@ -94,7 +94,11 @@ body:has(.storefront){background:#faf9fc}.storefront{--sf-ink:#251a3b;--sf-muted
 .storefront-product-art.is-image-fallback>img,.storefront-modal-art.is-image-fallback>img{display:none}
 
 
-/* Avoid mobile scroll anchoring jumps while the sticky search changes density. */
+/* The standalone storefront scrolls the document. Anchor adjustments while
+   the sticky search changes height can send the document back across its
+   compaction threshold. Studio applies this policy to its preview frame. */
+html:has(.storefront:not(.storefront-embedded)){overflow-anchor:none}
+
 .storefront-search{overflow-anchor:none;transition:none}
 .storefront-search-sentinel{overflow-anchor:none}
 .storefront-product-art>img,.storefront-modal-art>img{background:transparent}

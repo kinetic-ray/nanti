@@ -3,17 +3,39 @@ import type { DefaultTreeAdapterTypes } from 'parse5';
 import { isIkeaMetadataLink, productMerchant } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import { currencies, parsePrice } from '../shared/wishlist.js';
+import { extractTokopediaMetadata } from './tokopedia-metadata.js';
+
+type Diagnostic = (reason: string, host: string, status?: number) => void;
+type ProductPreview = { title: string | null; image: string | null; price: NonNullable<ProductImport['price']> | null; sellerName?: string; productUrl?: string };
 
 const MAX_BYTES = 512 * 1024;
 
-export async function previewProduct(url: URL, request = fetch): Promise<string | null> {
+export async function previewProduct(url: URL, request?: typeof fetch): Promise<string | null> {
   return (await previewProductMetadata(url, request))?.title ?? null;
 }
 
-export async function previewProductMetadata(url: URL, request = fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
-  // Shopee short links and product pages may expose public Open Graph metadata.
-  // Only follow redirects within explicitly allowed Shopee domains; never fetch arbitrary destinations.
-  if (productMerchant(url.hostname) === 'shopee' || productMerchant(url.hostname) === 'tokopedia') return previewMarketplaceMetadata(url, request, onDiagnostic);
+export async function previewProductMetadata(url: URL, request?: typeof fetch, onDiagnostic?: Diagnostic): Promise<ProductPreview | null> {
+  const merchant = productMerchant(url.hostname);
+  if (merchant === 'tokopedia') {
+    // The production extractor uses its DNS-pinned transport. Explicit transports support fixtures.
+    const fetchPage = request;
+    const metadata = await extractTokopediaMetadata(url.href, fetchPage && ((target, signal) =>
+      fetchPage(target, { redirect: 'manual', signal, headers: { accept: 'text/html' } })), (reason, host, status) => {
+      console.info('[product-import]', { merchant, host: host || url.hostname, reason, ...(status === undefined ? {} : { status }) });
+      onDiagnostic?.(reason, host || url.hostname, status);
+    });
+    if (!metadata) return null;
+    const priceMinor = metadata.price ? parsePrice(String(metadata.price.amount)) : null;
+    return {
+      productUrl: metadata.productUrl,
+      title: metadata.title?.slice(0, 160) ?? null,
+      image: metadata.imageUrl && metadata.imageUrl.length <= 2048 ? metadata.imageUrl : null,
+      price: priceMinor === null ? null : { priceMinor, currency: 'IDR' },
+      ...(metadata.storeName && { sellerName: metadata.storeName.slice(0, 160) }),
+    };
+  }
+  request ??= fetch;
+  if (merchant === 'shopee') return previewMarketplaceMetadata(url, request, onDiagnostic);
   if (!isIkeaMetadataLink(url)) {
     onDiagnostic?.('adapter_disabled', url.hostname);
     return null;
@@ -125,12 +147,6 @@ const shopeeHosts = new Set([
 ]);
 function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase().replace(/^www\./u, '')); }
 
-function isMarketplaceHost(host: string, merchant: 'shopee' | 'tokopedia') {
-  return merchant === 'shopee' ? isShopeeHost(host) :
-    ['tokopedia.com', 'tokopedia.link', 'tk.tokopedia.com', 'vt.tokopedia.com', 'shop-id.tokopedia.com'].includes(host) ||
-    host.endsWith('.tokopedia.com');
-}
-
 async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
   const diagnostic = (reason: string, host: string, status?: number) => {
     // No full URLs, query strings, affiliate codes or product identifiers in logs.
@@ -140,11 +156,9 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
   let current = new URL(initial.href);
   let hop = 0;
   try {
-    const merchant = productMerchant(initial.hostname);
-    if (merchant !== 'shopee' && merchant !== 'tokopedia') return null;
     current.hash = '';
     for (hop = 0; hop < 6; hop++) {
-      if (current.protocol !== 'https:' || !isMarketplaceHost(current.hostname, merchant) ||
+      if (current.protocol !== 'https:' || !isShopeeHost(current.hostname) ||
           current.username || current.password || current.port) {
         diagnostic('redirect_disallowed', current.hostname);
         return null;
@@ -252,9 +266,7 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
           const host = parsed.hostname.toLowerCase();
           if (parsed.protocol === 'https:' && !parsed.username && !parsed.password &&
               (host === 'susercontent.com' || host.endsWith('.susercontent.com') ||
-               host === 'shopee.co.id' || host.endsWith('.shopee.co.id') ||
-               (merchant === 'tokopedia' && (host === 'tokopedia.net' || host.endsWith('.tokopedia.net') ||
-                 host === 'tokopedia.com' || host.endsWith('.tokopedia.com'))))) {
+               host === 'shopee.co.id' || host.endsWith('.shopee.co.id'))) {
             image = parsed.href.slice(0, 2048);
             break;
           }

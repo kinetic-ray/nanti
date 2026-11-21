@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { currencies, parsePrice } from '../shared/wishlist.js';
-import type { Currency, Item, ItemWriteInput, WishlistSummary } from '../shared/wishlist.js';
+import type { Currency, Item, ItemSaveInput, WishlistSummary } from '../shared/wishlist.js';
 import { safeImportUrl } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
@@ -135,13 +135,14 @@ export function ListForm({ list, close, save }: {
   );
 }
 
-export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
+export function ItemForm({ item, initialUrl, listId, currency, existingItems, close, save }: {
   item?: Item;
   initialUrl?: string;
+  existingItems?: Item[];
   listId: string;
   currency: Currency;
   close: () => void;
-  save: (data: ItemWriteInput) => Promise<void>;
+  save: (data: ItemSaveInput, requestKey?: string) => Promise<void>;
 }) {
   const { t, decimal, money, language, error: localError } = useLocale();
   const [url, setUrl] = useState(item?.url ?? initialUrl ?? '');
@@ -162,6 +163,8 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
   const [busy, setBusy] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
   const pastePending = useRef(false);
+  const submitting = useRef(false);
+  const saveRequestKey = useRef<string | null>(null);
 
   async function chooseImage(file?: File) {
     if (!file) return;
@@ -241,7 +244,7 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
     setLooking(true);
     try {
       const result = await api<ProductImport>('/products/import', {
-        method: 'POST', data: { url: parsed.href },
+        method: 'POST', data: { url: value.trim() },
       });
       setPreview(result);
       if (result.name && (!name.trim() || (replaced && importedName))) {
@@ -253,8 +256,19 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
         setPrice(language === 'id' ? value.replace('.', ',') : value);
         setImportedPrice(true);
       }
-      setLookup(result.status === 'manual_required' ? 'Product details could not be retrieved automatically. You can still save the link by entering a name.'
-        : 'Review the product details before saving.');
+      const timedOut = result.diagnostic?.code === 'timeout' || result.diagnostic?.code === 'destination_timeout';
+      if (result.merchant !== 'tokopedia') {
+        setLookup(result.status === 'manual_required' ? 'Product details could not be retrieved automatically. You can still save the link by entering a name.'
+          : 'Review the product details before saving.');
+      } else if (timedOut) {
+        setLookup('Tokopedia took too long to respond. Try again or enter the details yourself.');
+      } else if (result.status === 'manual_required') {
+        setLookup('The link is ready to save. Add a name to finish.');
+      } else {
+        setLookup(result.name && result.price && result.imagePath && result.sellerName
+          ? 'Review the product details before saving.'
+          : 'Some details came through. Check them and fill in anything you want to save.');
+      }
     } catch (failure) {
       setLookup(errorMessage(failure));
     } finally {
@@ -266,7 +280,7 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (looking || busy) return;
+    if (looking || busy || submitting.current) return;
     if (!showDetails && url.trim()) { await findProduct(url); return; }
     setError('');
     if (!name.trim()) { setError('Enter a product name.'); return; }
@@ -283,24 +297,39 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
       setError('Enter a valid HTTP or HTTPS product link, or leave it blank.');
       return;
     }
+    const originalUrl = parsed ? url.trim() : null;
+    const sellerName = preview?.merchant === 'tokopedia' && preview.originalUrl === originalUrl
+      ? preview.sellerName ?? (item?.url === originalUrl ? item.sellerName : null)
+      : item?.url === originalUrl ? item.sellerName : null;
+    const saveTokopediaImage = !item && !imageKey && !uploadedImage && preview?.merchant === 'tokopedia' &&
+      preview.originalUrl === originalUrl && Boolean(preview.imagePath);
+    submitting.current = true;
     setBusy(true);
     try {
       if (uploadedImage) {
         const blob = await (await fetch(uploadedImage)).blob();
         if (blob.size > 195_000) throw new Error('Image is too large after compression.');
-        const { uploadUrl, key } = await api<{ uploadUrl: string; key: string }>('/uploads/product-image', { method: 'POST', data: { contentType: 'image/jpeg', size: blob.size } });
-        const result = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
-        if (!result.ok) throw new Error('Image upload failed. Try again.');
+        const result = await fetch('/api/uploads/product-image/content', {
+          method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-Nanti-Request': '1' }, body: blob,
+        }).catch(() => { throw new Error('Could not reach Nanti. Try again.'); });
+        const upload = await result.json().catch(() => null);
+        if (!result.ok || typeof upload?.key !== 'string') throw new Error(upload?.error ?? 'Image upload failed. Try again.');
+        const { key } = upload;
+        setUploadedImage(null);
         setImageKey(key);
-        await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageKey: key,
+        await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey: key, sellerName,
           ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
         return;
       }
-      await save({ name, url: parsed?.href ?? null, priceMinor, quantity: Number(quantity), imageKey,
-        ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
+      if (saveTokopediaImage) saveRequestKey.current ??= crypto.randomUUID();
+      await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey, sellerName,
+        ...(saveTokopediaImage && { saveTokopediaImage: true, tokopediaProductUrl: preview?.productUrl }),
+        ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) },
+        saveTokopediaImage ? saveRequestKey.current ?? undefined : undefined);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -324,9 +353,11 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
             }} />
         </label>
         {!showDetails && <p className="hint">{t('Use a link from Shopee, Tokopedia, IKEA, or another store.')}</p>}
-        {(!preview || preview.originalUrl !== url) && <div className="actions">
+        {!item && preview?.merchant === 'tokopedia' && existingItems?.some(saved => saved.url === preview.originalUrl) &&
+          <p className="hint" role="status">{t('This link is already in your wishlist. You can update the quantity there.')}</p>}
+        {(!preview || preview.originalUrl !== url || (preview.merchant === 'tokopedia' && preview.status === 'manual_required')) && <div className="actions">
           <button type="button" className={showDetails ? 'lookup' : 'primary'} disabled={looking || busy || !url.trim()}
-            onClick={() => void findProduct(url)}>{t(looking ? 'Looking up…' : 'Check product link')}</button>
+            onClick={() => void findProduct(url)}>{t(looking ? 'Looking up…' : preview?.merchant === 'tokopedia' && preview.status === 'manual_required' ? 'Try again' : 'Check product link')}</button>
           {!showDetails && <button type="button" onClick={() => {
             setShowDetails(true);
             requestAnimationFrame(() => nameInput.current?.focus());
@@ -334,7 +365,7 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
             {t('Enter details myself')}
           </button>}
         </div>}
-        {(lookup || looking) && <p className="hint" role="status">{looking ? t('Looking up…') : localError(lookup)}</p>}
+        {(lookup || looking) && <p className="hint" role="status">{looking ? t('Checking the product link…') : localError(lookup)}</p>}
         {preview && <div className={preview.status === 'manual_required' ? 'import-fallback' : 'import-preview'}>
           {preview.imagePath && !imageFailed && <img src={preview.imagePath} alt="" width="80" height="64"
             decoding="async" onError={() => setImageFailed(true)} />}
@@ -343,6 +374,7 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
               shopee: 'Shopee', tokopedia: 'Tokopedia', ikea: 'IKEA', other: preview.hostname,
             }[preview.merchant] })}</p>
             {preview.name && <strong>{preview.name}</strong>}
+            {preview.sellerName && <p className="hint">{t('Seller: {seller}', { seller: preview.sellerName })}</p>}
             {preview.price && <p>{money(preview.price.priceMinor, preview.price.currency)}</p>}
             {preview.status !== 'manual_required' && <p className="hint">{t('From the store page · unverified')}</p>}
             {preview.price && preview.price.currency !== currency &&
@@ -387,7 +419,9 @@ export function ItemForm({ item, initialUrl, listId, currency, close, save }: {
                     alt="Product preview" onError={() => setImageFailed(true)} />
                 : <span aria-hidden="true">＋<small>Tambah gambar (opsional)</small></span>}
             </button>
-            {(uploadedImage || imageKey) && <button type="button" className="product-image-remove"
+            {!item && preview?.merchant === 'tokopedia' && preview.imagePath && !preview.canSaveImage && !uploadedImage &&
+              <p className="hint">{t('Photo storage is unavailable. You can still save the product without a photo.')}</p>}
+            {(uploadedImage || imageKey) && <button type="button" className="product-image-remove" disabled={busy || looking}
               onClick={() => { setUploadedImage(null); setImageKey(null); if (uploadInput.current) uploadInput.current.value = ''; }}>
               Hapus gambar
             </button>}
