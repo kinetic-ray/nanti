@@ -71,7 +71,7 @@ describe.skipIf(!databaseUrl)('Consumer accounts over HTTP and MySQL', () => {
       }
       const { proof, authorization } = entry;
       const idToken = await new SignJWT({ nonce: proof.nonce ?? authorization.searchParams.get('nonce'),
-        ...(provider === 'google' && { name: 'Verified profile' }), email: 'same-email@example.test' })
+        ...(provider === 'google' && { name: 'Verified profile', picture: 'https://lh3.googleusercontent.com/profile' }), email: 'same-email@example.test' })
         .setProtectedHeader({ alg: 'RS256', kid: jwk.kid })
         .setSubject(proof.subject).setIssuer(proof.issuer ?? issuer)
         .setAudience(proof.audience ?? (provider === 'google' ? google : apple))
@@ -142,6 +142,19 @@ describe.skipIf(!databaseUrl)('Consumer accounts over HTTP and MySQL', () => {
   });
   afterAll(() => db.$disconnect());
 
+  it('rejects a Google sign-in started on an origin that cannot receive the callback cookie', async () => {
+    const { http } = await fixture();
+    const mismatch = await http.post(`${path}/google/start`).set(mutation)
+      .set('Origin', 'https://alias.nanti.example.test').send({ purpose: 'signin' }).expect(409);
+    expect(mismatch.body).toEqual({ error: 'Open Nanti at its main address and try signing in again.' });
+    expect(mismatch.headers['set-cookie']).toBeUndefined();
+
+    const canonical = await http.post(`${path}/google/start`).set(mutation)
+      .set('Origin', origin).send({ purpose: 'signin' }).expect(200);
+    expect(new URL(canonical.body.url).searchParams.get('redirect_uri')).toBe(`${origin}${path}/google/callback`);
+    expect(String(canonical.headers['set-cookie'])).toContain('__Host-nanti-oauth-google=');
+  });
+
   it('verifies signed Google and Apple responses and never merges on email', async () => {
     const { http, signIn } = await fixture();
     const subject = randomUUID();
@@ -152,10 +165,11 @@ describe.skipIf(!databaseUrl)('Consumer accounts over HTTP and MySQL', () => {
     await http.get(`/api/wishlists/${list.body.id}`).set('Cookie', second).expect(404);
     await http.get(path).set('Cookie', first).expect(200, {
       available: ['google', 'apple'], account: { displayName: 'Verified profile', providers: ['google'],
+        avatarUrl: 'https://lh3.googleusercontent.com/profile', canAccessCreatorStudio: false,
         recentlyVerified: true, import: null },
     });
     await http.get(path).set('Cookie', second).expect(200, {
-      available: ['google', 'apple'], account: { displayName: null, providers: ['apple'], recentlyVerified: true, import: null },
+      available: ['google', 'apple'], account: { displayName: null, providers: ['apple'], canAccessCreatorStudio: false, recentlyVerified: true, import: null },
     });
     const returning = await signIn('google', subject);
     expect(returning).not.toBe(first);

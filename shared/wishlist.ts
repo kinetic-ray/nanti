@@ -2,8 +2,9 @@ export const currencies = ['USD', 'THB', 'EUR', 'GBP', 'CAD', 'AUD', 'SGD', 'MYR
 export type Currency = typeof currencies[number];
 
 export type WishlistSummary = { id: string; name: string; currency: Currency };
-export type ItemInput = { name: string; url: string | null; priceMinor: number | null; quantity: number; imageKey?: string | null };
+export type ItemInput = { name: string; url: string | null; priceMinor: number | null; quantity: number; imageKey?: string | null; sellerName?: string | null };
 export type ItemWriteInput = ItemInput & { priceSource?: 'imported_unverified' };
+export type ItemSaveInput = ItemWriteInput & { saveTokopediaImage?: true; tokopediaProductUrl?: string };
 export type Item = ItemInput & { id: string };
 export type Wishlist = WishlistSummary & {
   items: Item[];

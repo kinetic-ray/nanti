@@ -3,6 +3,8 @@ import { connectDatabase } from '../server/database.js';
 import request from 'supertest';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../server/app.js';
+import { createImageStorage } from '../server/image-storage.js';
+import * as tokopedia from '../server/tokopedia-metadata.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
 import type { WishlistRepository } from '../server/wishlist.js';
 import type { Item, WishlistSummary } from '../shared/wishlist.js';
@@ -160,6 +162,156 @@ describe.skipIf(!databaseUrl)('Wishlist API with MySQL-compatible persistence', 
   const db = connectDatabase(databaseUrl ?? 'mysql://127.0.0.1/nanti_test');
   afterAll(() => db.$disconnect());
   contract(prismaWishlists(db));
+  it('saves a Tokopedia preview with an optional preview-only image and isolates the saved item by owner', async () => {
+    const url = 'https://TOKOPEDIA.LINK:443/helm?ref=%2f#saved';
+    const name = 'Helm Full Face MLA Crypton';
+    const sellerName = 'Fixture Helmet Shop';
+    const options = {
+      secret: randomBytes(32).toString('hex'), secureCookies: false, preview: async () => null,
+      lookupMetadata: async () => ({
+        title: name, sellerName, image: 'https://images.tokopedia.net/fixture.jpg',
+        productUrl: 'https://www.tokopedia.com/shop/helm',
+        price: { priceMinor: 34500000, currency: 'IDR' as const },
+      }),
+    };
+    const app = createApp({ ...options, repository: prismaWishlists(db) });
+    const agent = request.agent(app);
+    const session = await agent.post('/api/session').set(mutation).send({}).expect(200);
+    const cookie = session.headers['set-cookie']![0]!.split(';')[0]!;
+    const { body: list } = await agent.post('/api/wishlists').set(mutation)
+      .send({ name: 'Helmet save regression', currency: 'IDR' }).expect(201);
+    const { body: preview } = await agent.post('/api/products/import').set(mutation).send({ url }).expect(200);
+    expect(preview).toMatchObject({ originalUrl: url, name, sellerName,
+      price: { priceMinor: 34500000, currency: 'IDR' }, imagePath: expect.any(String) });
+    expect(preview.canSaveImage).toBeUndefined();
+    const input = { name: preview.name, url: preview.originalUrl, sellerName: preview.sellerName,
+      priceMinor: preview.price.priceMinor, quantity: 1, imageKey: null, priceSource: 'imported_unverified' };
+    const listPath = '/api/wishlists/' + list.id;
+    await agent.post(listPath + '/items').set(mutation).send(input).expect(201);
+    const fresh = createApp({ ...options, repository: prismaWishlists(db) });
+    const { body: reloaded } = await request(fresh).get(listPath).set('Cookie', cookie).expect(200);
+    expect(reloaded.items).toEqual([{ id: expect.any(String), name, url, sellerName,
+      priceMinor: 34500000, quantity: 1, imageKey: null }]);
+    const other = request.agent(fresh);
+    await other.post('/api/session').set(mutation).send({}).expect(200);
+    await other.get(listPath).expect(404);
+    await other.post(listPath + '/items').set(mutation).send(input).expect(404);
+  });
+  it('copies a Tokopedia photo on save, deduplicates retries, and reloads private bytes', async () => {
+    const storage = createImageStorage({
+      NANTI_S3_ENDPOINT: 'https://storage.example.com', NANTI_S3_BUCKET: 'nanti-test',
+      NANTI_S3_REGION: 'auto', NANTI_S3_ACCESS_KEY_ID: 'test', NANTI_S3_SECRET_ACCESS_KEY: 'test',
+    })!;
+    const bytes = Buffer.from([255, 216, 255, 217]);
+    const download = vi.spyOn(tokopedia, 'downloadTokopediaImage').mockResolvedValue(bytes);
+    const store = vi.spyOn(storage, 'storeJpeg').mockImplementation(async (owner, _body, key) => key ?? storage.createUpload(owner).key);
+    vi.spyOn(storage, 'readJpeg').mockResolvedValue(bytes);
+    const options = {
+      secret: randomBytes(32).toString('hex'), secureCookies: false, imageStorage: storage, preview: async () => null,
+      lookupMetadata: async () => ({ title: 'Helmet', price: null, image: 'https://images.tokopedia.net/helmet.jpg' }),
+    };
+    try {
+      const agent = request.agent(createApp({ ...options, repository: prismaWishlists(db) }));
+      const session = await agent.post('/api/session').set(mutation).send({}).expect(200);
+      const cookie = session.headers['set-cookie']![0]!.split(';')[0]!;
+      const { body: list } = await agent.post('/api/wishlists').set(mutation)
+        .send({ name: 'Automatic photo', currency: 'IDR' }).expect(201);
+      const path = '/api/wishlists/' + list.id;
+      const url = 'https://tokopedia.link/helmet?ref=%2f#saved';
+      const input = { name: 'Helmet', url, priceMinor: 34500000, quantity: 1, saveTokopediaImage: true };
+      const key = randomUUID();
+      for (let retry = 0; retry < 2; retry++) {
+        await agent.post(path + '/items').set(mutation).set('Idempotency-Key', key).send(input)
+          .expect(201, { photoStatus: 'saved' });
+      }
+      expect(download).toHaveBeenCalledOnce();
+      expect(store).toHaveBeenCalledOnce();
+      const fresh = createApp({ ...options, repository: prismaWishlists(db) });
+      const { body } = await request(fresh).get(path).set('Cookie', cookie).expect(200);
+      expect(body.items).toEqual([expect.objectContaining({ id: key, url, imageKey: expect.stringMatching(/^products\//) })]);
+      const imagePath = path + '/items/' + key + '/uploaded-image';
+      await request(fresh).get(imagePath).set('Cookie', cookie).expect(200, bytes);
+      const other = request.agent(fresh);
+      await other.post('/api/session').set(mutation).send({}).expect(200);
+      await other.get(imagePath).expect(404);
+    } finally {
+      download.mockRestore();
+    }
+  });
+  it('saves text and discards an uncertain upload when automatic photo storage fails', async () => {
+    const storage = createImageStorage({
+      NANTI_S3_ENDPOINT: 'https://storage.example.com', NANTI_S3_BUCKET: 'nanti-test',
+      NANTI_S3_REGION: 'auto', NANTI_S3_ACCESS_KEY_ID: 'test', NANTI_S3_SECRET_ACCESS_KEY: 'test',
+    })!;
+    const download = vi.spyOn(tokopedia, 'downloadTokopediaImage').mockResolvedValue(Buffer.from('fixture'));
+    const store = vi.spyOn(storage, 'storeJpeg').mockRejectedValue(new Error('Fixture PUT timed out'));
+    const discard = vi.spyOn(storage, 'discard').mockResolvedValue(true);
+    try {
+      const app = createApp({
+        repository: prismaWishlists(db), secret: randomBytes(32).toString('hex'), secureCookies: false,
+        imageStorage: storage, preview: async () => null,
+        lookupMetadata: async () => ({ title: 'Helmet', price: null, image: 'https://images.tokopedia.net/helmet.jpg' }),
+      });
+      const owner = request.agent(app);
+      await owner.post('/api/session').set(mutation).send({}).expect(200);
+      const { body: list } = await owner.post('/api/wishlists').set(mutation)
+        .send({ name: 'Photo fallback', currency: 'IDR' }).expect(201);
+      const path = '/api/wishlists/' + list.id;
+      const input = { name: 'Helmet', url: 'https://tokopedia.link/helm?ref=%2f#save', priceMinor: null,
+        quantity: 1, saveTokopediaImage: true };
+      const key = randomUUID();
+      await owner.post(path + '/items').set('Idempotency-Key', key).send(input).expect(403);
+      expect(store).not.toHaveBeenCalled();
+      for (let retry = 0; retry < 2; retry++) {
+        await owner.post(path + '/items').set(mutation).set('Idempotency-Key', key).send(input)
+          .expect(201, { photoStatus: 'unavailable' });
+      }
+      expect(store).toHaveBeenCalledOnce();
+      expect(discard).toHaveBeenCalledExactlyOnceWith(store.mock.calls[0]![2]);
+      const { body } = await owner.get(path).expect(200);
+      expect(body.items).toEqual([expect.objectContaining({ id: key, url: input.url, imageKey: null })]);
+    } finally {
+      download.mockRestore();
+    }
+  });
+  it('reloads the original affiliate URL, seller and private photo through the API', async () => {
+    const storage = createImageStorage({
+      NANTI_S3_ENDPOINT: 'https://storage.example.com', NANTI_S3_BUCKET: 'nanti-test',
+      NANTI_S3_REGION: 'auto', NANTI_S3_ACCESS_KEY_ID: 'test', NANTI_S3_SECRET_ACCESS_KEY: 'test',
+    })!;
+    const bytes = Buffer.from([255, 216, 255, 217]);
+    vi.spyOn(storage, 'exists').mockResolvedValue(true);
+    const read = vi.spyOn(storage, 'readJpeg').mockResolvedValue(bytes);
+    const options = { secret: randomBytes(32).toString('hex'), secureCookies: false,
+      preview: async () => null, imageStorage: storage };
+    const app = createApp({ ...options, repository: prismaWishlists(db) });
+    const agent = request.agent(app);
+    const session = await agent.post('/api/session').set(mutation).send({}).expect(200);
+    const cookie = session.headers['set-cookie']![0]!.split(';')[0]!;
+    const { body: { id } } = await agent.post('/api/wishlists').set(mutation)
+      .send({ name: 'Tokopedia photo', currency: 'IDR' }).expect(201);
+    const { body: { key: imageKey } } = await agent.post('/api/uploads/product-image').set(mutation)
+      .send({ contentType: 'image/jpeg', size: bytes.length }).expect(200);
+    const url = 'https://TOKOPEDIA.LINK:443/abc?ref=%2f#saved';
+    const input = { name: 'Product', url, sellerName: 'Tokopedia shop', imageKey, priceMinor: 173500000, quantity: 1 };
+    const list = '/api/wishlists/' + id;
+    await agent.post(list + '/items').set(mutation).send(input).expect(201);
+    const fresh = createApp({ ...options, repository: prismaWishlists(db) });
+    const { body: reloaded } = await request(fresh).get(list).set('Cookie', cookie).expect(200);
+    expect(reloaded.items[0]).toMatchObject(input);
+    const item = list + '/items/' + reloaded.items[0].id;
+    const response = await request(fresh).get(item + '/uploaded-image').set('Cookie', cookie)
+      .expect('Content-Type', /image\/jpeg/).expect('Cache-Control', 'private, no-store').expect(200);
+    expect(response.body).toEqual(bytes);
+    const stranger = request.agent(fresh);
+    await stranger.post('/api/session').set(mutation).send({}).expect(200);
+    await stranger.get(item + '/uploaded-image').expect(404);
+    expect(read).toHaveBeenCalledExactlyOnceWith(imageKey);
+    await request(fresh).put(item).set(mutation).set('Cookie', cookie)
+      .send({ ...input, sellerName: null, imageKey: null }).expect(204);
+    const { body: cleared } = await request(fresh).get(list).set('Cookie', cookie).expect(200);
+    expect(cleared.items[0]).toMatchObject({ url, sellerName: null, imageKey: null });
+  });
   it('cascades wishlist deletion to persisted products', async () => {
     const repository = prismaWishlists(db);
     const ownerId = randomUUID();

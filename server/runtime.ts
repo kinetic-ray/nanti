@@ -56,8 +56,12 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     await db.$transaction([
       db.dataOwner.findFirst({ select: { id: true } }),
       // Check the latest Item schema even when there are no wishlists.
-      // A missing imageKey migration must fail readiness before users hit CRUD.
-      db.item.findFirst({ select: { id: true, imageKey: true } }),
+      // Verify the item columns required by wishlist reads before accepting traffic.
+      db.item.findFirst({ select: { id: true, imageKey: true, sellerName: true } }),
+      // Account initialization reads this column for linked Google identities.
+      db.authIdentity.findFirst({ select: { avatarUrl: true } }),
+      db.creatorProfile.findFirst({ select: { handle: true, publishedDesign: true } }),
+      db.creatorProduct.findFirst({ select: { id: true, hasPhoto: true } }),
       db.priceObservation.findFirst({ select: { id: true } }),
       db.priceTarget.findFirst({ select: { itemId: true } }),
       db.priceAlert.findFirst({ select: { id: true } }),
@@ -91,8 +95,8 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
       const merchant = productMerchant(url.hostname);
       if (!ikeaMetadataAllowed && merchant !== 'shopee' && merchant !== 'tokopedia') return null;
       const metadata = await previewProductMetadata(url, request, onDiagnostic);
-      return metadata && { ...metadata, price: merchant === 'ikea' &&
-        env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted' ? metadata.price : null };
+      return metadata && { ...metadata, price: merchant === 'tokopedia' || (merchant === 'ikea' &&
+        env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted') ? metadata.price : null };
     },
     productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
     imageStorage: createImageStorage(environment),

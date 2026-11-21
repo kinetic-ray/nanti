@@ -13,5 +13,5 @@ export function databaseUnavailable(error: unknown): boolean {
 
 export const databaseProblem = {
   code: 'database_unavailable',
-  error: 'The database is unavailable. Try again shortly.',
+  error: 'Could not reach Nanti. Try again.',
 };

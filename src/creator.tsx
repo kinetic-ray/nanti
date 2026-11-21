@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocale } from './locale.js';
+import { CreatorStorefront, studioSoreExample } from './creator-storefront.js';
 import './creator.css';
 
 export function CreatorLanding() {
-  const { language, setLanguage } = useLocale();
+  const { language, setLanguage, t } = useLocale();
   const id = language === 'id';
   const [coffeeOpen, setCoffeeOpen] = useState(false);
   useEffect(() => {
@@ -48,7 +49,7 @@ export function CreatorLanding() {
       <section className="creator-hero" aria-labelledby="creator-title">
         <div className="creator-hero-copy">
           <h1 id="creator-title">{id ? <>Semua link.<br/><em>Satu etalase</em><span className="creator-period">.</span></> : <>Every link.<br/><em>One storefront</em><span className="creator-period">.</span></>}</h1>
-          <div className="creator-hero-bottom"><p>{id ? 'Pernah ditanya, “Kak, link bajunya mana?” berkali-kali? Taruh semua rekomendasimu di satu tempat. Biar yang lihat kontenmu tinggal cari, bukan scroll chat.' : 'Keep your affiliate product links on one page. Organize them into collections so followers can find products from your Instagram posts without opening links one by one.'}</p><div className="creator-hero-actions"><a className="creator-primary" href="/creator/studio">{id ? 'Coba bikin etalase' : 'Design your storefront'} <span aria-hidden="true">↗</span></a><a className="creator-secondary" href="/creator/demo">{id ? 'Intip contohnya' : 'View sample storefront'} <span aria-hidden="true">↗</span></a></div></div>
+          <div className="creator-hero-bottom"><p>{id ? 'Pernah ditanya, “Kak, link bajunya mana?” berkali-kali? Taruh semua rekomendasimu di satu tempat. Biar yang lihat kontenmu tinggal cari, bukan scroll chat.' : 'Keep your affiliate product links on one page. Organize them into collections so followers can find products from your Instagram posts without opening links one by one.'}</p><div className="creator-hero-actions"><a className="creator-primary" href="/creator?onboard=1">{id ? 'Buat Nanti Creator' : 'Become a Nanti Creator'} <span aria-hidden="true">↗</span></a><a className="creator-secondary" href="/creator/demo">{id ? 'Intip contohnya' : 'View sample storefront'} <span aria-hidden="true">↗</span></a></div></div>
         </div>
         <div className="creator-hero-index" aria-hidden="true">n<span>.</span></div>
         <div className="creator-hero-footer"><span>{id ? 'Masih dirancang, tapi sudah bisa dicoba.' : 'A work in progress you can already try.'}</span><a href="#manifesto">{id ? 'Lihat caranya' : 'See how it works'} ↓</a></div>
@@ -60,9 +61,9 @@ export function CreatorLanding() {
       </section>
 
       <section className="creator-showcase" aria-labelledby="creator-showcase-title" data-reveal>
-        <div className="creator-showcase-head"><h2 id="creator-showcase-title">{id ? <>Dari caption.<br/><em>Ketemu barangnya.</em></> : <>From caption.<br/><em>To the right product.</em></>}</h2><p>{id ? 'Lihat contoh postingan Instagram, lalu buka etalase Nanti untuk mencari barang dari caption.' : 'Followers see a product code on Instagram, enter it in search, and find the item they came for.'}</p></div>
+        <div className="creator-showcase-head"><h2 id="creator-showcase-title">{t('From Instagram to Nanti')}</h2></div>
         <CreatorJourney id={id} />
-        <p className="creator-showcase-note">{id ? 'Contoh alur, bukan postingan atau testimoni pengguna sungguhan. Etalase ini masih demo; fitur publikasi belum tersedia.' : '* Illustrative journey. Content and products are samples; creator publishing is not yet available.'}</p>
+        <p className="creator-showcase-note">{t('Fictional creator and sample products.')}</p>
       </section>
 
       <section id="cara-kerja" className="creator-process" data-reveal>
@@ -78,7 +79,7 @@ export function CreatorLanding() {
         <div className="creator-free-support-copy"><span className="creator-free-tag">FREE PLAN</span><h2 id="creator-free-title">{id ? 'Mulai gratis. Berkarya sesukamu.' : 'Start free. Create your way.'}</h2><p>{id ? 'Nanti bisa dicoba tanpa harus traktir siapa pun. Kalau suatu hari kamu merasa terbantu, boleh dukung pengembangnya.' : 'Try Nanti without paying or tipping. If it helps, you can support the developer voluntarily.'}</p></div>
         <button type="button" className="creator-coffee-trigger" onClick={() => setCoffeeOpen(true)}><span aria-hidden="true">☕</span> {id ? 'Traktir kopi developer' : 'Buy the developer a coffee'} <span aria-hidden="true">↗</span></button>
       </section>
-      <section className="creator-end" data-reveal><h2>{id ? <>Biar link-nya rapi.<br/><em>Yang nanya juga happy.</em></> : <>Organized links.<br/><em>Easy to find.</em></>}</h2><p>{id ? 'Penasaran kalau etalasemu punya gaya sendiri? Coba utak-atik tampilannya dulu. Ini masih demo — belum bisa terbitkan halaman atau sambungkan afiliasi.' : 'Try arranging your storefront in Design Studio. This is still a preview; publishing and affiliate integrations are not available yet.'}</p><div><a className="creator-primary" href="/creator/studio">{id ? 'Coba Design Studio' : 'Enter Design Studio'} ↗</a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat etalase demo' : 'View demo storefront'} ↗</a></div></section>
+      <section className="creator-end" data-reveal><h2>{id ? <>Biar link-nya rapi.<br/><em>Yang nanya juga happy.</em></> : <>Organized links.<br/><em>Easy to find.</em></>}</h2><p>{id ? 'Tambahkan produk, atur tampilan, lalu bagikan tautan etalasemu.' : 'Add products, style your storefront, and share your link.'}</p><div><a className="creator-primary" href="/creator?onboard=1">{id ? 'Buat Nanti Creator' : 'Become a Nanti Creator'} ↗</a><a className="creator-secondary" href="/creator/demo">{id ? 'Lihat etalase demo' : 'View demo storefront'} ↗</a></div></section>
     </main>
     {coffeeOpen && <div className="creator-coffee-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setCoffeeOpen(false); }}><section className="creator-coffee-dialog" role="dialog" aria-modal="true" aria-labelledby="creator-coffee-title"><button type="button" className="creator-coffee-close" onClick={() => setCoffeeOpen(false)} aria-label={id ? 'Tutup jendela traktir kopi' : 'Close coffee support dialog'} title={id ? 'Tutup' : 'Close'}><span aria-hidden="true">×</span></button><span className="creator-free-tag">{id ? 'DUKUNGAN SUKARELA' : 'OPTIONAL SUPPORT'}</span><h2 id="creator-coffee-title">{id ? 'Mau traktir kopi?' : 'Coffee for the developer?'}</h2><p>{id ? 'Makasih sudah mencoba Nanti. Dukungan ini sepenuhnya opsional dan tidak memengaruhi fitur gratis.' : 'Thanks for trying Nanti. Supporting is completely optional and does not affect free features.'}</p><div className="creator-coffee-methods"><div className="creator-coffee-method"><span className="creator-coffee-method-icon" aria-hidden="true">▦</span><div><strong>QRIS</strong><p>{id ? 'Bayar dengan nominal pilihanmu.' : 'Choose any amount to contribute.'}</p></div><span className="creator-coffee-unavailable">{id ? 'Segera hadir' : 'Coming soon'}</span></div><div className="creator-coffee-method"><span className="creator-coffee-method-icon" aria-hidden="true">↗</span><div><strong>{id ? 'Buka link sponsor' : 'Visit a sponsor link'}</strong><p>{id ? 'Dukung tanpa mengeluarkan uang.' : 'Support without spending money.'}</p></div><span className="creator-coffee-unavailable">{id ? 'Segera hadir' : 'Coming soon'}</span></div></div><button type="button" className="creator-coffee-dismiss" onClick={() => setCoffeeOpen(false)}>{id ? 'Nanti saja' : 'Maybe later'}</button></section></div>}
     <footer className="creator-footer"><span>nanti<span className="creator-purple">.</span> creator</span><span>© 2026 NANTI / {id ? 'MASIH DALAM PENGEMBANGAN' : 'WORK IN PROGRESS'}</span><a href="/">{id ? 'KEMBALI KE NANTI' : 'BACK TO NANTI'} ↗</a></footer>
@@ -86,48 +87,100 @@ export function CreatorLanding() {
 }
 
 
-type PostIconName = 'heart' | 'comment' | 'repost' | 'send' | 'bookmark' | 'more' | 'verified' | 'arrow' | 'back';
-function PostIcon({ name, size = 24 }: { name: PostIconName; size?: number }) {
-  const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const };
-  if (name === 'verified') return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path fill="#3897f0" d="m12 1.5 2.4 1.4 2.8-.1 1.4 2.4 2.4 1.4-.1 2.8 1.4 2.4-1.4 2.4.1 2.8-2.4 1.4-1.4 2.4-2.8-.1-2.4 1.4-2.4-1.4-2.8.1-1.4-2.4-2.4-1.4.1-2.8-1.4-2.4 1.4-2.4-.1-2.8 2.4-1.4 1.4-2.4 2.8.1z"/><path d="m8 12 2.5 2.5L16 9" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-  return <svg {...common}>{name === 'heart' ? <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/> : name === 'comment' ? <path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.3 0-2.6-.3-3.7-.9L3 21l1.8-5.2A8.5 8.5 0 1 1 20.5 11.5Z"/> : name === 'repost' ? <><path d="M4 7h13l-3-3m3 3-3 3M20 17H7l3 3m-3-3 3-3"/><path d="M20 12v5M4 12V7"/></> : name === 'send' ? <path d="m22 2-7.5 20-4.1-8.4L2 9.5 22 2ZM10.4 13.6 22 2"/> : name === 'bookmark' ? <path d="M5 3h14v18l-7-5-7 5V3Z"/> : name === 'more' ? <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></> : name === 'back' ? <path d="m14 5-7 7 7 7"/> : <path d="M5 12h14m-6-6 6 6-6 6"/>}</svg>;
+const postIconPaths = {
+  heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z',
+  comment: 'M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.3 0-2.6-.3-3.7-.9L3 21l1.8-5.2A8.5 8.5 0 1 1 20.5 11.5Z',
+  send: 'm22 2-7.5 20-4.1-8.4L2 9.5 22 2ZM10.4 13.6 22 2',
+  bookmark: 'M5 3h14v18l-7-5-7 5V3Z',
+  arrow: 'M5 12h14m-6-6 6 6-6 6',
+  back: 'M19 12H5m6-6-6 6 6 6',
+  link: 'M10 13a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 4.3l-1.5 1.5m2.5 5.2a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 19.7l1.5-1.5',
+};
+
+function PostIcon({ name, size }: { name: keyof typeof postIconPaths; size: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={postIconPaths[name]} />
+  </svg>;
 }
+
 function CreatorJourney({ id }: { id: boolean }) {
+  const { t } = useLocale();
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [query, setQuery] = useState('PRD-003');
-  const [error, setError] = useState(false);
-  const labels = id ? ['Lihat postingan', 'Cari produk', 'Produk ditemukan'] : ['See the post', 'Search product', 'Product found'];
-  const go = (next: 1 | 2 | 3) => { setStep(next); setError(false); };
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (query.trim().toUpperCase() === 'PRD-003') go(3);
-    else setError(true);
+  const [liked, setLiked] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const stage = useRef<HTMLDivElement>(null);
+  const focusStage = useRef(false);
+  const labels = [t('See the post'), t('Open the profile'), t('Search the storefront')];
+  useEffect(() => {
+    if (!focusStage.current) return;
+    focusStage.current = false;
+    const target = step === 3 ? 'input[type="search"]' : step === 2 ? 'h3' : '.creator-post-account';
+    stage.current?.querySelector<HTMLElement>(target)?.focus();
+  }, [step]);
+
+  const go = (next: 1 | 2 | 3, moveFocus = false) => {
+    focusStage.current = moveFocus;
+    setStep(next);
   };
-  return <div className="creator-journey creator-post-journey" data-reveal>
-    <div className="creator-journey-intro">
-      <span className="creator-journey-eyebrow">{id ? 'DARI INSTAGRAM KE NANTI' : 'FROM INSTAGRAM TO NANTI'}</span>
-      <h3>{id ? 'Lihat postingannya. Temukan barangnya.' : 'See the post. Find the product.'}</h3>
-      <p>{id ? 'Coba sendiri bagaimana followers menemukan barang dari postingan kreator.' : 'See how followers find products from a creator post.'}</p>
-      <nav className="creator-stepper" aria-label={id ? 'Langkah simulasi' : 'Demo steps'}>
-        {labels.map((label, index) => {
-          const number = (index + 1) as 1 | 2 | 3;
-          return <button type="button" key={number} className={step === number ? 'is-active' : step > number ? 'is-complete' : ''} aria-current={step === number ? 'step' : undefined} aria-label={`${number}. ${label}`} onClick={() => go(number)}><span>{number}</span><small>{label}</small></button>;
-        })}
-      </nav>
-      <div className="creator-journey-help" aria-live="polite"><strong>{String(step).padStart(2, '0')} / {labels[step - 1]}</strong><p>{step === 1 ? (id ? 'Lihat kode PRD-003 di caption, lalu lanjut ke etalase.' : 'Find PRD-003 in the caption, then open the storefront.') : step === 2 ? (id ? 'Ketik PRD-003 dan tekan Cari.' : 'Enter PRD-003 and press Search.') : (id ? 'Sepatunya ketemu! Ini contoh hasil pencarian di Nanti.' : 'Found the shoes! This is a sample Nanti search result.')}</p></div>
-      <div className="creator-post-actions"><button type="button" className="creator-post-main-cta" onClick={() => go(step === 3 ? 1 : (step + 1) as 2 | 3)}>{step === 1 ? (id ? 'Buka link di bio' : 'Open bio link') : step === 2 ? (id ? 'Lihat contoh hasil' : 'Preview result') : (id ? 'Ulangi simulasi' : 'Replay demo')} <PostIcon name="arrow" size={18}/></button></div>
-    </div>
-    <div className="creator-post-preview" aria-label={id ? 'Simulasi Instagram dan etalase Nanti' : 'Instagram and Nanti demo'}>
-      <div className="creator-post-viewport" key={step}>
-        {step === 1 ? <article className="creator-instagram-post" aria-label={id ? 'Contoh postingan Instagram' : 'Sample Instagram post'}>
-          <header className="creator-post-header"><div className="creator-post-avatar"><span>s.</span></div><div className="creator-post-account"><div><strong>studio.sore</strong><PostIcon name="verified" size={17}/></div><span>{id ? 'Rekomendasi outfit' : 'Outfit recommendations'}</span></div><span className="creator-post-more"><PostIcon name="more" size={22}/></span></header>
-          <div className="creator-post-media" role="img" aria-label={id ? 'Ilustrasi editorial outfit musim panas' : 'Summer outfit editorial illustration'}><span className="creator-post-media-sun"/><span className="creator-post-media-arc"/><div className="creator-post-media-copy"><small>STUDIO.SORE — SUMMER / 03</small><strong>OFF<br/>DUTY.</strong><span>THE WEEKEND EDIT</span></div></div>
-          <div className="creator-post-dots" aria-label={id ? 'Slide 1 dari 3' : 'Slide 1 of 3'}><i className="active"/><i/><i/></div>
-          <div className="creator-post-engagement"><span><PostIcon name="heart" size={29}/><b>37.3K</b></span><span><PostIcon name="comment" size={29}/><b>649</b></span><span><PostIcon name="repost" size={29}/><b>1,312</b></span><span><PostIcon name="send" size={29}/><b>14K</b></span><span className="creator-post-save"><PostIcon name="bookmark" size={29}/></span></div>
-          <p className="creator-post-caption"><strong>studio.sore</strong> {id ? 'Outfit pantai kemarin ☀ Semua detail ada di link bio. Cari kode ' : 'Weekend outfit ☀ Everything is in my bio link. Search for '}<b>PRD-003</b>.</p>
-          <p className="creator-post-time">{id ? '12 jam yang lalu' : '12 hours ago'}</p>
-        </article> : <div className="creator-post-store"><div className="creator-post-store-bar"><button type="button" onClick={() => go(1)} aria-label={id ? 'Kembali ke Instagram' : 'Back to Instagram'}><PostIcon name="back" size={22}/></button><span>nanti.id/@studio.sore</span><span>•••</span></div><div className="creator-post-store-logo">nanti<span>.</span></div><div className="creator-post-store-body"><span className="creator-journey-eyebrow">STUDIO.SORE / STOREFRONT</span><h4>{id ? 'Yang kamu cari, ada di sini.' : 'Find what caught your eye.'}</h4><p>{id ? 'Cari kode barang dari caption Instagram.' : 'Search the product code from the Instagram caption.'}</p><form className="creator-product-search" onSubmit={submit}><label className="sr-only" htmlFor="creator-post-product-code">{id ? 'Kode produk' : 'Product code'}</label><input id="creator-post-product-code" type="text" autoComplete="off" spellCheck={false} value={query} onChange={event => { setQuery(event.target.value); setError(false); if (step === 3) setStep(2); }} placeholder="PRD-003"/><button type="submit">{id ? 'Cari' : 'Search'}</button></form>{error && <p className="creator-post-store-hint" role="alert">{id ? 'Kode tidak ditemukan. Coba PRD-003.' : 'Code not found. Try PRD-003.'}</p>}{step === 3 ? <div className="creator-post-result" role="status"><small>{id ? 'PRODUK DITEMUKAN' : 'PRODUCT FOUND'}</small><div><img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop&auto=format&q=85" alt={id ? 'Sepatu sneaker merah' : 'Red sneaker shoe'} loading="lazy" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = '/images/red-sneaker.svg'; }}/><section><strong>{id ? 'Sneakers — Summer Edit' : 'Sneakers — Summer Edit'}</strong><p>{id ? 'PRD-003 · Dari postingan OFF DUTY.' : 'PRD-003 · From the OFF DUTY. post'}</p></section></div></div> : <p className="creator-post-store-hint">{id ? 'Contoh kode: PRD-003' : 'Example code: PRD-003'}</p>}</div></div>}
-      </div>
+
+  return <div className="creator-post-journey">
+    <nav className="creator-stepper" aria-label={id ? 'Langkah simulasi' : 'Demo steps'}>
+      {([1, 2, 3] as const).map(number => (
+        <button type="button" key={number} aria-current={step === number ? 'step' : undefined}
+          aria-label={`${number}. ${labels[number - 1]}`} onClick={() => go(number)}>
+          <span aria-hidden="true">{number}</span>{labels[number - 1]}
+        </button>
+      ))}
+    </nav>
+    <div className="creator-journey-stage" ref={stage} key={step}>
+      {step === 1 && <article className="creator-instagram-post" aria-label={id ? 'Contoh postingan Instagram' : 'Example Instagram post'}>
+        <header className="creator-post-header">
+          <button className="creator-post-account" type="button" onClick={() => go(2, true)}>
+            <span className="creator-post-avatar" aria-hidden="true">S.</span><strong>studio.sore</strong>
+          </button>
+          <span className="creator-social-label">{t('Simulation')}</span>
+        </header>
+        <img className="creator-post-photo" src={studioSoreExample.photo} alt={id ? 'Sepatu merah dari etalase Studio Sore' : 'Red sneakers from the Studio Sore storefront'} width="640" height="640" loading="lazy" decoding="async" />
+        <div className="creator-post-engagement">
+          <button type="button" aria-label={t('Like')} aria-pressed={liked} onClick={() => setLiked(value => !value)}><PostIcon name="heart" size={22} /></button>
+          <button type="button" aria-label={t('Comment')} disabled><PostIcon name="comment" size={22} /></button>
+          <button type="button" aria-label={t('Share')} disabled><PostIcon name="send" size={22} /></button>
+          <button type="button" aria-label={t('Save post')} aria-pressed={saved} onClick={() => setSaved(value => !value)}><PostIcon name="bookmark" size={22} /></button>
+        </div>
+        <p className="creator-post-caption"><strong>studio.sore</strong> {t('Red sneakers for a Sunday walk. I’ve linked them in my bio.')}</p>
+      </article>}
+      {step === 2 && <section className="creator-instagram-profile" aria-labelledby="creator-walkthrough-profile">
+        <header className="creator-profile-header">
+          <button type="button" aria-label={t('Back to post')} onClick={() => go(1, true)}><PostIcon name="back" size={20} /></button>
+          <h3 id="creator-walkthrough-profile" tabIndex={-1}>studio.sore</h3>
+          <span className="creator-social-label">{t('Simulation')}</span>
+        </header>
+        <div className="creator-profile-body">
+          <div className="creator-profile-identity">
+            <span className="creator-post-avatar creator-profile-ring" aria-hidden="true">S.</span>
+            <dl className="creator-profile-stats">
+              <div><dt>{t('Posts')}</dt><dd>1</dd></div>
+              <div><dt>{t('Followers')}</dt><dd>0</dd></div>
+              <div><dt>{t('Following')}</dt><dd>0</dd></div>
+            </dl>
+          </div>
+          <div className="creator-profile-bio">
+            <strong>Studio Sore</strong>
+            <p className="creator-profile-category">{t('Digital creator')}</p>
+            <p>{t('Everyday outfits and the pieces you ask me about.')}</p>
+            <a className="creator-profile-link" href="/creator/demo" aria-label={`Nanti / Studio Sore · ${t('Open bio link')}`} onClick={event => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              go(3, true);
+            }}><PostIcon name="link" size={17} /><span>Nanti / Studio Sore</span></a>
+          </div>
+        </div>
+      </section>}
+      {step === 3 && <>
+        <CreatorStorefront walkthrough />
+        <a className="creator-journey-store-link" href="/creator/demo">{t('Open demo storefront')} <PostIcon name="arrow" size={16} /></a>
+      </>}
     </div>
   </div>;
 }

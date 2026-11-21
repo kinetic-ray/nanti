@@ -135,9 +135,16 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
     const saved = await agent.post(endpoint).set(mutation).send(input).expect(201);
     expect(saved.body).toMatchObject({ version: '2.0.0', input: input.answers,
       result: { period: '3-days', reviewOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/u) } });
+    const currentInput = { ...input, version: '3.0.0', answers: { ...input.answers, practicalNeed: true } };
+    const current = await agent.post(endpoint).set(mutation).send(currentInput).expect(201);
+    expect(current.body).toMatchObject({ version: '3.0.0', input: currentInput.answers,
+      result: { period: '3-days', reviewOn: saved.body.result.reviewOn, outcome: 'green' } });
     const history = await agent.get(endpoint).expect(200);
+    expect(history.body.records).toHaveLength(3);
     expect(history.body.records).toEqual(expect.arrayContaining([
-      saved.body, { ...prior.body, review: [{ kind: 'methodology' }] },
+      current.body,
+      { ...saved.body, review: [{ kind: 'methodology' }] },
+      { ...prior.body, review: [{ kind: 'methodology' }] },
     ]));
     await other.agent.get(endpoint).expect(404);
   });

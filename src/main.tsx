@@ -1,11 +1,13 @@
+import { CreatorAccess } from './creator-access.js';
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
 import { sharedProductLink } from './share-target.js';
-import type { Currency, Item, ItemWriteInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
+import type { Currency, Item, ItemSaveInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { DeleteForm, ItemForm, ListForm, PrivacyForm } from './forms.js';
-import { LanguagePicker, LocaleProvider, useLocale } from './locale.js';
+import { LocaleProvider, useLocale } from './locale.js';
+import { HeaderActions } from './header-actions.js';
 import type { Message } from './messages.js';
 import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.js';
 import { AccountDialog, announceAuthChange, authChangeKey, authNotices } from './account.js';
@@ -17,8 +19,10 @@ import './styles.css';
 import './consumer.css';
 
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
+const AccountAdmin = lazy(() => import('./account-admin.js').then(({ AccountAdmin }) => ({ default: AccountAdmin })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
-const CreatorDesignStudio = lazy(() => import('./creator-studio.js').then(({ CreatorDesignStudio }) => ({ default: CreatorDesignStudio })));
+const CreatorWorkspace = lazy(() => import('./creator-workspace.js').then(({ CreatorWorkspace }) => ({ default: CreatorWorkspace })));
+const LiveCreatorStorefront = lazy(() => import('./creator-workspace.js').then(({ LiveCreatorStorefront }) => ({ default: LiveCreatorStorefront })));
 const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ CreatorStorefront }) => ({ default: CreatorStorefront })));
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
@@ -30,7 +34,7 @@ type Editor =
   | { kind: 'delete'; list: WishlistSummary; item?: Item };
 
 function App() {
-  const { t, error, money, number, language } = useLocale();
+  const { t, error, money, number } = useLocale();
   const [lists, setLists] = useState<WishlistSummary[] | null>(null);
   const [sessionError, setSessionError] = useState('');
   const [sessionAttempt, setSessionAttempt] = useState(0);
@@ -157,13 +161,16 @@ function App() {
     finish('Wishlist created.');
   }
 
-  async function saveItem(data: ItemWriteInput) {
+  async function saveItem(data: ItemSaveInput, requestKey?: string) {
     if (editor?.kind !== 'item') return;
     const { item, list } = editor;
     const endpoint = `/wishlists/${list.id}/items`;
-    await api(item ? `${endpoint}/${item.id}` : endpoint, { method: item ? 'PUT' : 'POST', data });
+    const result = await api<{ photoStatus: 'saved' | 'unavailable' } | undefined>(
+      item ? `${endpoint}/${item.id}` : endpoint, { method: item ? 'PUT' : 'POST', data, requestKey },
+    );
     refresh();
-    finish(item ? 'Product updated.' : 'Product added.');
+    finish(result?.photoStatus === 'unavailable' ? 'Product added without its store photo.' :
+      item ? 'Product updated.' : 'Product added.');
   }
 
   async function remove() {
@@ -188,27 +195,14 @@ function App() {
           <span className="brand-symbol" aria-hidden="true" />
           <div className="brand">nanti<span>.</span></div>
         </div>
-        <div className="masthead-controls">
-          <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
-            title={t('Price alerts')} disabled={!lists} onClick={() => setAlertsOpen(true)}>
-            <Icon name="bell" />{activeId && unreadAlerts > 0 && <span aria-hidden="true">{number(Math.min(99, unreadAlerts))}</span>}
-          </button>
-          <details className="masthead-menu">
-            <summary className="icon-button masthead-menu-toggle" aria-label={language === 'id' ? 'Buka menu' : 'Open menu'}
-              title={language === 'id' ? 'Menu' : 'Menu'} aria-haspopup="true">
-              <span className="masthead-hamburger" aria-hidden="true"><span /><span /><span /></span>
-            </summary>
-            <div className="masthead-menu-panel">
-              <button type="button" disabled={!lists} onClick={() => {
-                document.querySelector<HTMLDetailsElement>('.masthead-menu')?.removeAttribute('open');
-                setShowAccount(true);
-                void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
-              }}><Icon name="person" />{t(account ? 'Account' : 'Sign in')}</button>
-              <a href="/creator"><Icon name="sparkles" />{language === 'id' ? 'Kreator' : 'Creator'}</a>
-            </div>
-          </details>
-          <LanguagePicker />
-        </div>
+        <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
+          openAlerts={() => setAlertsOpen(true)} signIn={() => {
+            setShowAccount(true);
+            void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
+          }} signOut={() => void api('/account/logout', { method: 'POST' }).then(() => {
+            announceAuthChange();
+            location.replace('/?auth=signed-out');
+          }, () => setStatus('Could not load your account. Try again.'))} />
       </header>
       <div className={`workspace${selected ? ' workspace-collection' : ''}`}>
         {selected && <aside className="collection-rail">
@@ -297,6 +291,7 @@ function App() {
                             <span className="sr-only"> ({t('opens in a new tab')})</span>
                           </a>}
                           <h3>{item.name}</h3>
+                          {item.sellerName && <span className="hint">{t('Seller: {seller}', { seller: item.sellerName })}</span>}
                           <div className="product-price">
                             <strong className={item.priceMinor === null ? 'price-missing' : undefined}>
                               {item.priceMinor === null ? t('No price') : money(item.priceMinor * item.quantity, list.currency)}
@@ -330,6 +325,7 @@ function App() {
       </div>
       {editor?.kind === 'list' && <ListForm list={editor.list} close={() => setEditor(null)} save={saveList} />}
       {editor?.kind === 'item' && <ItemForm item={editor.item} initialUrl={!editor.item ? sharedDraft ?? undefined : undefined} listId={editor.list.id} currency={editor.list.currency}
+        existingItems={detail?.id === editor.list.id ? detail.items : undefined}
         close={() => { setSharedDraft(null); setEditor(null); }} save={saveItem} />}
       {editor?.kind === 'delete' && <DeleteForm name={editor.item?.name ?? editor.list.name}
         wishlist={!editor.item} close={() => setEditor(null)} remove={remove} />}
@@ -345,7 +341,13 @@ function App() {
       </Suspense>}
       {showAccount && lists && <AccountDialog status={accountStatus} notice={notice}
         close={() => {
-          if (/^\/account\/?$/u.test(location.pathname)) history.replaceState(null, '', '/');
+          if (/^\/account\/?$/u.test(location.pathname)) {
+            if (new URLSearchParams(location.search).get('next') === 'creator') {
+              location.replace('/creator?onboard=1');
+              return;
+            }
+            history.replaceState(history.state, '', '/');
+          }
           setShowAccount(false);
           setNotice(null);
         }} update={setAccountStatus} />}
@@ -357,12 +359,17 @@ const root = document.getElementById('root');
 if (root) {
   if (/^\/admin\/?$/u.test(location.pathname)) {
     document.documentElement.lang = 'en';
-    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening Affiliate Center…</p>}><AdminCenter /></Suspense>);
+    const accounts = new URLSearchParams(location.search).get('view') === 'accounts';
+    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening administration…</p>}>
+      {accounts ? <AccountAdmin /> : <AdminCenter />}
+    </Suspense>);
   } else if (/^\/creator\/studio\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Design Studio…</p>}><CreatorDesignStudio /></Suspense></LocaleProvider>);
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Studio…</p>}><CreatorAccess studio={(ownerId, draft) => <CreatorWorkspace key={ownerId} ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
+  } else if (/^\/store\/[^/]+\/?$/u.test(location.pathname)) {
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening storefront…</p>}><LiveCreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/demo\/?$/u.test(location.pathname)) {
     createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening creator storefront…</p>}><CreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening Nanti Kreator…</p>}><CreatorLanding /></Suspense></LocaleProvider>);
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening Nanti Kreator…</p>}>{new URLSearchParams(location.search).get('onboard') === '1' ? <CreatorAccess studio={() => null} /> : <CreatorLanding />}</Suspense></LocaleProvider>);
   } else createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
 }

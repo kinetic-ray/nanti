@@ -9,10 +9,20 @@ type DatabaseOptions = { caBase64?: string; serverlessPoolLimit?: number };
 const idleSeconds = 5;
 
 export function connectDatabase(url: string, options: DatabaseOptions = {}) {
-  const parsed = new URL(url);
+  const parsed = URL.parse(url);
+  if (!parsed || parsed.protocol !== 'mysql:') {
+    throw new Error('Invalid DATABASE_URL. Use a MySQL connection URL.');
+  }
   const { caBase64, serverlessPoolLimit } = options;
   const strictTls = serverlessPoolLimit !== undefined || Boolean(caBase64) || parsed.searchParams.get('sslaccept') === 'strict';
-  if (!strictTls) return new PrismaClient({ adapter: new PrismaMariaDb(url) });
+  if (!strictTls) {
+    try {
+      return new PrismaClient({ adapter: new PrismaMariaDb(url) });
+    } catch {
+      // Driver configuration errors can contain the original credential-bearing URL.
+      throw new Error('Invalid MySQL connection settings. Check DATABASE_URL.');
+    }
+  }
 
   const tlsMode = parsed.searchParams.get('sslaccept');
   const ssl = parsed.searchParams.get('ssl');

@@ -1,3 +1,5 @@
+import { passwordAccounts } from './password-accounts.js';
+import { prismaCreatorCatalog } from './prisma-creator-catalog.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Prisma } from './generated/prisma/client.js';
 import type { AuthProvider, OAuthAttempt, PrismaClient, UserSession } from './generated/prisma/client.js';
@@ -34,16 +36,46 @@ function uniqueConflict(error: unknown) {
 export function prismaAccounts(db: PrismaClient) {
   const identityKey = (provider: AuthProvider, subject: string) => ({ provider, subjectHash: tokenHash(subject) });
 
-  async function newSession(tx: Prisma.TransactionClient, userId: string, guestOwnerId: string | null) {
+  async function newSession(tx: Prisma.TransactionClient, userId: string, guestOwnerId: string | null, provider?: AuthProvider) {
     const token = authToken();
     await tx.userSession.create({
       data: { tokenHash: tokenHash(token), userId, pendingGuestOwnerId: guestOwnerId,
         verifiedAt: new Date(), expiresAt: new Date(Date.now() + sessionDuration) },
     });
+    await tx.authActivity.create({ data: { userId, kind: 'signed_in', provider } });
     return token;
   }
 
   return {
+    creatorCatalog: prismaCreatorCatalog(db),
+passwords: passwordAccounts(db, newSession, authToken, tokenHash),
+    creator(userId: string) {
+      return db.user.findUnique({ where: { id: userId }, select: {
+        creatorProfile: { select: { id: true, name: true } }, creatorOnboarding: { select: { continuedAt: true } },
+      } });
+    },
+    async creatorDesign(userId: string) {
+      return db.creatorProfile.findUnique({ where: { userId }, select: { page: { select: { design: true } } } });
+    },
+    async saveCreatorDesign(userId: string, design: Prisma.InputJsonValue) {
+      return db.$transaction(async tx => {
+        const profile = await tx.creatorProfile.findUnique({ where: { userId }, select: { id: true } });
+        if (!profile) return false;
+        await tx.creatorPage.createMany({ data: { profileId: profile.id, design }, skipDuplicates: true });
+        await tx.creatorPage.update({ where: { profileId: profile.id }, data: { design } });
+        return true;
+      });
+    },
+    async continueCreator(userId: string) {
+      await db.creatorOnboarding.createMany({ data: { userId }, skipDuplicates: true });
+    },
+    async setupCreator(userId: string, name: string) {
+      return db.$transaction(async tx => {
+        if (!await tx.creatorOnboarding.findUnique({ where: { userId } })) return null;
+        await tx.creatorProfile.createMany({ data: { userId, name }, skipDuplicates: true });
+        return tx.creatorProfile.findUnique({ where: { userId }, select: { id: true, name: true } });
+      });
+    },
     async guest(id: string) {
       const owner = await db.dataOwner.findUnique({ where: { id }, select: { userId: true } });
       return !owner?.userId;
@@ -62,25 +94,32 @@ export function prismaAccounts(db: PrismaClient) {
         return attempt;
       });
     },
-    async signin(provider: AuthProvider, subject: string, displayName: string | null, guestOwnerId: string | null) {
+    async signin(provider: AuthProvider, subject: string, displayName: string | null, guestOwnerId: string | null,
+      verifiedEmail?: string | null, avatarUrl?: string | null) {
       const key = identityKey(provider, subject);
       try {
         return await db.$transaction(async (tx) => {
           const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
-          if (identity) return newSession(tx, identity.userId, guestOwnerId);
+          if (identity) {
+            if ((verifiedEmail !== undefined && identity.verifiedEmail !== verifiedEmail) ||
+                (avatarUrl !== undefined && identity.avatarUrl !== avatarUrl)) {
+              await tx.authIdentity.update({ where: { provider_subjectHash: key }, data: { verifiedEmail, avatarUrl } });
+            }
+            return newSession(tx, identity.userId, guestOwnerId, provider);
+          }
           const id = randomUUID();
           await tx.user.create({ data: { id, displayName, dataOwners: { create: { id } },
-            identities: { create: key } } });
-          return newSession(tx, id, guestOwnerId);
+            identities: { create: { ...key, verifiedEmail, avatarUrl } } } });
+          return newSession(tx, id, guestOwnerId, provider);
         });
       } catch (error) {
         if (!uniqueConflict(error)) throw error;
         const identity = await db.authIdentity.findUnique({ where: { provider_subjectHash: key } });
         if (!identity) throw error;
-        return newSession(db, identity.userId, guestOwnerId);
+        return db.$transaction(tx => newSession(tx, identity.userId, guestOwnerId, provider));
       }
     },
-    async confirmIdentity(attempt: OAuthAttempt, subject: string) {
+    async confirmIdentity(attempt: OAuthAttempt, subject: string, avatarUrl?: string | null) {
       if (!attempt.sessionHash) return false;
       const key = identityKey(attempt.provider, subject);
       try {
@@ -94,10 +133,13 @@ export function prismaAccounts(db: PrismaClient) {
           if (attempt.purpose === 'verify') {
             const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
             if (identity?.userId !== session.userId) return false;
+            if (avatarUrl !== undefined && identity.avatarUrl !== avatarUrl) {
+              await tx.authIdentity.update({ where: { provider_subjectHash: key }, data: { avatarUrl } });
+            }
             await tx.userSession.update({ where: { tokenHash: session.tokenHash }, data: { verifiedAt: new Date() } });
           } else {
             if (!recentSession(session)) return false;
-            await tx.authIdentity.create({ data: { ...key, userId: session.userId } });
+            await tx.authIdentity.create({ data: { ...key, userId: session.userId, avatarUrl } });
           }
           return true;
         });
@@ -106,12 +148,41 @@ export function prismaAccounts(db: PrismaClient) {
         throw error;
       }
     },
-    logout(hash: string) {
-      return db.userSession.deleteMany({ where: { tokenHash: hash } });
+    async logout(hash: string) {
+      await db.$transaction(async tx => {
+        const current = await tx.userSession.findUnique({ where: { tokenHash: hash }, select: { userId: true } });
+        if (current && (await tx.userSession.deleteMany({ where: { tokenHash: hash } })).count === 1) {
+          await tx.authActivity.create({ data: { userId: current.userId, kind: 'signed_out' } });
+        }
+      });
+    },
+    async adminProfile(hash: string) {
+      const current = await db.userSession.findFirst({
+        where: { tokenHash: hash, expiresAt: { gt: new Date() }, user: { role: 'admin' } },
+        select: { user: { select: { id: true, displayName: true, role: true, identities: { select: { provider: true } } } } },
+      });
+      return current?.user ?? null;
+    },
+    async adminDashboard(profile: { id: string; displayName: string | null; role: 'member' | 'admin';
+      identities: { provider: AuthProvider }[] }) {
+      const [users, activity] = await Promise.all([
+        db.user.findMany({
+          take: 50, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: { id: true, displayName: true, role: true, createdAt: true },
+        }),
+        db.authActivity.findMany({
+          take: 50, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: { id: true, userId: true, kind: true, provider: true, createdAt: true },
+        }),
+      ]);
+      return { profile, users, activity };
     },
     account(id: string) {
       return db.user.findUnique({ where: { id }, select: {
-        displayName: true, identities: { select: { provider: true }, orderBy: { provider: 'asc' } },
+        displayName: true,
+        creatorProfile: { select: { id: true } },
+        password: { select: { email: true, verifiedAt: true } },
+        identities: { select: { provider: true, verifiedEmail: true, avatarUrl: true }, orderBy: { provider: 'asc' } },
       } });
     },
     async rename(id: string, displayName: string | null) {
@@ -160,6 +231,8 @@ export function prismaAccounts(db: PrismaClient) {
     async prune() {
       const now = new Date();
       await db.$transaction([
+        db.authActivity.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 90 * 86_400_000) } } }),
+        db.accountToken.deleteMany({ where: { expiresAt: { lte: now } } }),
         db.oAuthAttempt.deleteMany({ where: { expiresAt: { lte: now } } }),
         db.userSession.deleteMany({ where: { expiresAt: { lte: now } } }),
       ]);

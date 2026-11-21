@@ -16,9 +16,6 @@ export async function api<T>(path: string, options: {
   }).catch(() => { throw new Error('Could not reach Nanti. Try again.'); });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    if (payload?.code === 'database_unavailable' && import.meta.env.DEV) {
-      throw new Error('Start MySQL and check DATABASE_URL and migrations, then try again.');
-    }
     throw new Error(payload?.error ?? 'Could not reach Nanti. Try again.');
   }
   if (response.status === 204 || !response.headers.get('content-type')?.includes('application/json')) {
