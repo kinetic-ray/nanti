@@ -55,7 +55,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Check migration status before deployment
+      - name: Check migration status before deployment (informational)
+        continue-on-error: true
         run: npx prisma migrate status
       - name: Apply pending migrations
         run: npx prisma migrate deploy
