@@ -1,0 +1,64 @@
+name: Migrate Nanti TiDB (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type MIGRATE_NANTI_PRODUCTION after taking a TiDB backup'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nanti-tidb-production-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'MIGRATE_NANTI_PRODUCTION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.TIDB_DATABASE_URL }}
+    steps:
+      - name: Check required secret
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::TIDB_DATABASE_URL secret is missing"
+            exit 1
+          fi
+          case "$DATABASE_URL" in
+            mysql://*) ;;
+            *) echo "::error::Expected a mysql:// TiDB connection string"; exit 1 ;;
+          esac
+      - name: Check out migrations from auth branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/google-auth-admin
+          persist-credentials: false
+      - name: Verify expected migration files
+        shell: bash
+        run: |
+          for name in \
+            20261118130000_item_image_data \
+            20261121120000_account_admin \
+            20261121130000_password_creator_accounts \
+            20261121140000_creator_page_drafts; do
+            test -s "prisma/migrations/$name/migration.sql" || exit 1
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Check migration status before deployment (informational)
+        continue-on-error: true
+        run: npx prisma migrate status
+      - name: Apply pending migrations
+        run: npx prisma migrate deploy
+      - name: Verify migration status after deployment
+        run: npx prisma migrate status

@@ -1,0 +1,52 @@
+name: Recover Nanti TiDB imageKey migration (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type RESOLVE_NANTI_IMAGEKEY after verifying Item.imageKey varchar(255) nullable'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nanti-tidb-production-migration
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: ${{ inputs.confirmation == 'RESOLVE_NANTI_IMAGEKEY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.TIDB_DATABASE_URL }}
+    steps:
+      - name: Check required secret
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::TIDB_DATABASE_URL secret is missing"
+            exit 1
+          fi
+          case "$DATABASE_URL" in
+            mysql://*) ;;
+            *) echo "::error::Expected mysql:// database URL"; exit 1 ;;
+          esac
+      - name: Check out migration sources
+        uses: actions/checkout@v4
+        with:
+          ref: feat/google-auth-admin
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Resolve failed imageKey migration as applied
+        run: npx prisma migrate resolve --applied 20261118130000_item_image_data
+      - name: Report migration status
+        continue-on-error: true
+        run: npx prisma migrate status
