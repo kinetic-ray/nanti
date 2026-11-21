@@ -280,3 +280,41 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-coffee-close:active{transform:scale(.96)}
 .creator-coffee-dialog>.creator-free-tag{display:block;padding-right:54px}
 @media(max-width:700px){.creator-coffee-close{top:12px;right:12px;width:46px;height:46px}.creator-coffee-dialog>.creator-free-tag{padding-right:52px}}
+
+
+/* Issue #58: desktop hero actions belong directly beneath the intro copy. */
+@media (min-width: 951px) {
+  .creator-hero-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 1.5rem;
+  }
+  .creator-hero-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Issue #58: align the journey with the showcase heading and keep steps steady. */
+@media (min-width: 781px) {
+  .creator-post-journey {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 405px);
+    align-items: start;
+    gap: clamp(2rem, 5vw, 5rem);
+  }
+  .creator-post-preview {
+    justify-self: end;
+    align-self: start;
+  }
+  /* The Instagram post is taller than the search/result states.
+     Reserve its footprint so changing steps never moves the next section. */
+  .creator-post-viewport {
+    min-height: 760px;
+  }
+  .creator-journey-help {
+    min-height: 106px;
+  }
+}
