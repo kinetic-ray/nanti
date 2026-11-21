@@ -225,13 +225,43 @@ model AdminSession {
   @@index([expiresAt])
 }
 
+enum UserRole {
+  member
+  admin
+}
+
+enum AuthActivityKind {
+  signed_in
+  signed_out
+}
+
+model AuthActivity {
+  id        String           @id @default(uuid()) @db.Char(36)
+  userId    String?          @db.Char(36)
+  kind      AuthActivityKind
+  provider  AuthProvider?
+  createdAt DateTime         @default(now())
+  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt, id])
+  @@index([userId])
+}
+
 model User {
+  role        UserRole       @default(member)
+  authActivity AuthActivity[]
+  password PasswordCredential?
+  tokens AccountToken[]
+  creatorOnboarding CreatorOnboarding?
+  creatorProfile CreatorProfile?
   id          String         @id @default(uuid()) @db.Char(36)
   displayName String?        @db.VarChar(100)
   createdAt   DateTime       @default(now())
   identities  AuthIdentity[]
   sessions    UserSession[]
   dataOwners  DataOwner[]
+
+  @@index([createdAt, id])
 }
 
 model DataOwner {
@@ -250,6 +280,7 @@ enum AuthProvider {
 }
 
 model AuthIdentity {
+  verifiedEmail String? @db.VarChar(254)
   provider    AuthProvider
   subjectHash String       @db.Char(64)
   userId      String       @db.Char(36)
@@ -278,7 +309,14 @@ enum AuthPurpose {
   verify
 }
 
+enum AuthDestination {
+  account
+  admin
+  creator
+}
+
 model OAuthAttempt {
+  destination    AuthDestination?
   stateHash      String       @id @db.Char(64)
   browserHash    String       @db.Char(64)
   provider       AuthProvider
@@ -292,4 +330,45 @@ model OAuthAttempt {
 
   @@index([sessionHash])
   @@index([expiresAt])
+}
+
+enum AccountTokenKind {
+  verify
+  reset
+}
+model PasswordCredential {
+  userId       String    @id @db.Char(36)
+  email        String    @unique @db.VarChar(254)
+  passwordHash String    @db.VarChar(120)
+  verifiedAt   DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+model AccountToken {
+  userId    String           @db.Char(36)
+  kind      AccountTokenKind
+  tokenHash String           @unique @db.Char(64)
+  expiresAt DateTime
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, kind])
+  @@index([expiresAt])
+}
+model CreatorOnboarding {
+  userId      String   @id @db.Char(36)
+  continuedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+model CreatorProfile {
+  page CreatorPage?
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @unique @db.Char(36)
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CreatorPage {
+  profileId String         @id @db.Char(36)
+  design    Json
+  updatedAt DateTime       @default(now()) @updatedAt
+  profile   CreatorProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 }

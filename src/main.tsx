@@ -1,3 +1,4 @@
+import { CreatorAccess } from './creator-access.js';
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
@@ -17,6 +18,7 @@ import './styles.css';
 import './consumer.css';
 
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
+const AccountAdmin = lazy(() => import('./account-admin.js').then(({ AccountAdmin }) => ({ default: AccountAdmin })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
 const CreatorDesignStudio = lazy(() => import('./creator-studio.js').then(({ CreatorDesignStudio }) => ({ default: CreatorDesignStudio })));
 const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ CreatorStorefront }) => ({ default: CreatorStorefront })));
@@ -199,14 +201,26 @@ function App() {
           <details className="masthead-menu">
             <summary className="icon-button masthead-menu-toggle" aria-label={language === 'id' ? 'Buka menu' : 'Open menu'}
               title={language === 'id' ? 'Menu' : 'Menu'} aria-haspopup="true">
-              <span className="masthead-hamburger" aria-hidden="true"><span /><span /><span /></span>
+              {account ? <span aria-hidden="true">{Array.from(account.displayName?.trim() || account.email || 'N').slice(0, 2).join('').toUpperCase()}</span>
+                : <span className="masthead-hamburger" aria-hidden="true"><span /><span /><span /></span>}
             </summary>
             <div className="masthead-menu-panel">
-              <button type="button" disabled={!lists} onClick={() => {
-                document.querySelector<HTMLDetailsElement>('.masthead-menu')?.removeAttribute('open');
+              <button type="button" disabled={!lists} aria-label={account ? t('Account') : undefined} onClick={event => {
+                const menu = event.currentTarget.closest('details');
+                if (menu) menu.open = false;
+                menu?.querySelector('summary')?.focus();
                 setShowAccount(true);
                 void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
-              }}><Icon name="person" />{t(account ? 'Account' : 'Sign in')}</button>
+              }}>{account?.displayName ? <span aria-hidden="true">{Array.from(account.displayName.trim())[0]?.toUpperCase()}</span> : <Icon name="person" />}{account ? account.displayName || account.email || t('Account') : t('Sign in')}</button>
+              {account && <>
+                <a href="/account">Profil Saya</a>
+                <a href="/account?view=settings">Pengaturan Akun</a>
+                <a href="/creator/studio">Creator Studio</a>
+                <button type="button" onClick={() => void api('/account/logout', { method: 'POST' }).then(() => {
+                  announceAuthChange();
+                  location.replace('/?auth=signed-out');
+                }, () => setStatus('Could not load your account. Try again.'))}>Keluar</button>
+              </>}
               <a href="/creator"><Icon name="sparkles" />{language === 'id' ? 'Kreator' : 'Creator'}</a>
             </div>
           </details>
@@ -350,7 +364,13 @@ function App() {
       </Suspense>}
       {showAccount && lists && <AccountDialog status={accountStatus} notice={notice}
         close={() => {
-          if (/^\/account\/?$/u.test(location.pathname)) history.replaceState(null, '', '/');
+          if (/^\/account\/?$/u.test(location.pathname)) {
+            if (new URLSearchParams(location.search).get('next') === 'creator') {
+              location.replace('/creator');
+              return;
+            }
+            history.replaceState(history.state, '', '/');
+          }
           setShowAccount(false);
           setNotice(null);
         }} update={setAccountStatus} />}
@@ -362,12 +382,15 @@ const root = document.getElementById('root');
 if (root) {
   if (/^\/admin\/?$/u.test(location.pathname)) {
     document.documentElement.lang = 'en';
-    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening Affiliate Center…</p>}><AdminCenter /></Suspense>);
+    const accounts = new URLSearchParams(location.search).get('view') === 'accounts';
+    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening administration…</p>}>
+      {accounts ? <AccountAdmin /> : <AdminCenter />}
+    </Suspense>);
   } else if (/^\/creator\/studio\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Design Studio…</p>}><CreatorDesignStudio /></Suspense></LocaleProvider>);
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Design Studio…</p>}><CreatorAccess studio={(ownerId, draft) => <CreatorDesignStudio ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/demo\/?$/u.test(location.pathname)) {
     createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening creator storefront…</p>}><CreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening Nanti Kreator…</p>}><CreatorLanding /></Suspense></LocaleProvider>);
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening Nanti Kreator…</p>}>{new URLSearchParams(location.search).get('onboard') === '1' ? <CreatorAccess studio={() => null} /> : <CreatorLanding />}</Suspense></LocaleProvider>);
   } else createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
 }

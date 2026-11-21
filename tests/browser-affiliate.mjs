@@ -126,7 +126,7 @@ try {
     await axe(shopper, 'mobile Indonesian product');
     if (screenshots) await shopper.screenshot({ path: join(screenshots, 'affiliate-buy-mobile.png') });
     await shopper.keyboard.press('Escape');
-    await button(shopper, 'English').click();
+    await button(shopper, 'Switch to English').click();
     await button(shopper, `Purchase tools for ${title}`).click();
     details = modal(shopper, title);
     buy = details.getByRole('link', { name: /^Buy product/u });

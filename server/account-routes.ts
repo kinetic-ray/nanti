@@ -1,3 +1,5 @@
+import { validateDesign } from '../shared/creator-design.js';
+import { developmentAccountMail } from './account-mail.js';
 import { randomUUID } from 'node:crypto';
 import { Router, urlencoded } from 'express';
 import type { Request, Response } from 'express';
@@ -15,9 +17,14 @@ const uuid = z.uuid();
 const confirm = z.strictObject({ confirm: z.literal(true) });
 const startInput = z.strictObject({
   purpose: z.enum(['signin', 'link', 'verify']),
+  destination: z.enum(['account', 'admin', 'creator']).optional(),
 });
 const callbackInput = z.object({ state: token, code: z.string().min(1).max(4096).optional(), error: z.string().optional() });
+const emailInput = z.email().max(254).transform(value => value.toLowerCase());
+const passwordInput = z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 256);
+const newPassword = passwordInput.refine(value => Array.from(value).length >= 15);
 const attemptDuration = 600_000;
+const authDestinations = { account: '/account', admin: '/admin?view=accounts', creator: '/creator?onboard=1' } as const;
 
 export function accountRoutes(accounts: Accounts, providers: OAuthProviders, secure: boolean, guestCookie: string) {
   const api = Router();
@@ -32,6 +39,24 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     windowMs: 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many account requests. Try again in a minute.' },
   });
+
+
+  const sendMail = developmentAccountMail(secure);
+  const passwordLimit = rateLimit({
+    windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Too many account requests. Try again in a minute.' },
+  });
+
+  async function deliver(email: string, kind: 'verify' | 'reset', creator: boolean) {
+    const raw = await accounts.passwords.issue(email, kind);
+    if (raw && sendMail) await sendMail(email, kind, raw, creator).catch(() => console.error('Account mail delivery failed.'));
+  }
+  function unavailable(res: Response) {
+    res.status(503).json({ error: 'Email delivery is currently unavailable.' });
+  }
+  function invalidCode(res: Response) {
+    res.status(400).json({ error: 'This link is invalid or has expired.' });
+  }
 
   function guest(req: Request) {
     const parsed = uuid.safeParse(req.signedCookies[guestCookie]);
@@ -75,20 +100,26 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const configured = providers[provider];
     const incoming = callbackInput.safeParse(provider === 'apple' ? req.body : req.query);
     const browser = token.safeParse(req.cookies[attemptCookie(provider)]);
-    const finish = (status: string) => res.redirect(303, `/?auth=${status}`);
+    let destination: string = '/';
+    const finish = (status: string) => {
+      const query = new URLSearchParams({ auth: status });
+      res.redirect(303, `${destination}${destination.includes('?') ? '&' : '?'}${query}`);
+    };
     if (!configured || !incoming.success || !browser.success) { finish('failed'); return; }
 
     try {
       const { state, code, error } = incoming.data;
       const attempt = await accounts.consumeAttempt(state, browser.data, provider);
       if (!attempt) { finish('failed'); return; }
+      if (attempt.destination) destination = authDestinations[attempt.destination];
       res.clearCookie(attemptCookie(provider), attemptOptions(provider));
       if (error || !code) { finish(error === 'access_denied' || error === 'user_cancelled_authorize' ? 'cancelled' : 'failed'); return; }
-      const { subject, displayName } = await configured.verify(new URLSearchParams({ state, code }), {
+      const { subject, displayName, verifiedEmail } = await configured.verify(new URLSearchParams({ state, code }), {
         state, nonce: attempt.nonce, verifier: attempt.verifier,
       });
       if (attempt.purpose === 'signin') {
-        const raw = await accounts.signin(provider, subject, displayName, attempt.guestOwnerId);
+        if (await session(req)) { finish('failed'); return; }
+        const raw = await accounts.signin(provider, subject, displayName, attempt.guestOwnerId, verifiedEmail);
         res.cookie(sessionCookie, raw, { ...sessionOptions, maxAge: sessionDuration });
         finish('signed-in');
       } else {
@@ -109,7 +140,10 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const current = await session(req);
     const account = current && await accounts.account(current.userId);
     const pending = current && eligibleGuest(req, current);
-    const response: AccountStatus = { available, account: account && current ? {
+    const providerEmail = account?.identities.find(identity => identity.verifiedEmail)?.verifiedEmail;
+    const response: AccountStatus = { available, ...(sendMail && { emailDelivery: true }), account: account && current ? {
+      ...(account.password ? { email: account.password.email, emailVerified: Boolean(account.password.verifiedAt), hasPassword: true }
+        : providerEmail ? { email: providerEmail, emailVerified: true } : {}),
       displayName: account.displayName, providers: account.identities.map(entry => entry.provider),
       recentlyVerified: recentSession(current), import: pending ? await accounts.importSummary(current.userId, pending) : null,
     } : null };
@@ -122,7 +156,7 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
       res.status(404).json({ error: 'This sign-in option is unavailable.' });
       return;
     }
-    const { purpose } = startInput.parse(req.body);
+    const { purpose, destination } = startInput.parse(req.body);
     const current = await session(req);
     if (purpose === 'signin' && current) {
       res.status(409).json({ error: 'Sign out before switching accounts.' });
@@ -145,10 +179,121 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const url = await configured.authorization({ state, nonce, verifier });
     const anonymous = purpose === 'signin' ? guest(req) : null;
     await accounts.attempt({ stateHash: tokenHash(state), browserHash: tokenHash(browser), nonce, provider, purpose,
-      verifier, guestOwnerId: anonymous && await accounts.guest(anonymous) ? anonymous : null,
+      verifier, destination: purpose === 'signin' ? destination : undefined, guestOwnerId: anonymous && await accounts.guest(anonymous) ? anonymous : null,
       sessionHash: current?.tokenHash, expiresAt: new Date(Date.now() + attemptDuration) });
     res.cookie(attemptCookie(provider), browser, { ...attemptOptions(provider), maxAge: attemptDuration });
     res.json({ url: url.href });
+  });
+
+  api.post('/password/register', passwordLimit, async (req, res) => {
+    if (!sendMail) return unavailable(res);
+    const { email, password, creator } = z.strictObject({ email: emailInput, password: newPassword, creator: z.boolean().default(false) }).parse(req.body);
+    await accounts.passwords.register(email, password);
+    await deliver(email, 'verify', creator);
+    res.sendStatus(202);
+  });
+  for (const [path, kind] of [['resend', 'verify'], ['forgot', 'reset']] as const) {
+    api.post(`/password/${path}`, passwordLimit, async (req, res) => {
+      if (!sendMail) return unavailable(res);
+      const { email, creator } = z.strictObject({ email: emailInput, creator: z.boolean().default(false) }).parse(req.body);
+      await deliver(email, kind, creator);
+      res.sendStatus(202);
+    });
+  }
+  api.post('/password/verify', passwordLimit, async (req, res) => {
+    const { code, password } = z.strictObject({ code: token, password: passwordInput }).parse(req.body);
+    if (!await accounts.passwords.consume(code, 'verify', password)) return invalidCode(res);
+    res.sendStatus(204);
+  });
+  api.post('/password/reset', passwordLimit, async (req, res) => {
+    const { code, password } = z.strictObject({ code: token, password: newPassword }).parse(req.body);
+    if (!await accounts.passwords.consume(code, 'reset', password)) return invalidCode(res);
+    clearSession(res);
+    clearAttempts(res);
+    res.sendStatus(204);
+  });
+  api.post('/password/login', passwordLimit, async (req, res) => {
+    const { email, password } = z.strictObject({ email: emailInput, password: passwordInput }).parse(req.body);
+    if (await session(req)) {
+      res.status(409).json({ error: 'Sign out before switching accounts.' });
+      return;
+    }
+    const anonymous = guest(req);
+    const raw = await accounts.passwords.login(email, password, anonymous && await accounts.guest(anonymous) ? anonymous : null);
+    if (!raw) {
+      res.status(401).json({ error: 'Check your email, password, and email verification.' });
+      return;
+    }
+    res.cookie(sessionCookie, raw, { ...sessionOptions, maxAge: sessionDuration });
+    clearAttempts(res);
+    res.sendStatus(204);
+  });
+  api.post('/password/change', passwordLimit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const { currentPassword, password } = z.strictObject({ currentPassword: passwordInput, password: newPassword }).parse(req.body);
+    if (!await accounts.passwords.change(current, currentPassword, password)) {
+      res.status(403).json({ error: 'Check your current password and try again.' });
+      return;
+    }
+    clearSession(res);
+    clearAttempts(res);
+    res.sendStatus(204);
+  });
+
+  api.get('/creator', async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const state = await accounts.creator(current.userId);
+    res.json({ profile: state?.creatorProfile ?? null, continued: Boolean(state?.creatorOnboarding) });
+  });
+  api.get('/creator/design', async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const profile = await accounts.creatorDesign(current.userId);
+    if (!profile) { res.status(403).json({ error: 'Create a Creator profile first.' }); return; }
+    res.json({ design: profile.page?.design ?? null });
+  });
+  api.put('/creator/design', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const { design } = z.strictObject({ design: z.record(z.string(), z.unknown()) }).parse(req.body);
+    if (!await accounts.saveCreatorDesign(current.userId, validateDesign(design))) {
+      res.status(403).json({ error: 'Create a Creator profile first.' });
+      return;
+    }
+    res.sendStatus(204);
+  });
+
+  api.post('/creator/continue', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    z.strictObject({}).parse(req.body);
+    await accounts.continueCreator(current.userId);
+    res.sendStatus(204);
+  });
+  api.post('/creator/setup', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const { name } = z.strictObject({ name: z.string().trim().min(1).max(100)
+      .refine(value => !/[\p{Cc}\p{Cf}]/u.test(value)) }).parse(req.body);
+    const profile = await accounts.setupCreator(current.userId, name);
+    if (!profile) {
+      res.status(409).json({ error: 'Continue through Creator onboarding first.' });
+      return;
+    }
+    res.status(201).json(profile);
+  });
+
+  api.get('/admin', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const profile = await accounts.adminProfile(current.tokenHash);
+    if (!profile) {
+      res.status(403).json({ error: 'Administrator access is required.' });
+      return;
+    }
+    res.json(await accounts.adminDashboard(profile));
   });
   api.post('/logout', limit, async (req, res) => {
     const hash = sessionKey(req);

@@ -85,6 +85,7 @@ export function AdminCenter() {
       <div className="brand-group"><span className="brand-symbol" aria-hidden="true" />
         <div className="brand">nanti<span>.</span></div></div>
       <div className="actions">
+        <a className="buy-original" href="/admin?view=accounts">Admin dashboard</a>
         <a className="buy-original" href="/">Back to Nanti</a>
         {session && <button type="button" disabled={busy} onClick={() => void signOut()}>Sign out</button>}
       </div>
