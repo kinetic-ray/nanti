@@ -318,3 +318,35 @@ body:has(.creator-page){background:#f6f5fc}
     min-height: 106px;
   }
 }
+
+
+/* Issue #58 follow-up: the storefront states fill the reserved desktop preview.
+   Keep the mobile preview content-sized instead of forcing a tall empty card. */
+@media (min-width: 781px) {
+  .creator-post-viewport {
+    min-height: 760px;
+  }
+  .creator-post-store {
+    min-height: 760px;
+    display: flex;
+    flex-direction: column;
+  }
+  .creator-post-store-body {
+    flex: 1;
+  }
+}
+.creator-post-store-body .creator-post-store-hint {
+  margin: 12px 0 0;
+  line-height: 1.55;
+}
+.creator-post-result {
+  margin-top: 24px;
+}
+@media (max-width: 780px) {
+  .creator-post-viewport {
+    min-height: 0;
+  }
+  .creator-post-store {
+    min-height: 530px;
+  }
+}
