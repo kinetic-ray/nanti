@@ -49,7 +49,7 @@ it('reports database failure for readiness and guest requests without exposing c
   expect(response.text).not.toContain(offline.message);
   await request(app).get('/api/health').expect(200, { service: 'nanti', status: 'ready' });
   await request(app).post('/api/session').set('X-Nanti-Request', '1').send({}).expect(503)
-    .expect({ code: 'database_unavailable', error: 'The database is unavailable. Try again shortly.' });
+    .expect({ code: 'database_unavailable', error: 'Could not reach Nanti. Try again.' });
 });
 
 it('loads the Vercel entrypoint without a database handshake and preserves the API mutation check', async () => {

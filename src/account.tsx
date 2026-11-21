@@ -23,6 +23,17 @@ export type AuthNotice = keyof typeof authNotices;
 export const authChangeKey = 'nanti:account-changed';
 const providerNames = { apple: 'Apple', google: 'Google' } as const;
 const providerOrigins = { apple: 'https://appleid.apple.com', google: 'https://accounts.google.com' } as const;
+const providerMarks = {
+  google: <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+    <path fill="#4285f4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z" />
+    <path fill="#34a853" d="M24 44c5.5 0 10.2-1.8 13.5-4.6l-6.6-5c-1.8 1.2-4.2 1.9-6.9 1.9-5.3 0-9.9-3.6-11.5-8.4H5.7v5.2A20 20 0 0 0 24 44Z" />
+    <path fill="#fbbc05" d="M12.5 27.9a12 12 0 0 1 0-7.8v-5.2H5.7a20 20 0 0 0 0 18.2l6.8-5.2Z" />
+    <path fill="#ea4335" d="M24 11.7c3 0 5.7 1 7.8 3l5.9-5.8A19.6 19.6 0 0 0 24 4 20 20 0 0 0 5.7 14.9l6.8 5.2c1.6-4.8 6.2-8.4 11.5-8.4Z" />
+  </svg>,
+  apple: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+    <path d="M17.1 12.3c0-2 1.6-3 1.7-3.1-1-1.5-2.6-1.7-3.1-1.7-1.4-.2-2.7.8-3.4.8s-1.8-.8-2.9-.7c-1.5 0-2.9.9-3.7 2.2-1.6 2.7-.4 6.8 1.1 9 .7 1 1.6 2.2 2.8 2.2 1.1 0 1.6-.7 3-.7 1.3 0 1.7.7 2.9.7s2-1.1 2.7-2.1c.9-1.2 1.2-2.4 1.2-2.5-.1 0-2.3-.9-2.3-4.1ZM14.8 6c.6-.7 1-1.7.9-2.7-.9 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6 1 .1 1.9-.5 2.5-1.2Z" />
+  </svg>,
+};
 
 export function announceAuthChange() {
   try { localStorage.setItem(authChangeKey, String(Date.now())); } catch { /* Storage can be blocked. */ }
@@ -91,30 +102,32 @@ export function AccountDialog({ status, notice, close, update }: {
   const providerButtons = (choices: LoginProvider[], purpose: AuthPurpose) => choices.map(provider =>
     <button key={provider} type="button" disabled={busy || passwordBusy} className={`account-provider provider-${provider}`}
       onClick={() => void run(() => start(provider, purpose))}>
-      <span className="account-provider-mark" aria-hidden="true">{provider === 'google' ? 'G' : '●'}</span>
+      <span className="account-provider-mark" aria-hidden="true">{purpose === 'signin' ? providerMarks[provider] : provider === 'google' ? 'G' : '●'}</span>
       <span className="account-provider-label">{t(purpose === 'signin' ? 'Continue with {provider}' : purpose === 'link' ?
         'Connect {provider}' : 'Verify with {provider}', { provider: providerNames[provider] })}</span>
       <Icon name="arrow" />
     </button>);
-  const signInShell = loginProviders.map(provider => {
-    const enabled = status?.available.includes(provider) ?? false;
-    return enabled ? providerButtons([provider], 'signin') : <button key={provider} type="button"
-      className={`account-provider provider-${provider} account-provider-pending`} disabled>
-      <span className="account-provider-mark" aria-hidden="true">{provider === 'google' ? 'G' : '●'}</span>
-      <span className="account-provider-label">{t('Continue with {provider}', { provider: providerNames[provider] })}</span>
-      <span className="account-provider-status">{t('Unavailable')}</span>
-    </button>;
-  });
+  const signInProviders = loginProviders.filter(provider => status?.available.includes(provider));
+  const title = account
+    ? new URLSearchParams(location.search).get('view') === 'settings' ? 'Account settings' : 'Your account'
+    : status?.emailDelivery ? 'Welcome to Nanti' : 'Sign in to Nanti';
 
   return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
-    title={t(account ? new URLSearchParams(location.search).get('view') === 'settings' ? 'Account settings' : 'Your account' : 'Sign in to Nanti')} busy={busy || passwordBusy} close={close} focusHeading={Boolean(account)}
+    title={t(title)} busy={busy || passwordBusy} close={close} focusHeading
     headerAction={!account && <button type="button" className="account-signin-close" aria-label={t('Close')}
       disabled={busy || passwordBusy} onClick={close}><Icon name="close" /></button>}>
+    {!account && <div className="account-editorial">
+      <div className="account-editorial-brand"><span className="brand-symbol" aria-hidden="true" />Nanti</div>
+      <div className="account-editorial-copy">
+        <p className="account-editorial-tagline">{t('Save it now. Decide later.')}</p>
+        <p>{t('Keep your wishlists and purchase decisions with you across devices.')}</p>
+      </div>
+    </div>}
     {notice && <p className={notice === 'failed' ? 'error' : undefined}
       role={notice === 'failed' ? 'alert' : 'status'}>{t(authNotices[notice])}</p>}
     {error && <p role="alert" className="error">{translateError(error)}</p>}
     {signingInWith ? <p role="status">{t('Opening {provider} sign-in…', { provider: providerNames[signingInWith] })}</p>
-      : working && <p role="status">{t('Working…')}</p>}
+      : (working || passwordBusy) && <p role="status">{t('Working…')}</p>}
     {message && <p role="status">{t(message)}</p>}
     {!status ? <>
       <p>{t('Could not load your account. Try again.')}</p>
@@ -124,16 +137,15 @@ export function AccountDialog({ status, notice, close, update }: {
         update(current);
       })}>{t('Try again')}</button>
     </> :
-      !account ? <section className="account-signin-shell">
-        <h3>{t('Your wishlist, wherever you go.')}</h3>
-        <p>{t('Keep your wishlists and purchase decisions with you across devices.')}</p>
-        <div className="account-providers">{signInShell}</div>
-        <PasswordForm delivery={Boolean(status.emailDelivery)} signedIn={false} creator={creator} busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />
-        {!status.available.length && <p className="account-signin-note" role="status">
-          {t('Sign-in is currently unavailable.')}
-        </p>}
-        <p className="account-signin-note">{t('Your existing guest wishlists stay available on this device.')}</p>
-      </section> : <>
+      !account ? <div className="account-signin-shell">
+        <PasswordForm delivery={Boolean(status.emailDelivery)} signedIn={false} creator={creator}
+          busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy}
+          alternatives={signInProviders.length > 0 && <div className="account-signin-alternatives">
+            <p className="account-signin-divider">{t('Or')}</p>
+            <div className="account-providers">{providerButtons(signInProviders, 'signin')}</div>
+          </div>} />
+      </div> : <>
+        <p><a href="/creator/studio">Creator Studio</a></p>
         {account.import && <section className="account-import" aria-labelledby="account-import-heading">
           <h3 id="account-import-heading">{t('Bring your guest data')}</h3>
           <p>{t('This browser has {guest} guest wishlists. Your account has {account} wishlists.', {
@@ -183,7 +195,7 @@ export function AccountDialog({ status, notice, close, update }: {
           </details>
         </div>
       </>}
-    <div className="account-footer"><button onClick={close} disabled={busy}>
+    <div className="account-footer"><button type="button" onClick={close} disabled={busy || passwordBusy}>
       {t(account ? 'Close' : 'Continue as guest')}
     </button></div>
   </Dialog>;

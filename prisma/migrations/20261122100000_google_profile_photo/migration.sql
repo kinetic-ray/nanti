@@ -1,0 +1,1 @@
+ALTER TABLE `AuthIdentity` ADD COLUMN `avatarUrl` VARCHAR(2048) NULL;

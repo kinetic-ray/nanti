@@ -23,8 +23,8 @@ Set all credentials for each enabled provider. Store values in the server secret
 
 1. Select a Google Cloud project. Configure **Google Auth Platform → Branding** and **Audience** with the app name, support contact, and intended audience. Add test users if using external testing mode.
 2. In **Clients**, create an OAuth client of type **Web application**. Under **Authorized redirect URIs**, add `https://nanti.example.com/api/account/google/callback`, replacing the example origin with the exact deployed origin. The callback uses GET.
-3. For local Vite development, register `http://127.0.0.1:5173/api/account/google/callback` and set `AUTH_PUBLIC_ORIGIN=http://127.0.0.1:5173`. Open that exact origin. When serving the built app directly on a different port, register that port and set the origin accordingly.
-4. Set `AUTH_GOOGLE_CLIENT_ID` and `AUTH_GOOGLE_CLIENT_SECRET`. The server requests `openid profile`, uses S256 PKCE, and retains the stable identity key and an optional verified display name.
+3. For local Vite development with `AUTH_PUBLIC_ORIGIN=http://localhost:5173`, register `http://localhost:5173/api/account/google/callback` and open `http://localhost:5173`. If you configure `http://127.0.0.1:5173` instead, register `http://127.0.0.1:5173/api/account/google/callback` and use that browser address. The attempt cookie is host-only, and the browser origin must match the configured scheme, host, and port. When using a different port, update both values accordingly.
+4. Set `AUTH_GOOGLE_CLIENT_ID` and `AUTH_GOOGLE_CLIENT_SECRET`. The server requests `openid profile email` and uses S256 PKCE. During development, look for `OAuth sign-in failed` in the API console. The entry identifies the failure phase, such as an origin mismatch, a missing browser cookie, an expired attempt, or token exchange failure. It includes no credential or callback payload.
 
 [Google Workspace OAuth credentials](https://developers.google.com/workspace/guides/create-credentials) · [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
 
@@ -90,4 +90,4 @@ Set `NANTI_DEV_ACCOUNT_MAIL=file` in the ignored local environment file with `NO
 
 Apply `20261121130000_password_creator_accounts` before serving this version. It adds password credentials, expiring action tokens, Creator onboarding progress and one Creator profile per account. Existing identities, sessions and wishlists stay in place. Apply `20261121140000_creator_page_drafts` as well. Saved Studio designs belong to the authenticated Creator profile. The old, unowned preview key remains in browser storage.
 
-The Creator contribution step allows an unconditional skip. This checkout contains no existing contribution destination. Add the approved external donation link when it is available.
+Signed-in users can open Creator Studio from their account. New creators enter the name shown on their storefront. Apply migration `20261122110000_creator_catalog` before serving the catalog and public storefront routes. The migration assigns existing creators stable storefront links and keeps storefronts private until publication.

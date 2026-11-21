@@ -1,4 +1,5 @@
 import { passwordAccounts } from './password-accounts.js';
+import { prismaCreatorCatalog } from './prisma-creator-catalog.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Prisma } from './generated/prisma/client.js';
 import type { AuthProvider, OAuthAttempt, PrismaClient, UserSession } from './generated/prisma/client.js';
@@ -46,6 +47,7 @@ export function prismaAccounts(db: PrismaClient) {
   }
 
   return {
+    creatorCatalog: prismaCreatorCatalog(db),
 passwords: passwordAccounts(db, newSession, authToken, tokenHash),
     creator(userId: string) {
       return db.user.findUnique({ where: { id: userId }, select: {
@@ -92,20 +94,22 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
         return attempt;
       });
     },
-    async signin(provider: AuthProvider, subject: string, displayName: string | null, guestOwnerId: string | null, verifiedEmail?: string | null) {
+    async signin(provider: AuthProvider, subject: string, displayName: string | null, guestOwnerId: string | null,
+      verifiedEmail?: string | null, avatarUrl?: string | null) {
       const key = identityKey(provider, subject);
       try {
         return await db.$transaction(async (tx) => {
           const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
           if (identity) {
-            if (verifiedEmail !== undefined && identity.verifiedEmail !== verifiedEmail) {
-              await tx.authIdentity.update({ where: { provider_subjectHash: key }, data: { verifiedEmail } });
+            if ((verifiedEmail !== undefined && identity.verifiedEmail !== verifiedEmail) ||
+                (avatarUrl !== undefined && identity.avatarUrl !== avatarUrl)) {
+              await tx.authIdentity.update({ where: { provider_subjectHash: key }, data: { verifiedEmail, avatarUrl } });
             }
             return newSession(tx, identity.userId, guestOwnerId, provider);
           }
           const id = randomUUID();
           await tx.user.create({ data: { id, displayName, dataOwners: { create: { id } },
-            identities: { create: { ...key, verifiedEmail } } } });
+            identities: { create: { ...key, verifiedEmail, avatarUrl } } } });
           return newSession(tx, id, guestOwnerId, provider);
         });
       } catch (error) {
@@ -115,7 +119,7 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
         return db.$transaction(tx => newSession(tx, identity.userId, guestOwnerId, provider));
       }
     },
-    async confirmIdentity(attempt: OAuthAttempt, subject: string) {
+    async confirmIdentity(attempt: OAuthAttempt, subject: string, avatarUrl?: string | null) {
       if (!attempt.sessionHash) return false;
       const key = identityKey(attempt.provider, subject);
       try {
@@ -129,10 +133,13 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
           if (attempt.purpose === 'verify') {
             const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
             if (identity?.userId !== session.userId) return false;
+            if (avatarUrl !== undefined && identity.avatarUrl !== avatarUrl) {
+              await tx.authIdentity.update({ where: { provider_subjectHash: key }, data: { avatarUrl } });
+            }
             await tx.userSession.update({ where: { tokenHash: session.tokenHash }, data: { verifiedAt: new Date() } });
           } else {
             if (!recentSession(session)) return false;
-            await tx.authIdentity.create({ data: { ...key, userId: session.userId } });
+            await tx.authIdentity.create({ data: { ...key, userId: session.userId, avatarUrl } });
           }
           return true;
         });
@@ -172,7 +179,10 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
     },
     account(id: string) {
       return db.user.findUnique({ where: { id }, select: {
-        displayName: true, password: { select: { email: true, verifiedAt: true } }, identities: { select: { provider: true, verifiedEmail: true }, orderBy: { provider: 'asc' } },
+        displayName: true,
+        creatorProfile: { select: { id: true } },
+        password: { select: { email: true, verifiedAt: true } },
+        identities: { select: { provider: true, verifiedEmail: true, avatarUrl: true }, orderBy: { provider: 'asc' } },
       } });
     },
     async rename(id: string, displayName: string | null) {

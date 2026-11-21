@@ -394,7 +394,16 @@ export async function downloadTokopediaImage(value: string, transport: PageReque
   (url, signal) => requestPublicPage(url, signal, 'image/jpeg')): Promise<Buffer | null> {
   const url = value.length <= 2048 ? safeHttps(value) : null;
   if (!url || !imageHosts.test(url.hostname)) return null;
+  return downloadMarketplaceJpeg(url, transport);
+}
 
+export function downloadShopeeImage(value: string): Promise<Buffer | null> {
+  const url = value.length <= 2048 ? safeHttps(value) : null;
+  if (!url || !/(^|\.)susercontent\.com$/u.test(url.hostname)) return Promise.resolve(null);
+  return downloadMarketplaceJpeg(url, (target, signal) => requestPublicPage(target, signal, 'image/jpeg'));
+}
+
+async function downloadMarketplaceJpeg(url: URL, transport: PageRequest): Promise<Buffer | null> {
   const signal = AbortSignal.timeout(4000);
   try {
     const response = await Promise.race([

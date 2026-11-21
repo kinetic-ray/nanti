@@ -114,7 +114,11 @@ try {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches), true);
-    assert.equal(await page.locator('.primary').first().evaluate((element) => getComputedStyle(element).transitionDuration.split(', ')[0]), '1e-05s');
+    const primary = page.locator('.primary').first();
+    assert.deepEqual(await primary.evaluate(element => {
+      const style = getComputedStyle(element);
+      return [style.transitionProperty, style.transitionDuration, style.transform];
+    }), ['none', '0s', 'none']);
     await button(page, 'Cek kesiapan beli wishlist').click();
     const tool = dialog('Cek kesiapan beli');
     await tool.locator('summary').getByText('Keputusan sebelumnya', { exact: true }).click();

@@ -6,7 +6,8 @@ import { sharedProductLink } from './share-target.js';
 import type { Currency, Item, ItemSaveInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { DeleteForm, ItemForm, ListForm, PrivacyForm } from './forms.js';
-import { LanguagePicker, LocaleProvider, useLocale } from './locale.js';
+import { LocaleProvider, useLocale } from './locale.js';
+import { HeaderActions } from './header-actions.js';
 import type { Message } from './messages.js';
 import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.js';
 import { AccountDialog, announceAuthChange, authChangeKey, authNotices } from './account.js';
@@ -20,7 +21,8 @@ import './consumer.css';
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
 const AccountAdmin = lazy(() => import('./account-admin.js').then(({ AccountAdmin }) => ({ default: AccountAdmin })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
-const CreatorDesignStudio = lazy(() => import('./creator-studio.js').then(({ CreatorDesignStudio }) => ({ default: CreatorDesignStudio })));
+const CreatorWorkspace = lazy(() => import('./creator-workspace.js').then(({ CreatorWorkspace }) => ({ default: CreatorWorkspace })));
+const LiveCreatorStorefront = lazy(() => import('./creator-workspace.js').then(({ LiveCreatorStorefront }) => ({ default: LiveCreatorStorefront })));
 const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ CreatorStorefront }) => ({ default: CreatorStorefront })));
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
@@ -32,7 +34,7 @@ type Editor =
   | { kind: 'delete'; list: WishlistSummary; item?: Item };
 
 function App() {
-  const { t, error, money, number, language } = useLocale();
+  const { t, error, money, number } = useLocale();
   const [lists, setLists] = useState<WishlistSummary[] | null>(null);
   const [sessionError, setSessionError] = useState('');
   const [sessionAttempt, setSessionAttempt] = useState(0);
@@ -193,39 +195,14 @@ function App() {
           <span className="brand-symbol" aria-hidden="true" />
           <div className="brand">nanti<span>.</span></div>
         </div>
-        <div className="masthead-controls">
-          <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
-            title={t('Price alerts')} disabled={!lists} onClick={() => setAlertsOpen(true)}>
-            <Icon name="bell" />{activeId && unreadAlerts > 0 && <span aria-hidden="true">{number(Math.min(99, unreadAlerts))}</span>}
-          </button>
-          <details className="masthead-menu">
-            <summary className="icon-button masthead-menu-toggle" aria-label={language === 'id' ? 'Buka menu' : 'Open menu'}
-              title={language === 'id' ? 'Menu' : 'Menu'} aria-haspopup="true">
-              {account ? <span aria-hidden="true">{Array.from(account.displayName?.trim() || account.email || 'N').slice(0, 2).join('').toUpperCase()}</span>
-                : <span className="masthead-hamburger" aria-hidden="true"><span /><span /><span /></span>}
-            </summary>
-            <div className="masthead-menu-panel">
-              <button type="button" disabled={!lists} aria-label={account ? t('Account') : undefined} onClick={event => {
-                const menu = event.currentTarget.closest('details');
-                if (menu) menu.open = false;
-                menu?.querySelector('summary')?.focus();
-                setShowAccount(true);
-                void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
-              }}>{account?.displayName ? <span aria-hidden="true">{Array.from(account.displayName.trim())[0]?.toUpperCase()}</span> : <Icon name="person" />}{account ? account.displayName || account.email || t('Account') : t('Sign in')}</button>
-              {account && <>
-                <a href="/account">Profil Saya</a>
-                <a href="/account?view=settings">Pengaturan Akun</a>
-                <a href="/creator/studio">Creator Studio</a>
-                <button type="button" onClick={() => void api('/account/logout', { method: 'POST' }).then(() => {
-                  announceAuthChange();
-                  location.replace('/?auth=signed-out');
-                }, () => setStatus('Could not load your account. Try again.'))}>Keluar</button>
-              </>}
-              <a href="/creator"><Icon name="sparkles" />{language === 'id' ? 'Kreator' : 'Creator'}</a>
-            </div>
-          </details>
-          <LanguagePicker />
-        </div>
+        <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
+          openAlerts={() => setAlertsOpen(true)} signIn={() => {
+            setShowAccount(true);
+            void api<AccountStatus>('/account').then(setAccountStatus, () => undefined);
+          }} signOut={() => void api('/account/logout', { method: 'POST' }).then(() => {
+            announceAuthChange();
+            location.replace('/?auth=signed-out');
+          }, () => setStatus('Could not load your account. Try again.'))} />
       </header>
       <div className={`workspace${selected ? ' workspace-collection' : ''}`}>
         {selected && <aside className="collection-rail">
@@ -366,7 +343,7 @@ function App() {
         close={() => {
           if (/^\/account\/?$/u.test(location.pathname)) {
             if (new URLSearchParams(location.search).get('next') === 'creator') {
-              location.replace('/creator');
+              location.replace('/creator?onboard=1');
               return;
             }
             history.replaceState(history.state, '', '/');
@@ -387,7 +364,9 @@ if (root) {
       {accounts ? <AccountAdmin /> : <AdminCenter />}
     </Suspense>);
   } else if (/^\/creator\/studio\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Design Studio…</p>}><CreatorAccess studio={(ownerId, draft) => <CreatorDesignStudio ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Studio…</p>}><CreatorAccess studio={(ownerId, draft) => <CreatorWorkspace key={ownerId} ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
+  } else if (/^\/store\/[^/]+\/?$/u.test(location.pathname)) {
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening storefront…</p>}><LiveCreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/demo\/?$/u.test(location.pathname)) {
     createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Opening creator storefront…</p>}><CreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/?$/u.test(location.pathname)) {

@@ -183,8 +183,9 @@ try {
   assert.deepEqual(await (await stranger.request.get('/api/prices/alerts')).json(), { alerts: [], unread: 0 });
   await stranger.close();
 
-  await button(page, 'English').click();
+  await button(page, 'Switch to English').click();
   await page.reload();
+  assert.equal(await page.locator('html').getAttribute('lang'), 'en');
   await visible(button(page, 'Price alerts'));
   const stored = await (await page.request.get(path)).json();
   assert.equal(stored.currentMinor, 8_500_025);

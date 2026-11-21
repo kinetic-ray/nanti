@@ -281,6 +281,7 @@ enum AuthProvider {
 
 model AuthIdentity {
   verifiedEmail String? @db.VarChar(254)
+  avatarUrl     String? @db.VarChar(2048)
   provider    AuthProvider
   subjectHash String       @db.Char(64)
   userId      String       @db.Char(36)
@@ -359,11 +360,32 @@ model CreatorOnboarding {
 }
 model CreatorProfile {
   page CreatorPage?
+  products CreatorProduct[]
+  handle String @unique @default(uuid()) @db.VarChar(36)
+  publishedDesign Json?
   id        String   @id @default(uuid()) @db.Char(36)
   userId    String   @unique @db.Char(36)
   name      String   @db.VarChar(100)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CreatorProduct {
+  id          String         @id @db.Char(36)
+  profileId   String         @db.Char(36)
+  profile     CreatorProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title       String         @db.VarChar(160)
+  url         String         @db.VarChar(2048)
+  description String         @db.VarChar(1000)
+  category    String         @db.VarChar(60)
+  priceMinor  Int?
+  currency    String?        @db.VarChar(3)
+  photo       Bytes?         @db.MediumBlob
+  hasPhoto    Boolean        @default(false)
+  published   Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+
+  @@index([profileId, published, createdAt])
 }
 
 model CreatorPage {

@@ -1,9 +1,11 @@
 import { validateDesign } from '../shared/creator-design.js';
+import { creatorCatalogRoutes, type CreatorMedia } from './creator-catalog-routes.js';
 import { developmentAccountMail } from './account-mail.js';
 import { randomUUID } from 'node:crypto';
 import { Router, urlencoded } from 'express';
 import type { Request, Response } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { ResponseBodyError } from 'openid-client';
 import { z } from 'zod';
 import { loginProviders } from '../shared/account.js';
 import type { AccountStatus } from '../shared/account.js';
@@ -25,8 +27,16 @@ const passwordInput = z.string().min(1).refine(value => Buffer.byteLength(value,
 const newPassword = passwordInput.refine(value => Array.from(value).length >= 15);
 const attemptDuration = 600_000;
 const authDestinations = { account: '/account', admin: '/admin?view=accounts', creator: '/creator?onboard=1' } as const;
+const tokenErrorCodes = new Set(['invalid_client', 'invalid_grant', 'invalid_request', 'unauthorized_client']);
 
-export function accountRoutes(accounts: Accounts, providers: OAuthProviders, secure: boolean, guestCookie: string) {
+function oauthDiagnostic(req: Request, provider: AuthProvider, phase: string,
+  details?: { callbackOrigin?: string; providerError?: string }) {
+  if (req.app.get('env') === 'development') {
+    console.warn('OAuth sign-in failed', { provider, phase, ...details });
+  }
+}
+
+export function accountRoutes(accounts: Accounts, providers: OAuthProviders, secure: boolean, guestCookie: string, creatorMedia?: CreatorMedia) {
   const api = Router();
   const callbacks = Router();
   const sessionCookie = secure ? '__Host-nanti-user' : 'nanti-user';
@@ -105,30 +115,43 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
       const query = new URLSearchParams({ auth: status });
       res.redirect(303, `${destination}${destination.includes('?') ? '&' : '?'}${query}`);
     };
-    if (!configured || !incoming.success || !browser.success) { finish('failed'); return; }
+    const fail = (phase: string, error?: unknown) => {
+      const providerError = error instanceof ResponseBodyError && tokenErrorCodes.has(error.error) ? error.error : undefined;
+      oauthDiagnostic(req, provider, phase, providerError ? { providerError } : undefined);
+      finish('failed');
+    };
+    if (!configured) return fail('provider_not_configured');
+    if (!incoming.success) return fail('invalid_callback_parameters');
+    if (!browser.success) return fail('missing_or_invalid_attempt_cookie');
 
+    let phase = 'consume_attempt';
     try {
       const { state, code, error } = incoming.data;
       const attempt = await accounts.consumeAttempt(state, browser.data, provider);
-      if (!attempt) { finish('failed'); return; }
+      if (!attempt) return fail('attempt_expired_or_unmatched');
       if (attempt.destination) destination = authDestinations[attempt.destination];
       res.clearCookie(attemptCookie(provider), attemptOptions(provider));
-      if (error || !code) { finish(error === 'access_denied' || error === 'user_cancelled_authorize' ? 'cancelled' : 'failed'); return; }
-      const { subject, displayName, verifiedEmail } = await configured.verify(new URLSearchParams({ state, code }), {
+      if (error === 'access_denied' || error === 'user_cancelled_authorize') return finish('cancelled');
+      if (error || !code) return fail('authorization_code_unavailable');
+      phase = 'token_exchange_or_validation';
+      const { subject, displayName, verifiedEmail, avatarUrl } = await configured.verify(new URLSearchParams({ state, code }), {
         state, nonce: attempt.nonce, verifier: attempt.verifier,
       });
       if (attempt.purpose === 'signin') {
-        if (await session(req)) { finish('failed'); return; }
-        const raw = await accounts.signin(provider, subject, displayName, attempt.guestOwnerId, verifiedEmail);
+        phase = 'create_session';
+        if (await session(req)) return fail('already_signed_in');
+        const raw = await accounts.signin(provider, subject, displayName, attempt.guestOwnerId, verifiedEmail, avatarUrl);
         res.cookie(sessionCookie, raw, { ...sessionOptions, maxAge: sessionDuration });
         finish('signed-in');
       } else {
-        const accepted = await accounts.confirmIdentity(attempt, subject);
-        finish(accepted ? attempt.purpose === 'link' ? 'linked' : 'verified' : 'failed');
+        phase = 'confirm_identity';
+        const accepted = await accounts.confirmIdentity(attempt, subject, avatarUrl);
+        if (!accepted) return fail('identity_not_confirmed');
+        finish(attempt.purpose === 'link' ? 'linked' : 'verified');
       }
-    } catch {
+    } catch (error) {
       // Provider messages may contain credentials or personally identifying information.
-      finish('failed');
+      fail(phase, error);
     }
   }
   callbacks.get('/google/callback', limit, (req, res) => callback('google', req, res));
@@ -141,10 +164,13 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const account = current && await accounts.account(current.userId);
     const pending = current && eligibleGuest(req, current);
     const providerEmail = account?.identities.find(identity => identity.verifiedEmail)?.verifiedEmail;
+    const avatarUrl = account?.identities.find(identity => identity.provider === 'google')?.avatarUrl;
     const response: AccountStatus = { available, ...(sendMail && { emailDelivery: true }), account: account && current ? {
       ...(account.password ? { email: account.password.email, emailVerified: Boolean(account.password.verifiedAt), hasPassword: true }
         : providerEmail ? { email: providerEmail, emailVerified: true } : {}),
       displayName: account.displayName, providers: account.identities.map(entry => entry.provider),
+      ...(avatarUrl && { avatarUrl }),
+      canAccessCreatorStudio: Boolean(account.creatorProfile),
       recentlyVerified: recentSession(current), import: pending ? await accounts.importSummary(current.userId, pending) : null,
     } : null };
     res.json(response);
@@ -177,6 +203,13 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const nonce = authToken();
     const verifier = provider === 'google' ? authToken() : null;
     const url = await configured.authorization({ state, nonce, verifier });
+    const requestOrigin = req.get('Origin');
+    const callbackOrigin = URL.parse(url.searchParams.get('redirect_uri') ?? '')?.origin;
+    if (requestOrigin && callbackOrigin && requestOrigin !== callbackOrigin) {
+      oauthDiagnostic(req, provider, 'origin_mismatch', { callbackOrigin });
+      res.status(409).json({ error: 'Open Nanti at its main address and try signing in again.' });
+      return;
+    }
     const anonymous = purpose === 'signin' ? guest(req) : null;
     await accounts.attempt({ stateHash: tokenHash(state), browserHash: tokenHash(browser), nonce, provider, purpose,
       verifier, destination: purpose === 'signin' ? destination : undefined, guestOwnerId: anonymous && await accounts.guest(anonymous) ? anonymous : null,
@@ -331,5 +364,6 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     clearAttempts(res);
     res.sendStatus(204);
   });
+  api.use(creatorCatalogRoutes(accounts.creatorCatalog, session, creatorMedia));
   return { api, callbacks, resolveOwner };
 }

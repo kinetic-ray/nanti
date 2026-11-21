@@ -1,23 +1,40 @@
-import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { api } from './api.js';
+import { useLocale } from './locale.js';
+import type { Message } from './messages.js';
 
 type Mode = 'login' | 'register' | 'forgot' | 'resend' | 'verify' | 'reset' | 'change';
-const labels: Record<Mode, string> = {
-  login: 'Masuk dengan email', register: 'Buat akun', forgot: 'Atur ulang kata sandi', resend: 'Kirim ulang verifikasi',
-  verify: 'Verifikasi email', reset: 'Simpan kata sandi baru', change: 'Ubah kata sandi',
+const labels: Record<Mode, Message> = {
+  login: 'Sign in with email', register: 'Create an account', forgot: 'Reset password', resend: 'Resend verification',
+  verify: 'Verify email', reset: 'Save new password', change: 'Change password',
 };
-const success = 'Jika alamat email memenuhi syarat, tautan akan dikirim.';
-export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBusy }: {
+const success = 'If the email address is eligible, we’ll send a link.';
+export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBusy, alternatives }: {
   delivery: boolean; signedIn: boolean; creator: boolean; busy: boolean; setPasswordBusy: (busy: boolean) => void;
+  alternatives?: ReactNode;
 }) {
+  const { t } = useLocale();
   const [link] = useState(() => new URLSearchParams(location.hash.slice(1)));
   const [mode, setMode] = useState<Mode>(signedIn ? 'change' : link.get('mode') === 'reset' ? 'reset' :
     link.get('mode') === 'verify' ? 'verify' : 'login');
-  const [expanded, setExpanded] = useState(mode === 'reset' || mode === 'verify');
+  const [expanded, setExpanded] = useState(!signedIn);
   const [show, setShow] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<Message | null>(null);
   const [failed, setFailed] = useState(false);
+  const entryMode = mode === 'login' || mode === 'register';
+  const passwordHintId = useId();
+  const passwordHint = mode === 'verify' ? 'Enter the password you chose when you created your account.'
+    : mode === 'login' ? null : 'Use at least 15 characters.';
+  const canResend = delivery && (mode === 'forgot' || (failed && notice && (mode === 'login' || mode === 'verify')));
+  const formRef = useRef<HTMLFormElement>(null);
+  const focusAfterChange = useRef(false);
+  useLayoutEffect(() => {
+    if (focusAfterChange.current && !busy) {
+      focusAfterChange.current = false;
+      formRef.current?.querySelector('input')?.focus();
+    }
+  }, [busy, expanded, mode]);
   const code = link.get('token');
   useEffect(() => {
     if (!code) return;
@@ -27,9 +44,10 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
   }, [code]);
 
   function switchMode(next: Mode) {
+    focusAfterChange.current = true;
     setMode(next);
     setShow(false);
-    setNotice('');
+    setNotice(null);
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,7 +60,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     if (mode === 'verify' || mode === 'reset') data.code = code;
     if (creator && ['register', 'forgot', 'resend'].includes(mode)) data.creator = true;
     setPasswordBusy(true);
-    setNotice('');
+    setNotice(null);
     setFailed(false);
     try {
       await api(`/account/password/${mode}`, { method: 'POST', data });
@@ -56,42 +74,59 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
       }
       if (mode === 'verify' || mode === 'reset') {
         switchMode('login');
-        setNotice(mode === 'verify' ? 'Email sudah terverifikasi. Silakan masuk.' : 'Kata sandi diperbarui. Silakan masuk lagi.');
+        setNotice(mode === 'verify' ? 'Email verified. You can sign in now.' : 'Password updated. Please sign in again.');
       } else setNotice(success);
     } catch {
       setFailed(true);
-      setNotice(mode === 'verify' || mode === 'reset' ? 'Tautan tidak valid atau sudah kedaluwarsa.' :
-        mode === 'login' ? 'Periksa email, kata sandi, dan status verifikasi email.' : 'Permintaan belum berhasil. Periksa data dan coba lagi.');
+      setNotice(mode === 'verify' ? 'Check your password and verification link, then try again.' :
+        mode === 'reset' ? 'This link is invalid or has expired.' :
+        mode === 'login' ? 'Check your email, password, and whether your email is verified.' : 'Check your details and try again.');
     } finally { setPasswordBusy(false); }
   }
 
   return <div className="account-password">
-    {!expanded ? <button type="button" disabled={busy} onClick={() => setExpanded(true)}>{labels[mode]}</button> :
+    {!expanded ? <button type="button" disabled={busy} onClick={() => {
+      focusAfterChange.current = true;
+      setExpanded(true);
+    }}>{t(labels[mode])}</button> :
       <>
-        <form key={mode} className="account-section" onSubmit={event => void submit(event)}>
-          <h3>{labels[mode]}</h3>
-          {['login', 'register', 'forgot', 'resend'].includes(mode) && <label>Email
+        {delivery && !signedIn && entryMode && <div className="account-auth-modes" role="group" aria-label={t('Email authentication')}>
+          <button type="button" aria-pressed={mode === 'login'} disabled={busy}
+            onClick={() => mode !== 'login' && switchMode('login')}>{t('Sign in')}</button>
+          <button type="button" aria-pressed={mode === 'register'} disabled={busy}
+            onClick={() => mode !== 'register' && switchMode('register')}>{t(labels.register)}</button>
+        </div>}
+        <form key={mode} ref={formRef} className="account-section" onSubmit={event => void submit(event)}>
+          {!entryMode && <h3>{t(labels[mode])}</h3>}
+          {['login', 'register', 'forgot', 'resend'].includes(mode) && <label>{t('Email')}
             <input type="email" name="email" autoComplete="email" required maxLength={254} disabled={busy} />
           </label>}
-          {mode === 'change' && <label>Kata sandi saat ini
+          {mode === 'change' && <label>{t('Current password')}
             <input type={show ? 'text' : 'password'} name="currentPassword" autoComplete="current-password" required disabled={busy} maxLength={256} />
           </label>}
           {['login', 'register', 'verify', 'reset', 'change'].includes(mode) && <>
-            <label>{mode === 'reset' || mode === 'change' ? 'Kata sandi baru' : 'Kata sandi'}
-              <input name="password" type={show ? 'text' : 'password'} autoComplete={(mode === 'login' || mode === 'verify') ? 'current-password' : 'new-password'}
-                required minLength={mode === 'login' || mode === 'verify' ? undefined : 15} maxLength={256} disabled={busy} />
-            </label>
-            <button type="button" aria-pressed={show} disabled={busy} onClick={() => setShow(value => !value)}>Tampilkan kata sandi</button>
-            {mode === 'verify' ? <p>Masukkan kata sandi yang kamu pilih saat membuat akun.</p> : mode !== 'login' && <p>Gunakan sedikitnya 15 karakter.</p>}
+            <div className="account-password-field">
+              <label>{t(mode === 'reset' || mode === 'change' ? 'New password' : 'Password')}
+                <input name="password" type={show ? 'text' : 'password'} autoComplete={(mode === 'login' || mode === 'verify') ? 'current-password' : 'new-password'}
+                  aria-describedby={passwordHint ? passwordHintId : undefined}
+                  required minLength={mode === 'login' || mode === 'verify' ? undefined : 15} maxLength={256} disabled={busy} />
+              </label>
+              <button type="button" aria-label={t(show ? 'Hide password' : 'Show password')} disabled={busy}
+                onClick={() => setShow(value => !value)}>{t(show ? 'Hide' : 'Show')}</button>
+            </div>
+            {passwordHint && <p id={passwordHintId} className="hint">{t(passwordHint)}</p>}
           </>}
-          <button className="primary" disabled={busy}>{labels[mode]}</button>
+          <button type="submit" className="primary" disabled={busy}>{t(labels[mode])}</button>
         </form>
-        {notice && <p role={failed ? 'alert' : 'status'}>{notice}</p>}
-        {!signedIn && <div className="actions">
-          {mode !== 'login' && <button type="button" disabled={busy} onClick={() => switchMode('login')}>{labels.login}</button>}
-          {delivery && mode === 'login' && (['register', 'forgot', 'resend'] as const).map(next =>
-            <button key={next} type="button" disabled={busy} onClick={() => switchMode(next)}>{labels[next]}</button>)}
+        {notice && <p className={failed ? 'error' : undefined} role={failed ? 'alert' : 'status'}>{t(notice)}</p>}
+        {!signedIn && (!entryMode || (delivery && mode === 'login')) && <div className="actions">
+          {!entryMode && <button type="button" disabled={busy} onClick={() => switchMode('login')}>{t('Back to sign in')}</button>}
+          {delivery && mode === 'login' && <button type="button" disabled={busy}
+            onClick={() => switchMode('forgot')}>{t(labels.forgot)}</button>}
+          {canResend && <button type="button" disabled={busy}
+            onClick={() => switchMode('resend')}>{t(labels.resend)}</button>}
         </div>}
+        {entryMode && alternatives}
       </>}
   </div>;
 }

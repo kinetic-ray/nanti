@@ -6,6 +6,8 @@ export type AccountStatus = {
   emailDelivery?: boolean;
   account: {
     displayName: string | null;
+    avatarUrl?: string | null;
+    canAccessCreatorStudio?: boolean;
     email?: string | null;
     emailVerified?: boolean;
     hasPassword?: boolean;

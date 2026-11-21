@@ -58,6 +58,10 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
       // Check the latest Item schema even when there are no wishlists.
       // Verify the item columns required by wishlist reads before accepting traffic.
       db.item.findFirst({ select: { id: true, imageKey: true, sellerName: true } }),
+      // Account initialization reads this column for linked Google identities.
+      db.authIdentity.findFirst({ select: { avatarUrl: true } }),
+      db.creatorProfile.findFirst({ select: { handle: true, publishedDesign: true } }),
+      db.creatorProduct.findFirst({ select: { id: true, hasPhoto: true } }),
       db.priceObservation.findFirst({ select: { id: true } }),
       db.priceTarget.findFirst({ select: { itemId: true } }),
       db.priceAlert.findFirst({ select: { id: true } }),

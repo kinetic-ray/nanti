@@ -77,13 +77,13 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
-  const account = consumer && accountRoutes(consumer.accounts, consumer.providers, secureCookies, cookieName);
+  const account = consumer && accountRoutes(consumer.accounts, consumer.providers, secureCookies, cookieName, { lookupMetadata, productMedia });
   app.disable('x-powered-by');
   if (trustedProxy) app.set('trust proxy', trustedProxy);
   // Public Shopee preview images are hosted on Shopee's image CDN.
   // Keep all other Helmet CSP protections and allow only the known CDN hosts.
-  const imageSources = ["'self'", 'data:', 'https://*.susercontent.com',
-    'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id',
+  const imageSources = ["'self'", 'data:', 'https://images.unsplash.com', 'https://*.susercontent.com',
+    'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id', 'https://*.googleusercontent.com',
     'https://*.tokopedia.net', 'https://tokopedia.net', 'https://*.tokopedia.com', 'https://tokopedia.com',
     'https://*.tokopedia-static.net', 'https://tokopedia-static.net',
     'https://*.tiktokcdn.com', 'https://tiktokcdn.com', 'https://*.ibytedtos.com', 'https://ibytedtos.com',
@@ -140,7 +140,12 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
     }
     res.status(403).json({ error: 'Request could not be verified.' });
   });
-  api.use(express.json({ limit: '12kb' }));
+  const parseJson = express.json({ limit: '12kb' });
+  api.use((req, res, next) => {
+    if (account && ['PUT', 'PATCH'].includes(req.method) &&
+        /^\/account\/creator\/catalog\/products\/[a-f0-9-]{36}\/?$/iu.test(req.path)) return next();
+    return parseJson(req, res, next);
+  });
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
   if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
@@ -423,7 +428,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   app.use('/api', api);
 
   if (webRoot) {
-    app.get(['/admin', '/account', '/creator', '/creator/studio', '/creator/demo'], (_req, res) => {
+    app.get(['/admin', '/account', '/creator', '/creator/studio', '/creator/demo', '/store/:handle'], (_req, res) => {
       res.set('Cache-Control', 'no-store').sendFile('index.html', { root: webRoot });
     });
     app.use(express.static(webRoot, { dotfiles: 'deny' }));

@@ -46,8 +46,19 @@ try {
     const page = await browser.newPage({ viewport, hasTouch: mobile });
     await page.route('https://images.unsplash.com/**', route => route.abort());
     await verifyPublicStorefront(page, viewport);
-    await page.goto(new URL('/creator', baseURL).href);
-    await page.locator('.creator-hero-actions a[href="/creator/studio"]').click();
+    // Keep this fixture focused on scroll behavior. The catalog browser suite
+    // separately verifies Studio access and publication against MySQL.
+    await page.route('**/api/account/creator', route => route.fulfill({ json: { profile: { id: 'scroll-fixture', name: 'Studio Sore' } } }));
+    await page.route('**/api/account/creator/design', route => route.fulfill({ json: { design: null } }));
+    await page.route('**/api/account/creator/catalog', route => route.fulfill({ json: {
+      name: 'Studio Sore', handle: 'scroll-fixture', publishedDesign: null,
+      products: Array.from({ length: 12 }, (_, i) => ({
+        id: String(i), title: 'Product ' + i, url: 'https://example.com/product/' + i, description: '',
+        category: ['Everyday', 'Desk', 'Style'][i % 3], image: null, published: true,
+      })),
+    } }));
+    await page.goto(new URL('/creator/studio', baseURL).href);
+    await page.getByRole('button', { name: 'Tampilan', exact: true }).click();
     const frame = page.locator('.studio-preview-frame');
     if (mobile) {
       await page.locator('.studio-mobile-switch button').last().click();
@@ -93,15 +104,17 @@ try {
       }
     };
 
-    await page.locator('#creator-preview-search').click();
-    assert.equal((await observe()).active, 'creator-preview-search');
+    const previewSearch = frame.getByRole('searchbox');
+    const searchId = await previewSearch.getAttribute('id');
+    await previewSearch.click();
+    assert.equal((await observe()).active, searchId);
     await wheel([80, 80, 80, 80, -80, -80, 80, -80, 80, -80]);
-    assert.equal((await observe()).active, 'creator-preview-search');
+    assert.equal((await observe()).active, searchId);
     const keyboardStart = await observe();
     await page.keyboard.press('PageDown');
     await page.waitForFunction(top => window.previewFrame.scrollTop > top, keyboardStart.top);
     await page.getByRole('button', { name: 'Mobile', exact: true }).click();
-    assert.notEqual((await observe()).active, 'creator-preview-search');
+    assert.notEqual((await observe()).active, searchId);
     await wheel([80, -80]);
 
     if (mobile) await page.locator('.studio-mobile-switch button').first().click();
