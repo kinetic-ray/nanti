@@ -17,7 +17,7 @@ export async function api<T>(path: string, options: {
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     if (response.status === 503 && payload?.code === 'database_unavailable') {
-      throw new Error('Wishlist sedang mengalami gangguan database. Coba lagi sebentar.');
+      throw new Error('Database temporarily unavailable. Try again shortly.');
     }
     throw new Error(payload?.error ?? 'Could not reach Nanti. Try again.');
   }
