@@ -32,7 +32,6 @@ const actions = {
 } as const;
 export function formatMoneyInput(raw: string, language: 'id' | 'en'): string {
   const separator = language === 'id' ? '.' : ',';
-  const decimal = language === 'id' ? ',' : '.';
   // Keep entry simple: digits are whole currency units, grouped as they are typed.
   // Paste from another locale is supported by stripping grouping marks.
   const digits = raw.replace(/[^\d]/g, '').slice(0, 15);
