@@ -3,7 +3,6 @@ import { assessPurchase } from '../shared/purchase-decision.js';
 import { screeningQuestions } from '../shared/screening.js';
 import type { ScreeningAnswers } from '../shared/screening.js';
 import type { Item, Wishlist } from '../shared/wishlist.js';
-import { Dialog } from './forms.js';
 import { useLocale } from './locale.js';
 
 const prompts = {
@@ -77,7 +76,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
     else setQuestion(current => current + 1);
   }
   const currency = (value: bigint) => money(value.toString(), list.currency);
-  return <Dialog title={lang === 0 ? 'Bantu putuskan beli' : 'Help me decide'} close={close} busy={false} focusHeading className="decision guided-decision">
+  return <div className="guided-decision">
     <p className="hint">{item.name}</p>
     <div className="guided-progress" aria-label={lang === 0 ? 'Progres penilaian' : 'Assessment progress'}>
       <span className={stage >= 1 ? 'active' : ''}>1. {lang === 0 ? 'Alasan beli' : 'Buying reasons'}</span>
@@ -125,5 +124,5 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
       <p className="hint">{lang === 0 ? 'Ini perkiraan berdasarkan jawaban dan angka yang kamu isi, bukan jaminan kondisi keuangan sehat. Uang yang kamu masukkan tidak disimpan oleh fitur ini.' : 'This is an estimate based on your answers, not a guarantee of financial health. The amounts entered here are not saved.'}</p>
       <div className="actions"><button type="button" onClick={() => setStage(2)}>{lang === 0 ? 'Ubah isian' : 'Edit budget'}</button><button type="button" className="primary" onClick={close}>{lang === 0 ? 'Selesai' : 'Done'}</button></div>
     </section>}
-  </Dialog>;
+  </div>;
 }
