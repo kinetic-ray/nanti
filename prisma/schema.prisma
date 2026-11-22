@@ -420,6 +420,7 @@ model CuratedRecommendation {
   priceVerifiedAt DateTime?
   published      Boolean  @default(false)
   priority       Int      @default(0)
+  fulfillmentCursor String? @db.Char(36)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
