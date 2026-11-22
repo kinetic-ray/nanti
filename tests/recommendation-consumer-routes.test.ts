@@ -59,7 +59,7 @@ describe('recommendation HTTP eligibility', () => {
       .set(headers).send({ wishlistId, itemId, answers, finances, estimatedPriceMinor: 100000000 });
     expect(result.status).toBe(200);
     expect(db.recommendationRequest.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ create: expect.objectContaining({ sourcePriceMinor: 100000000 }) }));
+      expect.objectContaining({ create: expect.objectContaining({ sourcePriceMinor: 100000000, sourceColor: 'white' }) }));
     const payload = db.recommendationRequest.upsert.mock.calls[0]?.[0]?.create;
     expect(payload).not.toHaveProperty('cashMinor');
     expect(payload).not.toHaveProperty('billsMinor');
