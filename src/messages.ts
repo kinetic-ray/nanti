@@ -1,4 +1,13 @@
 export const idMessages = {
+  'Alternative updates': 'Kabar alternatif',
+  'Close alternative updates': 'Tutup kabar alternatif',
+  'Show alternative updates': 'Tampilkan kabar alternatif',
+  'Loading alternative updates…': 'Memuat kabar alternatif…',
+  'No alternative updates yet.': 'Belum ada kabar alternatif.',
+  'Check the price and whether it fits your needs before buying.': 'Cek lagi harga dan kebutuhanmu sebelum membeli.',
+  'Alternative for {product}': 'Alternatif untuk {product}',
+  'View product': 'Lihat produk',
+  'Mark as read': 'Tandai dibaca',
   'Add photo': 'Tambah foto',
   'Product setup': 'Pengaturan produk',
   'Product details': 'Detail produk',
