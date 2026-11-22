@@ -6,6 +6,7 @@ import { safeImportUrl } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
+import { formatProductPriceInput, normalizeProductPriceInput } from './product-price-input.js';
 
 const dialogHistoryStack: string[] = [];
 let pendingDialogHistoryCleanup = 0;
@@ -147,7 +148,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
   const { t, decimal, money, language, error: localError } = useLocale();
   const [url, setUrl] = useState(item?.url ?? initialUrl ?? '');
   const [name, setName] = useState(item?.name ?? '');
-  const [price, setPrice] = useState(item?.priceMinor == null ? '' : (item.priceMinor / 100).toFixed(2));
+  const [price, setPrice] = useState(item?.priceMinor == null ? '' : formatProductPriceInput((item.priceMinor / 100).toFixed(2).replace('.', ','), 'id'));
   const [quantity, setQuantity] = useState(item?.quantity.toString() ?? '1');
   const [lookup, setLookup] = useState('');
   const [preview, setPreview] = useState<ProductImport | null>(null);
@@ -253,7 +254,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
       }
       if (result.price?.currency === currency && (!price.trim() || (replaced && importedPrice))) {
         const value = (result.price.priceMinor / 100).toFixed(2);
-        setPrice(language === 'id' ? value.replace('.', ',') : value);
+        setPrice(formatProductPriceInput(language === 'id' ? value.replace('.', ',') : value, language));
         setImportedPrice(true);
       }
       const timedOut = result.diagnostic?.code === 'timeout' || result.diagnostic?.code === 'destination_timeout';
@@ -287,7 +288,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
     if (!/^\d+$/.test(quantity) || Number(quantity) < 1 || Number(quantity) > 999) {
       setError('Enter a whole number from 1 to 999.'); return;
     }
-    const priceMinor = parsePrice(decimal(price));
+    const priceMinor = parsePrice(normalizeProductPriceInput(price, language));
     if (price.trim() && priceMinor === null) {
       setError('Enter a price up to 9,999,999.99 with at most two decimal places.');
       return;
@@ -430,8 +431,8 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
             onChange={(event) => { setName(event.target.value); setImportedName(false); }} /></label>
           <div className="fields">
           <label>{t('Unit price ({currency})', { currency })} <span className="optional">{t('(optional)')}</span>
-            <input name="unit-price" inputMode="decimal" maxLength={10} value={price} disabled={looking || busy}
-              onChange={(event) => { setPrice(event.target.value); setImportedPrice(false); }} />
+            <input name="unit-price" inputMode="decimal" maxLength={15} value={price} disabled={looking || busy}
+              onChange={(event) => { setPrice(formatProductPriceInput(event.target.value, language)); setImportedPrice(false); }} />
           </label>
           <label>{t('Quantity')}<input name="quantity" type="number" min={1} max={999} step={1} required value={quantity} disabled={looking || busy}
             onChange={(event) => setQuantity(event.target.value)} /></label>
