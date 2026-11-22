@@ -7,6 +7,7 @@ import type {
 import { safeProductUrl } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
+import { RecommendationAdminPanel } from './RecommendationAdminPanel.js';
 
 const admin = '/admin';
 type Session = { username: string };
@@ -95,6 +96,7 @@ export function AdminCenter() {
       {session === undefined ? <p role="status">Checking administrator session…</p>
         : session ? <>
           {error && <p role="alert" className="error">{error}</p>}
+          <RecommendationAdminPanel />
           <Workspace username={session.username} onExpired={() => {
             setSession(null); setError('Your administrator session expired. Sign in again.');
           }} />
