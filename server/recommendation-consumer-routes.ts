@@ -39,7 +39,8 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
     const candidates = await db.curatedRecommendation.findMany({
-      where: { published: true, currency: wishlist.currency, priceVerified: true },
+      where: { published: true, currency: wishlist.currency, priceVerified: true,
+        priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
       take: 500, orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
     });
     const sourceCategory = inferCategory(item.name);
