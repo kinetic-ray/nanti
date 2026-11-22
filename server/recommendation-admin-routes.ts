@@ -112,6 +112,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     });
     if (!result.count) return res.status(409).json({ error: 'Produk tidak ditemukan atau harga perlu diverifikasi ulang.' });
     const product = await db.curatedRecommendation.findUnique({ where: { id } });
+    let continuation: string | null = null;
     if (published && product && product.priceVerifiedAt &&
       product.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000) {
       // Replay-safe: unique(requestId, productId) prevents duplicate notices.
@@ -146,11 +147,12 @@ export function recommendationAdminRoutes(db: PrismaClient) {
         }
         cursor = requests.at(-1)?.id;
         if (!cursor) break;
-        if (requests.length < 100) break;
+        if (requests.length < 100) { cursor = undefined; break; }
+        continuation = cursor ?? null;
       }
     }
     res.json({ product, fulfillment: published ? 'bounded' : 'disabled',
-      nextCursor: published ? cursor : null });
+      nextCursor: published ? continuation : null });
   });
   router.get('/requests', async (_req, res) => {
     const requests = await db.recommendationRequest.findMany({
