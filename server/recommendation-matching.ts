@@ -105,7 +105,7 @@ export function rankAlternatives(
   const vectors = vectorize([content(source), ...eligible.map(content)]);
   const manual = new Set(options.manuallyLinkedIds ?? []);
   const results = eligible.map((product, index) => {
-    const similarity = cosine(vectors[0], vectors[index + 1]);
+    const similarity = cosine(vectors[0] ?? new Map(), vectors[index + 1] ?? new Map());
     const color = !!norm(source.color) && norm(source.color) === norm(product.color);
     const style = !!norm(source.style) && norm(source.style) === norm(product.style);
     const useCase = !!norm(source.useCase) && norm(source.useCase) === norm(product.useCase);
