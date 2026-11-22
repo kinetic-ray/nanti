@@ -7,6 +7,7 @@ import { safeImportUrl } from '../shared/product-import.js';
 import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
 import { useLocale } from './locale.js';
+import { formatProductPriceInput, normalizeProductPriceInput } from './product-price-input.js';
 import type { Message } from './messages.js';
 import { Loading } from './visual.js';
 
@@ -50,12 +51,12 @@ export function PriceDetails({ listId, item, close, onUpdate }: {
     setSource('manual');
     setNotify(page?.target?.notify ?? true);
     const stored = mode === 'target' ? page?.target?.priceMinor : null;
-    setPrice(stored == null ? '' : (stored / 100).toFixed(2).replace('.', language === 'id' ? ',' : '.'));
+    setPrice(stored == null ? '' : formatProductPriceInput((stored / 100).toFixed(2).replace('.', language === 'id' ? ',' : '.'), language));
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const priceMinor = parsePrice(decimal(price));
+    const priceMinor = parsePrice(normalizeProductPriceInput(price, language));
     if (priceMinor === null) { setError(invalidPrice); return; }
     await run(async () => {
       if (editor === 'target') {
@@ -114,7 +115,7 @@ export function PriceDetails({ listId, item, close, onUpdate }: {
       <div id={editorId}>
         {editor && <form className="price-editor" onSubmit={submit} noValidate>
           <label>{t(editor === 'price' ? 'New unit price ({currency})' : 'Target unit price ({currency})', { currency: page.currency })}
-            <input inputMode="decimal" maxLength={10} value={price} disabled={busy} onChange={event => setPrice(event.target.value)} />
+            <input inputMode="decimal" maxLength={15} value={price} disabled={busy} onChange={event => setPrice(formatProductPriceInput(event.target.value, language))} />
           </label>
           {editor === 'price' && item.url && <label>{t('Price source')}
             <select value={source} disabled={busy} onChange={event => setSource(event.target.value as UserPriceSource)}>
