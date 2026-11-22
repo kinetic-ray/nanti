@@ -60,13 +60,13 @@ export function RecommendationCatalogForm({ importLink, saveDraft }: Recommendat
   return (
     <section aria-label="Tambah rekomendasi" className="recommendation-catalog-form">
       <h2>Tambah rekomendasi</h2>
-      <p>Tempel link produk, lalu lengkapi detailnya. Impor otomatis sedang disiapkan.</p>
+      <p>Tempel link produk, lalu lengkapi detailnya. Nama produk dicoba diambil otomatis dari marketplace. Kalau tidak tersedia, isi manual saja.</p>
       {step === 'link' && (
         <form onSubmit={event => { event.preventDefault(); void fetchDetails(); }}>
           <label htmlFor="recommendation-link">Link produk</label>
           <input id="recommendation-link" type="url" inputMode="url" autoComplete="url"
             required placeholder="https://..." value={link} onChange={event => setLink(event.target.value)} />
-          <button type="submit" disabled={busy}>{busy ? 'Memeriksa link…' : 'Lanjut'}</button>
+          <button type="submit" disabled={busy}>{busy ? 'Mengambil detail…' : 'Lanjut'}</button>
         </form>
       )}
       {step === 'review' && draft && (
