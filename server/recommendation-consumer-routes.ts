@@ -67,12 +67,13 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
       priceMinor: BigInt(comparisonPrice) * BigInt(item.priceMinor === null ? 1 : item.quantity), cashMinor: BigInt(finances.cashMinor),
       billsMinor: BigInt(finances.billsMinor), setAsideMinor: BigInt(finances.setAsideMinor),
     }).decision)) return res.status(422).json({ error: 'Alternatif hanya tersedia ketika kondisi keuangan memerlukan pilihan lebih hemat.' });
+    const sourceCategory = inferCategory(item.name);
+    if (!sourceCategory) return res.json({ alternatives: [], hasMore: false });
     const candidates = await db.curatedRecommendation.findMany({
-      where: { published: true, currency: wishlist.currency, priceVerified: true,
+      where: { published: true, category: sourceCategory, currency: wishlist.currency, priceVerified: true,
         priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
       take: 500, orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
     });
-    const sourceCategory = inferCategory(item.name);
     const source: RecommendationProduct = {
       id: item.id, title: item.name, category: sourceCategory,
       priceMinor: item.priceMinor ?? estimatedPriceMinor ?? null, currency: wishlist.currency, priceVerified: false,
