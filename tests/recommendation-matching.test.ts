@@ -17,8 +17,8 @@ describe('curated alternative ranking', () => {
   it('matches relevant cheaper products without external services', () => {
     const matches = rankAlternatives(source, [candidate()]);
     expect(matches).toHaveLength(1);
-    expect(matches[0].product.id).toBe('brodo');
-    expect(matches[0].reasons).toContain('Warna serupa');
+    expect(matches[0]?.product.id).toBe('brodo');
+    expect(matches[0]?.reasons).toContain('Warna serupa');
   });
   it('excludes expensive, unverified, unpublished and wrong-currency products', () => {
     expect(rankAlternatives(source, [
