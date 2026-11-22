@@ -79,7 +79,7 @@ export function RecommendationCatalogForm({ importLink, saveDraft }: Recommendat
           <input id="recommendation-category" required maxLength={80} value={draft.category}
             placeholder="Misalnya sneakers" onChange={event => setDraft({ ...draft, category: event.target.value })} />
           <label htmlFor="recommendation-price">Harga (opsional, rupiah)</label>
-          <input id="recommendation-price" inputMode="numeric" value={draft.priceMinor === null ? '' : String(draft.priceMinor / 100)}
+          <input id="recommendation-price" inputMode="numeric" value={draft.priceMinor === null ? '' : new Intl.NumberFormat('id-ID').format(draft.priceMinor / 100)}
             onChange={event => {
               const digits = event.target.value.replace(/\D/gu, '');
               const amount = digits ? Number(digits) : null;
