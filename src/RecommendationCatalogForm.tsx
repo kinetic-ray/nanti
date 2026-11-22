@@ -17,15 +17,16 @@ export interface RecommendationCatalogFormProps {
   /** Admin-only API, authenticated and authorized by the server. */
   importLink: (url: string) => Promise<Partial<CuratedCatalogDraft>>;
   saveDraft: (draft: CuratedCatalogDraft) => Promise<void>;
+  initialDraft?: CuratedCatalogDraft;
 }
 const blank = (url: string): CuratedCatalogDraft => ({
   title: '', url, category: '', color: null, style: null,
   useCase: null, description: null, priceMinor: null, currency: 'IDR', priority: 0,
 });
-export function RecommendationCatalogForm({ importLink, saveDraft }: RecommendationCatalogFormProps) {
-  const [step, setStep] = useState<Step>('link');
+export function RecommendationCatalogForm({ importLink, saveDraft, initialDraft }: RecommendationCatalogFormProps) {
+  const [step, setStep] = useState<Step>(initialDraft ? 'review' : 'link');
   const [link, setLink] = useState('');
-  const [draft, setDraft] = useState<CuratedCatalogDraft | null>(null);
+  const [draft, setDraft] = useState<CuratedCatalogDraft | null>(initialDraft ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const fetchDetails = async () => {
@@ -59,7 +60,7 @@ export function RecommendationCatalogForm({ importLink, saveDraft }: Recommendat
   };
   return (
     <section aria-label="Tambah rekomendasi" className="recommendation-catalog-form">
-      <h2>Tambah rekomendasi</h2>
+      <h2>{initialDraft ? 'Edit rekomendasi' : 'Tambah rekomendasi'}</h2>
       <p>Tempel link produk, lalu lengkapi detailnya. Nama produk dicoba diambil otomatis dari marketplace. Kalau tidak tersedia, isi manual saja.</p>
       {step === 'link' && (
         <form onSubmit={event => { event.preventDefault(); void fetchDetails(); }}>
