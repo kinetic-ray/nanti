@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from './generated/prisma/client.js';
 import { recommendationAdminRoutes } from './recommendation-admin-routes.js';
 import type { CookieOptions, ErrorRequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
