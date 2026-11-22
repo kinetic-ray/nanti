@@ -63,9 +63,9 @@ try {
   await step('Original and missing purchase destinations in Indonesian', async () => {
     await shopper.goto('/');
     assert.equal(await shopper.locator('html').getAttribute('lang'), 'id');
-    await button(shopper, 'Buat kategori').click();
-    await modal(shopper, 'Kategori baru').getByLabel('Nama kategori').fill('Browser affiliate QA');
-    await button(modal(shopper, 'Kategori baru'), 'Simpan kategori').click();
+    await button(shopper, 'Buat wishlist').click();
+    await modal(shopper, 'Kategori wishlist baru').getByLabel('Nama kategori wishlist').fill('Browser affiliate QA');
+    await button(modal(shopper, 'Kategori wishlist baru'), 'Simpan wishlist').click();
     await show(shopper.getByRole('heading', { name: 'Browser affiliate QA' }));
     wishlistId = (await (await shopper.request.get('/api/wishlists')).json())[0].id;
     await addProduct(title, original);
