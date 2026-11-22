@@ -14,6 +14,7 @@ export function RecommendationAdminPanel() {
   const [busy, setBusy] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [unavailable, setUnavailable] = useState(false);
+  const [verificationPrice, setVerificationPrice] = useState<Record<string, string>>({});
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
@@ -57,6 +58,31 @@ export function RecommendationAdminPanel() {
         <strong>{product.title}</strong>
         <p>{product.category} · {product.published ? 'Terbit' : 'Draf'} · {product.priceVerified ? 'Harga dikonfirmasi' : 'Harga belum diverifikasi'}</p>
         {product.priceMinor !== null && <p>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: product.currency }).format(product.priceMinor / 100)}</p>}
+        {!product.published && <form onSubmit={event => {
+          event.preventDefault();
+          const digits = (verificationPrice[product.id] ?? '').replace(/\\D/gu, '');
+          const amount = Number(digits);
+          if (!Number.isSafeInteger(amount * 100) || amount <= 0) {
+            setError('Isi harga produk yang valid.');
+            return;
+          }
+          void mutate(product.id, () => api(`${base}/catalog/${product.id}/verify-price`, {
+            method: 'POST', data: { priceMinor: amount * 100, checkedUrl: product.url, confirmedOnListing: true },
+          }));
+        }}>
+          <label>Harga terbaru setelah dicek di listing
+            <input inputMode="numeric" required placeholder="Contoh: 750.000"
+              value={verificationPrice[product.id] ?? ''}
+              onChange={event => {
+                const digits = event.target.value.replace(/\\D/gu, '');
+                setVerificationPrice(current => ({
+                  ...current, [product.id]: digits ? new Intl.NumberFormat('id-ID').format(Number(digits)) : '',
+                }));
+              }} />
+          </label>
+          <a href={product.url} target="_blank" rel="noopener noreferrer">Periksa listing</a>
+          <button type="submit" disabled={busy !== ''}>Konfirmasi harga</button>
+        </form>}
         {!product.published && <button type="button" disabled={busy !== '' || !product.priceVerified}
           onClick={() => void mutate(product.id, () => api(`${base}/catalog/${product.id}/publication`, {
             method: 'PATCH', data: { published: true },
