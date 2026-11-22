@@ -42,10 +42,10 @@ export function RecommendationAdminPanel() {
     <p>Kurasi alternatif yang relevan. Produk baru selalu disimpan sebagai draf.</p>
     {error && <p role="alert" className="error">{error}</p>}
     <RecommendationCatalogForm
-      importLink={async url => {
-        const result = await api<{ name?: string; price?: number }>(
-          '/products/import', { method: 'POST', data: { url } });
-        return { title: result.name ?? '', priceMinor: null };
+      importLink={async () => {
+        // Manual fallback until the hardened marketplace importer is wired here.
+        // Never imply metadata was imported successfully.
+        return {};
       }}
       saveDraft={async (draft) => {
         await api(`${base}/catalog`, { method: 'POST', data: draft });
