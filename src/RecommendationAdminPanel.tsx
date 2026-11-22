@@ -47,9 +47,13 @@ export function RecommendationAdminPanel() {
       importLink={async (url) => {
         // Reuse the existing hardened marketplace metadata endpoint; never scrape from the browser.
         try {
-          const result = await api<{ name?: string | null; productUrl?: string; status: string }>(
+          const result = await api<{ name?: string | null; productUrl?: string; status: string; price?: { priceMinor: number; currency: string } }>(
             '/products/import', { method: 'POST', data: { url } });
-          return { ...(result.name ? { title: result.name } : {}) };
+          return {
+            ...(result.name ? { title: result.name } : {}),
+            ...(result.price?.currency === 'IDR' && Number.isSafeInteger(result.price.priceMinor)
+              ? { priceMinor: result.price.priceMinor } : {}),
+          };
         } catch {
           // Metadata is best-effort. Admin can always fill the product details manually.
           return {};
