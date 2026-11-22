@@ -43,10 +43,16 @@ export function RecommendationAdminPanel() {
     <p>Kurasi alternatif yang relevan. Produk baru selalu disimpan sebagai draf.</p>
     {error && <p role="alert" className="error">{error}</p>}
     <RecommendationCatalogForm
-      importLink={async () => {
-        // Manual fallback until the hardened marketplace importer is wired here.
-        // Never imply metadata was imported successfully.
-        return {};
+      importLink={async (url) => {
+        // Reuse the existing hardened marketplace metadata endpoint; never scrape from the browser.
+        try {
+          const result = await api<{ name?: string | null; productUrl?: string; status: string }>(
+            '/products/import', { method: 'POST', data: { url } });
+          return { ...(result.name ? { title: result.name } : {}) };
+        } catch {
+          // Metadata is best-effort. Admin can always fill the product details manually.
+          return {};
+        }
       }}
       saveDraft={async (draft) => {
         await api(`${base}/catalog`, { method: 'POST', data: draft });
