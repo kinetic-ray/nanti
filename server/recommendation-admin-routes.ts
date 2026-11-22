@@ -22,6 +22,11 @@ const productInput = z.strictObject({
   priority: z.number().int().min(-100).max(100).default(0),
 });
 const publication = z.strictObject({ published: z.boolean() });
+const verification = z.strictObject({
+  priceMinor: z.number().int().positive().max(2_000_000_000),
+  checkedUrl: z.string().trim().max(2048),
+  confirmedOnListing: z.literal(true),
+});
 
 /** Mount only behind existing administrator session middleware. */
 export function recommendationAdminRoutes(db: PrismaClient) {
@@ -47,6 +52,20 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     });
     if (!result.count) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
     res.json(await db.curatedRecommendation.findUnique({ where: { id } }));
+  });
+  router.post('/catalog/:id/verify-price', async (req, res) => {
+    const id = uuid.parse(req.params.id);
+    const evidence = verification.parse(req.body);
+    const item = await db.curatedRecommendation.findUnique({ where: { id } });
+    if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+    const checked = safeAdminUrl(evidence.checkedUrl);
+    if (!checked || checked.href !== item.url) {
+      return res.status(422).json({ error: 'Periksa harga di link produk yang tersimpan, lalu coba lagi.' });
+    }
+    const updated = await db.curatedRecommendation.update({
+      where: { id }, data: { priceMinor: evidence.priceMinor, priceVerified: true, published: false },
+    });
+    res.json({ product: updated, message: 'Harga sudah dikonfirmasi. Periksa detail sebelum publikasi.' });
   });
   router.patch('/catalog/:id/publication', async (req, res) => {
     const id = uuid.parse(req.params.id);
