@@ -322,26 +322,29 @@ export async function extractTokopediaMetadata(originalUrl: string, transport: P
     return null;
   };
   const timeoutReason = () => hop > 0 ? 'destination_timeout' : 'timeout';
+  const allowed = (url: URL) => {
+    const key = listingKey(url);
+    return url.href.length <= 4096 && (identity ? key === identity : Boolean(key) || shortHosts.has(url.hostname));
+  };
   const extract = async () => {
-    if (!current) return fail('redirect_disallowed');
+    if (!current || !allowed(current)) return fail('redirect_disallowed');
     const visited = new Set<string>();
     for (; current && hop <= 4; hop++) {
       controller.signal.throwIfAborted();
       host = current.hostname;
       current.hash = '';
       const key = listingKey(current);
-      if (identity ? key !== identity : !key && !shortHosts.has(host)) return fail('redirect_disallowed');
       identity ??= key;
       if (visited.has(current.href)) return fail('redirect_limit');
-      if (current.href.length > 4096) return fail('redirect_disallowed');
       visited.add(current.href);
       const response = await transport(current, controller.signal);
       if (redirectStatuses.has(response.status)) {
         const location = response.headers.get('location');
         void response.body?.cancel().catch(() => {});
         if (!location) return fail('redirect_missing_location', response.status);
-        current = safeHttps(location, current);
-        if (!current) return fail('redirect_disallowed');
+        const next = safeHttps(location, current);
+        if (!next || !allowed(next)) return fail('redirect_disallowed', response.status);
+        current = next;
         continue;
       }
       const issue = response.status !== 200 ? 'http_failure' :

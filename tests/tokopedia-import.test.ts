@@ -122,3 +122,29 @@ describe.each([
     expect(upstream.mock.calls.map(([url]) => String(url))).toEqual([short, product]);
   });
 });
+
+describe('Shopee product identity at the import API', () => {
+  const short = 'https://s.shopee.co.id/fixture';
+  const product = 'https://shopee.co.id/product/123/456';
+  const tags = '<meta property="og:title" content="Store page"><meta property="og:image" content="https://cf.shopee.co.id/file/demo">';
+  it.each([
+    [short, 'https://shopee.co.id/login', '', 'text/html'],
+    [product, 'https://shopee.co.id/other-i.123.789', '', 'text/html'],
+    [short, product, '<link rel="canonical" href="/product/123/789">', 'text/html'],
+    [short, product, '', 'text/html-preview'],
+  ])('keeps manual entry for %s redirected to %s with %s %s', async (original, destination, canonical, type) => {
+    const upstream = vi.fn<typeof fetch>().mockResolvedValueOnce(redirect(destination!))
+      .mockResolvedValueOnce(new Response('<head>' + tags + canonical + '</head>', { headers: { 'content-type': type! } }));
+    const { body } = await post(appFor(upstream), 'import', original).expect(200);
+    expect(body).toMatchObject({ originalUrl: original, name: null, status: 'manual_required' });
+    for (const key of ['imagePath', 'price', 'sellerName']) expect(body).not.toHaveProperty(key);
+  });
+
+  it('recognizes the same listing across slug, www and product URLs', async () => {
+    const upstream = vi.fn<typeof fetch>().mockResolvedValueOnce(redirect('https://www.shopee.co.id/lamp-i.123.456'))
+      .mockResolvedValueOnce(new Response('<head>' + tags + '<link rel="canonical" href="' + product + '"></head>',
+        { headers: { 'content-type': 'text/html; charset=utf-8' } }));
+    const { body } = await post(appFor(upstream), 'import', product).expect(200);
+    expect(body).toMatchObject({ originalUrl: product, status: 'details_available', name: 'Store page' });
+  });
+});

@@ -147,6 +147,12 @@ const shopeeHosts = new Set([
 ]);
 function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase().replace(/^www\./u, '')); }
 
+function shopeeListingKey(url: URL): string | null {
+  const match = url.pathname.match(/^\/product\/(\d+)\/(\d+)\/?$/u) ??
+    url.pathname.match(/^\/[^/]*-i\.(\d+)\.(\d+)\/?$/u);
+  return match ? url.hostname.replace(/^www\./u, '') + '/' + match[1] + '/' + match[2] : null;
+}
+
 async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | undefined, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
   const diagnostic = (reason: string, host: string, status?: number) => {
     // No full URLs, query strings, affiliate codes or product identifiers in logs.
@@ -161,9 +167,11 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | 
       !url.username && !url.password && !url.port && url.href.length <= 4096;
     if (!allowed(current)) { diagnostic('redirect_disallowed', current.hostname); return null; }
     const visited = new Set<string>();
+    let listing = shopeeListingKey(current);
+    const deadline = AbortSignal.timeout(5000);
     for (hop = 0; hop < 6; hop++) {
       visited.add(current.href);
-      const signal = AbortSignal.timeout(3500);
+      const signal = AbortSignal.any([deadline, AbortSignal.timeout(3500)]);
       const response = request
         ? await request(current, { redirect: 'manual', signal, headers: { accept: 'text/html' } })
         : await requestPublicPage(current, signal);
@@ -175,11 +183,20 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | 
         if (!target || !allowed(target)) { diagnostic('redirect_disallowed', current.hostname, response.status); return null; }
         target.hash = '';
         if (visited.has(target.href)) { diagnostic('redirect_limit', current.hostname, response.status); return null; }
+        const targetListing = shopeeListingKey(target);
+        if (listing && targetListing !== listing) { diagnostic('redirect_disallowed', current.hostname, response.status); return null; }
+        listing ??= targetListing;
         current = target;
         continue;
       }
-      if (!response.ok || !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ||
-          !response.body) { diagnostic(!response.ok ? 'http_failure' : !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ? 'not_html' : 'empty_response', current.hostname, response.status); await response.body?.cancel(); return null; }
+      const mime = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+      const issue = response.status !== 200 ? 'http_failure' : mime !== 'text/html' ? 'not_html' :
+        !response.body ? 'empty_response' : null;
+      if (issue || !response.body) {
+        diagnostic(issue ?? 'empty_response', current.hostname, response.status);
+        await response.body?.cancel();
+        return null;
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let html = '';
@@ -199,14 +216,28 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | 
         'tagName' in node && node.tagName === 'html');
       const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
         'tagName' in node && node.tagName === 'head');
+      const matchesPage = (value: string) => {
+        const url = URL.parse(value, current);
+        if (!url || !allowed(url)) return false;
+        return listing ? shopeeListingKey(url) === listing :
+          url.origin === current.origin && url.pathname === current.pathname;
+      };
       const tags = new Map<string, string>();
       for (const node of head?.childNodes ?? []) {
-        if (!('tagName' in node) || node.tagName !== 'meta') continue;
-        const key = node.attrs.find(a => a.name === 'property' || a.name === 'name')?.value.toLowerCase();
-        const content = node.attrs.find(a => a.name === 'content')?.value.trim();
-        if (key && content && !tags.has(key)) tags.set(key, content);
+        if (!('tagName' in node)) continue;
+        const attr = (name: string) => node.attrs.find(a => a.name === name)?.value;
+        const key = (attr('property') ?? attr('name'))?.toLowerCase();
+        const content = attr('content')?.trim();
+        const canonical = node.tagName === 'link' && attr('rel')?.toLowerCase().split(/\s+/u).includes('canonical')
+          ? attr('href') : node.tagName === 'meta' && key === 'og:url' ? content : undefined;
+        if (canonical && !matchesPage(canonical)) {
+          diagnostic('metadata_missing', current.hostname, response.status);
+          return null;
+        }
+        if (node.tagName === 'meta' && key && content && !tags.has(key)) tags.set(key, content);
       }
       // Prefer public social preview tags, then structured Product data if available.
+      let hasProduct = false;
       let structuredTitle: string | null = null;
       let structuredImage: string | null = null;
       const offers: NonNullable<ProductImport['price']>[] = [];
@@ -226,13 +257,10 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | 
               if (!value || typeof value !== 'object' || !('@type' in value)) continue;
               const kind = value['@type'];
               if (kind !== 'Product' && !(Array.isArray(kind) && kind.includes('Product'))) continue;
-              const listingMatches = !('url' in value) || (typeof value.url === 'string' && (() => {
-                try {
-                  const listed = new URL(value.url, current.origin);
-                  return listed.origin === current.origin && listed.pathname.replace(/\/$/u, '') === current.pathname.replace(/\/$/u, '');
-                } catch { return false; }
-              })());
-              if (!listingMatches) continue;
+              const reference = 'url' in value ? value.url : '@id' in value ? value['@id'] : undefined;
+              if (reference !== undefined && (typeof reference !== 'string' || !matchesPage(reference))) continue;
+              if (!listing && !reference) continue;
+              hasProduct = true;
               if ('name' in value && typeof value.name === 'string') structuredTitle ??= value.name;
               const photos = 'image' in value ? value.image : null;
               const photo = Array.isArray(photos) ? photos[0] : photos;
@@ -251,6 +279,10 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | 
             }
           }
         } catch { /* Ignore malformed structured data. */ }
+      }
+      if (!listing && !hasProduct) {
+        diagnostic('metadata_missing', current.hostname, response.status);
+        return null;
       }
       const socialOffer = parseOffer(tags.get('product:price:amount'), tags.get('product:price:currency'));
       if (socialOffer) offers.push(socialOffer);

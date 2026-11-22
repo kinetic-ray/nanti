@@ -238,3 +238,28 @@ describe('Shopee import reliability', () => {
       .resolves.toMatchObject({ title: 'Lamp', image: 'https://cf.shopee.co.id/lamp' });
   });
 });
+
+describe.each([
+  ['https://s.shopee.co.id/start', 6],
+  ['https://tk.tokopedia.com/start', 5],
+] as const)('redirect budget for %s', (start, budget) => {
+  it('stops at the request limit even if each redirect is unique', async () => {
+    let hops = 0;
+    const report = vi.fn();
+    await expect(previewProductMetadata(new URL(start), async () => new Response(null, {
+      status: 302, headers: { location: '/hop-' + ++hops },
+    }), report)).resolves.toBeNull();
+    expect(hops).toBe(budget);
+    expect(report.mock.calls[0]?.[0]).toBe('redirect_limit');
+  });
+});
+
+it('keeps an untrusted redirect host out of Tokopedia diagnostics', async () => {
+  const start = new URL('https://tk.tokopedia.com/start');
+  const report = vi.fn();
+  const upstream = vi.fn(async () => new Response(null, { status: 302,
+    headers: { location: 'https://untrusted.example/catalog' } }));
+  await expect(previewProductMetadata(start, upstream, report)).resolves.toBeNull();
+  expect(upstream).toHaveBeenCalledOnce();
+  expect(report).toHaveBeenCalledWith('redirect_disallowed', start.hostname, 302);
+});
