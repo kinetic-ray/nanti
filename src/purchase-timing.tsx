@@ -11,6 +11,7 @@ import type { Currency, Item, Wishlist } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
 import { financialLabels, History, ReviewDetails, ToolDialog, useAssessmentHistory } from './intelligence-ui.js';
 import { useLocale } from './locale.js';
+import { formatProductPriceInput, normalizeProductPriceInput } from './product-price-input.js';
 import type { Message } from './messages.js';
 
 const amounts = ['purchaseMinor', 'liquidMinor', 'obligationsMinor', 'reserveMinor', 'extraMinor', 'monthlyMinor'] as const;
@@ -29,7 +30,7 @@ const readinessAdvice = {
 export function PurchaseTiming({ list, item, path, close }: {
   list: Wishlist; item?: Item; path: string; close: () => void;
 }) {
-  const { t, number, money, decimal, date, language, error: localError } = useLocale();
+  const { t, number, money, date, language, error: localError } = useLocale();
   const [values, setValues] = useState<Partial<Record<keyof TimingInput, string>>>({});
   const [plan, setPlan] = useState<PurchasePlan>([]);
   const [result, setResult] = useState<TimingPreview | null>(null);
@@ -68,7 +69,7 @@ export function PurchaseTiming({ list, item, path, close }: {
   }
 
   function change(key: keyof TimingInput, value: string) {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => ({ ...current, [key]: key === 'targetDate' ? value : formatProductPriceInput(value, language) }));
     setConfirmed(false);
     invalidate();
   }
@@ -157,7 +158,7 @@ export function PurchaseTiming({ list, item, path, close }: {
       if (key === 'purchaseMinor' && quote.source === 'saved') continue;
       const amount = values[key]?.trim();
       if (!amount) continue;
-      const parsed = parsePlanningAmount(decimal(amount));
+      const parsed = parsePlanningAmount(normalizeProductPriceInput(amount, language));
       if (parsed === null) { setInvalidAmount(key); return; }
       input[key] = parsed;
     }
@@ -193,7 +194,7 @@ export function PurchaseTiming({ list, item, path, close }: {
 
   function amountField(key: AmountKey) {
     return <label key={key}>{t(financialLabels[key])}
-      <input inputMode="decimal" maxLength={19} value={values[key] ?? ''} onChange={(event) => change(key, event.target.value)}
+      <input inputMode="decimal" maxLength={25} value={values[key] ?? ''} onChange={(event) => change(key, event.target.value)}
         aria-invalid={invalidAmount === key || undefined}
         aria-describedby={key === 'extraMinor' || key === 'monthlyMinor' ? undefined : firstHint} />
     </label>;
