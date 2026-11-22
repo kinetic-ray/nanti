@@ -32,6 +32,12 @@ const verification = z.strictObject({
 /** Mount only behind existing administrator session middleware. */
 export function recommendationAdminRoutes(db: PrismaClient) {
   const router = Router();
+  router.use((req, res, next) => {
+    if (req.get('Sec-Fetch-Site') === 'cross-site' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      return res.status(403).json({ error: 'Permintaan tidak dapat diverifikasi.' });
+    }
+    next();
+  });
   router.get('/catalog', async (_req, res) => {
     const products = await db.curatedRecommendation.findMany({
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: 100,
