@@ -16,6 +16,7 @@ export function RecommendationAdminPanel() {
   const [unavailable, setUnavailable] = useState(false);
   const [verificationPrice, setVerificationPrice] = useState<Record<string, string>>({});
   const [continuations, setContinuations] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
@@ -42,7 +43,7 @@ export function RecommendationAdminPanel() {
     <h2>Rekomendasi produk</h2>
     <p>Kurasi alternatif yang relevan. Produk baru selalu disimpan sebagai draf.</p>
     {error && <p role="alert" className="error">{error}</p>}
-    <RecommendationCatalogForm
+    <RecommendationCatalogForm key={editing ?? 'new'}
       importLink={async (url) => {
         // Reuse the existing hardened marketplace metadata endpoint; never scrape from the browser.
         try {
@@ -54,8 +55,12 @@ export function RecommendationAdminPanel() {
           return {};
         }
       }}
+      initialDraft={products.find(product => product.id === editing) ?? undefined}
       saveDraft={async (draft) => {
-        await api(`${base}/catalog`, { method: 'POST', data: draft });
+        await api(editing ? `${base}/catalog/${editing}` : `${base}/catalog`, {
+          method: editing ? 'PATCH' : 'POST', data: draft,
+        });
+        setEditing(null);
         setRefresh(value => value + 1);
       }}
     />
@@ -65,6 +70,7 @@ export function RecommendationAdminPanel() {
         <strong>{product.title}</strong>
         <p>{product.category} · {product.published ? 'Terbit' : 'Draf'} · {product.priceVerified ? 'Harga dikonfirmasi' : 'Harga belum diverifikasi'}</p>
         {product.priceMinor !== null && <p>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: product.currency }).format(product.priceMinor / 100)}</p>}
+        <button type="button" disabled={busy !== ''} onClick={() => setEditing(product.id)}>Edit produk</button>
         {!product.published && <form onSubmit={event => {
           event.preventDefault();
           const digits = (verificationPrice[product.id] ?? '').replace(/\D/gu, '');
