@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { evaluateScreening } from '../shared/screening.js';
+import { assessPurchase } from '../shared/purchase-decision.js';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
@@ -11,7 +12,9 @@ const answersSchema = z.strictObject({
   practicalNeed: z.boolean(), alreadyHave: z.boolean(), useOften: z.boolean(),
   canWait: z.boolean(), withoutDiscount: z.boolean(), socialPressure: z.boolean(),
 });
-const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema,
+const financeSchema = z.strictObject({ cashMinor: z.string().regex(/^\\d{1,18}$/u),
+  billsMinor: z.string().regex(/^\\d{1,18}$/u), setAsideMinor: z.string().regex(/^\\d{1,18}$/u) });
+const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema, finances: financeSchema,
   estimatedPriceMinor: z.number().int().positive().max(2_000_000_000).optional() });
 const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30).default(20) });
 
@@ -51,7 +54,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
   router.post('/alternatives', readLimit, async (req, res) => {
     const parsed = requestBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
-    const { itemId, wishlistId, answers, estimatedPriceMinor } = parsed.data;
+    const { itemId, wishlistId, answers, finances, estimatedPriceMinor } = parsed.data;
     const screening = evaluateScreening(answers, null, new Date().toISOString().slice(0, 10));
     if (screening.outcome !== 'green' || screening.unanswered.length > 0) {
       return res.status(422).json({ error: 'Alternatif hanya tersedia untuk kebutuhan yang jelas.' });
@@ -59,6 +62,11 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
+    const comparisonPrice = item.priceMinor ?? estimatedPriceMinor;
+    if (!comparisonPrice || !['save', 'alternative'].includes(assessPurchase(answers, {
+      priceMinor: BigInt(comparisonPrice), cashMinor: BigInt(finances.cashMinor),
+      billsMinor: BigInt(finances.billsMinor), setAsideMinor: BigInt(finances.setAsideMinor),
+    }).decision)) return res.status(422).json({ error: 'Alternatif hanya tersedia ketika kondisi keuangan memerlukan pilihan lebih hemat.' });
     const candidates = await db.curatedRecommendation.findMany({
       where: { published: true, currency: wishlist.currency, priceVerified: true,
         priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
@@ -98,6 +106,10 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const key = createHash('sha256').update(identity).digest('hex');
     const category = inferCategory(item.name);
     const sourcePriceMinor = item.priceMinor ?? estimatedPriceMinor ?? null;
+    if (sourcePriceMinor && !['save', 'alternative'].includes(assessPurchase(answers, {
+      priceMinor: BigInt(sourcePriceMinor), cashMinor: BigInt(finances.cashMinor),
+      billsMinor: BigInt(finances.billsMinor), setAsideMinor: BigInt(finances.setAsideMinor),
+    }).decision)) return res.status(422).json({ error: 'Permintaan alternatif hanya untuk kebutuhan dengan keterbatasan anggaran.' });
     if (!category || !Number.isSafeInteger(sourcePriceMinor) || (sourcePriceMinor ?? 0) <= 0) {
       return res.status(422).json({ error: 'Produk perlu kategori dan harga yang jelas sebelum meminta alternatif.' });
     }
