@@ -12,7 +12,7 @@ const answersSchema = z.strictObject({
   canWait: z.boolean(), withoutDiscount: z.boolean(), socialPressure: z.boolean(),
 });
 const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema,
-  estimatedPriceMinor: z.number().int().positive().safe().max(2_000_000_000).optional() });
+  estimatedPriceMinor: z.number().int().positive().max(2_000_000_000).optional() });
 const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30).default(20) });
 
 /** Conservative classification. Unknown categories produce no recommendations. */
