@@ -140,7 +140,9 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
             }}
             requestRecommendation={async () => {
               await api('/recommendations/requests', {
-                method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers },
+                method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+                  ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
+                    ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) },
               });
             }}
             onOpenProduct={(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }}
