@@ -1,0 +1,50 @@
+name: Recommendation migration validation
+
+on:
+  pull_request:
+    paths:
+      - 'prisma/schema.prisma'
+      - 'prisma/migrations/**'
+      - '.github/workflows/recommendation-migration-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-root-only
+          MYSQL_DATABASE: nanti_migration_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-root-only"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:test-root-only@127.0.0.1:3306/nanti_migration_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies and generate Prisma client
+        run: npm ci
+      - name: Validate Prisma schema
+        run: npx prisma validate
+      - name: Apply migrations to disposable MySQL
+        run: npx prisma migrate deploy
+      - name: Check migration drift
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run recommendation unit tests
+        run: npx vitest run tests/recommendation-matching.test.ts tests/recommendation-fulfillment.test.ts
+
+# No production secrets or database are used. This workflow does not deploy or merge.
