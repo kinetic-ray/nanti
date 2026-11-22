@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocale } from './locale.js';
-import { CreatorStorefront, studioSoreExample } from './creator-storefront.js';
+import { CreatorStorefront, demoProducts, studioSoreExample } from './creator-storefront.js';
 import './creator.css';
 
 export function CreatorLanding() {
@@ -95,7 +95,35 @@ const postIconPaths = {
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   back: 'M19 12H5m6-6-6 6 6 6',
   link: 'M10 13a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 4.3l-1.5 1.5m2.5 5.2a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 19.7l1.5-1.5',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  personAdd: 'M14 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m18-13v6m-3-3h6M12 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  grid: 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18m6-18v18',
+  reels: 'M3 8h18v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v2M8 3l3 5m3-5 3 5m-7 4 5 3-5 3z',
+  tagged: 'M3 5h5l4-3 4 3h5v16H3zM7 21v-1a5 5 0 0 1 10 0v1m-2-9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+  home: 'm2 10 10-8 10 8m-2-1v12h-5v-7H9v7H4V9',
+  search: 'm16 16 5 5m-3-10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
+  create: 'M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm6 5v8m-4-4h8',
 };
+
+const profilePosts = [studioSoreExample, ...demoProducts.filter(product => product.id !== studioSoreExample.id)];
+const journeySteps = [1, 2, 3] as const;
+const journeyGuidance = {
+  1: {
+    title: 'Notice a product you like.',
+    description: 'Found something you like in a creator’s post? Open their profile to find out more.',
+    hint: 'Tap the creator’s name or profile picture.',
+  },
+  2: {
+    title: 'Find the storefront link in the bio.',
+    description: 'Creators often use a link in their profile to list the products they’ve shared.',
+    hint: 'Tap the Nanti link in the creator’s bio.',
+  },
+  3: {
+    title: 'Find the product on Nanti.',
+    description: 'Search by product name or browse categories to find the item you saw.',
+    hint: 'Type "sneakers" in the search field.',
+  },
+} as const;
 
 function PostIcon({ name, size }: { name: keyof typeof postIconPaths; size: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -104,12 +132,37 @@ function PostIcon({ name, size }: { name: keyof typeof postIconPaths; size: numb
   </svg>;
 }
 
+function JourneyStatus({ label }: { label: string }) {
+  return <div className="creator-profile-status">
+    <span aria-hidden="true">9:41</span>
+    <span className="creator-social-label">{label}</span>
+    <svg width="42" height="22" viewBox="0 0 42 22" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 15v-2m3 2v-4m3 4V9m3 6V7" />
+      <path d="M15 9a8 8 0 0 1 10 0m-8 2.5a5 5 0 0 1 6 0m-4 2.5a2 2 0 0 1 2 0m-1 2h.01" />
+      <rect x="29" y="7.5" width="10" height="7" rx="1.5" />
+      <path d="M41 10v2m-9.5-.5h4.5" />
+    </svg>
+  </div>;
+}
+
+function SocialNavigation() {
+  return <div className="creator-profile-bottom" aria-hidden="true">
+    <PostIcon name="home" size={21} />
+    <PostIcon name="search" size={21} />
+    <PostIcon name="create" size={21} />
+    <PostIcon name="reels" size={21} />
+    <span className="creator-post-avatar">S.</span>
+  </div>;
+}
+
 function CreatorJourney({ id }: { id: boolean }) {
   const { t } = useLocale();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
+  const comments = useRef<HTMLParagraphElement>(null);
   const focusStage = useRef(false);
   const labels = [t('See the post'), t('Open the profile'), t('Search the storefront')];
   useEffect(() => {
@@ -126,61 +179,110 @@ function CreatorJourney({ id }: { id: boolean }) {
 
   return <div className="creator-post-journey">
     <nav className="creator-stepper" aria-label={id ? 'Langkah simulasi' : 'Demo steps'}>
-      {([1, 2, 3] as const).map(number => (
+      {journeySteps.map(number => (
         <button type="button" key={number} aria-current={step === number ? 'step' : undefined}
           aria-label={`${number}. ${labels[number - 1]}`} onClick={() => go(number)}>
           <span aria-hidden="true">{number}</span>{labels[number - 1]}
         </button>
       ))}
     </nav>
-    <div className="creator-journey-stage" ref={stage} key={step}>
-      {step === 1 && <article className="creator-instagram-post" aria-label={id ? 'Contoh postingan Instagram' : 'Example Instagram post'}>
+    <div className="creator-journey-guidance">
+      {journeySteps.map(number => {
+        const { title, description, hint } = journeyGuidance[number];
+        return <div key={number} aria-hidden={number !== step ? true : undefined}>
+          <h3>{t(title)}</h3>
+          <p>{t(description)}</p>
+          <p className="creator-journey-hint">{t(hint)}</p>
+        </div>;
+      })}
+      <p className="sr-only" role="status">{t(journeyGuidance[step].hint)}</p>
+    </div>
+    <div className="creator-journey-stage" ref={stage}>
+      {step === 1 ? <article className="creator-instagram-post" aria-label={id ? 'Contoh postingan Instagram' : 'Example Instagram post'}>
+        <JourneyStatus label={t('Simulation')} />
         <header className="creator-post-header">
           <button className="creator-post-account" type="button" onClick={() => go(2, true)}>
             <span className="creator-post-avatar" aria-hidden="true">S.</span><strong>studio.sore</strong>
           </button>
-          <span className="creator-social-label">{t('Simulation')}</span>
+          <button className="creator-post-more" type="button" aria-label={t('Post options')} disabled><PostIcon name="more" size={20} /></button>
         </header>
-        <img className="creator-post-photo" src={studioSoreExample.photo} alt={id ? 'Sepatu merah dari etalase Studio Sore' : 'Red sneakers from the Studio Sore storefront'} width="640" height="640" loading="lazy" decoding="async" />
-        <div className="creator-post-engagement">
-          <button type="button" aria-label={t('Like')} aria-pressed={liked} onClick={() => setLiked(value => !value)}><PostIcon name="heart" size={22} /></button>
-          <button type="button" aria-label={t('Comment')} disabled><PostIcon name="comment" size={22} /></button>
-          <button type="button" aria-label={t('Share')} disabled><PostIcon name="send" size={22} /></button>
-          <button type="button" aria-label={t('Save post')} aria-pressed={saved} onClick={() => setSaved(value => !value)}><PostIcon name="bookmark" size={22} /></button>
+        <div className="creator-profile-scroll" role="region" aria-label={t('Post content')} tabIndex={0}>
+          <img className="creator-post-photo" src={studioSoreExample.photo} alt={id ? 'Sepatu merah dari etalase Studio Sore' : 'Red sneakers from the Studio Sore storefront'} width="640" height="640" loading="lazy" decoding="async" />
+          <div className="creator-post-engagement">
+            <button type="button" aria-label={t('Like')} aria-pressed={liked} onClick={() => setLiked(value => !value)}><PostIcon name="heart" size={22} /></button>
+            <button type="button" aria-label={t('Comment')} onClick={() => comments.current?.focus()}><PostIcon name="comment" size={22} /></button>
+            <button type="button" aria-label={t('Share')} disabled><PostIcon name="send" size={22} /></button>
+            <button type="button" aria-label={t('Save post')} aria-pressed={saved} onClick={() => setSaved(value => !value)}><PostIcon name="bookmark" size={22} /></button>
+          </div>
+          <div className="creator-post-caption">
+            <strong aria-live="polite">{t('{count} likes', { count: liked ? 25 : 24 })}</strong>
+            <p><button className="creator-caption-account" type="button" onClick={() => go(2, true)}>studio.sore</button> {t('Red sneakers for a Sunday walk. I’ve linked them in my bio.')}</p>
+            <p ref={comments} className="creator-post-comment-count" tabIndex={-1}>{t('1 comment')}</p>
+            <p><strong>rina.pagi</strong> {t('What are these sneakers called?')}</p>
+          </div>
         </div>
-        <p className="creator-post-caption"><strong>studio.sore</strong> {t('Red sneakers for a Sunday walk. I’ve linked them in my bio.')}</p>
-      </article>}
-      {step === 2 && <section className="creator-instagram-profile" aria-labelledby="creator-walkthrough-profile">
+        <SocialNavigation />
+      </article> : <div className={`creator-journey-panel${step === 3 ? ' creator-journey-shop' : ''}`} key={step}>
+      {step === 2 ? <section className="creator-instagram-profile" aria-labelledby="creator-walkthrough-profile">
+        <JourneyStatus label={t('Simulation')} />
         <header className="creator-profile-header">
           <button type="button" aria-label={t('Back to post')} onClick={() => go(1, true)}><PostIcon name="back" size={20} /></button>
           <h3 id="creator-walkthrough-profile" tabIndex={-1}>studio.sore</h3>
-          <span className="creator-social-label">{t('Simulation')}</span>
+          <button type="button" aria-label={t('Profile options')} disabled><PostIcon name="more" size={20} /></button>
         </header>
-        <div className="creator-profile-body">
-          <div className="creator-profile-identity">
-            <span className="creator-post-avatar creator-profile-ring" aria-hidden="true">S.</span>
-            <dl className="creator-profile-stats">
-              <div><dt>{t('Posts')}</dt><dd>1</dd></div>
-              <div><dt>{t('Followers')}</dt><dd>0</dd></div>
-              <div><dt>{t('Following')}</dt><dd>0</dd></div>
-            </dl>
+        <div className="creator-profile-scroll" role="region" aria-label={t('Profile content')} tabIndex={0}>
+          <div className="creator-profile-body">
+            <div className="creator-profile-identity">
+              <span className="creator-profile-ring" aria-hidden="true"><span className="creator-post-avatar">S.</span></span>
+              <dl className="creator-profile-stats">
+                <div><dt>{t('Posts')}</dt><dd>{profilePosts.length}</dd></div>
+                <div><dt>{t('Followers')}</dt><dd>0</dd></div>
+                <div><dt>{t('Following')}</dt><dd>0</dd></div>
+              </dl>
+            </div>
+            <div className="creator-profile-bio">
+              <strong>Studio Sore</strong>
+              <p className="creator-profile-category">{t('Digital creator')}</p>
+              <p>{t('Everyday outfits and the pieces you ask me about.')}</p>
+              <a className="creator-profile-link" href="/creator/demo" aria-label={`Nanti / Studio Sore · ${t('Open bio link')}`} onClick={event => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                go(3, true);
+              }}><PostIcon name="link" size={17} /><span>Nanti / Studio Sore</span></a>
+            </div>
+            <div className="creator-profile-actions">
+              <button type="button" disabled>{t('Follow')}</button>
+              <button type="button" disabled>{t('Message')}</button>
+              <button type="button" disabled>{t('Email')}</button>
+              <button type="button" aria-label={t('Add person')} disabled><PostIcon name="personAdd" size={17} /></button>
+            </div>
           </div>
-          <div className="creator-profile-bio">
-            <strong>Studio Sore</strong>
-            <p className="creator-profile-category">{t('Digital creator')}</p>
-            <p>{t('Everyday outfits and the pieces you ask me about.')}</p>
-            <a className="creator-profile-link" href="/creator/demo" aria-label={`Nanti / Studio Sore · ${t('Open bio link')}`} onClick={event => {
-              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              event.preventDefault();
-              go(3, true);
-            }}><PostIcon name="link" size={17} /><span>Nanti / Studio Sore</span></a>
+          <div className="creator-profile-tabs" role="group" aria-label={t('Profile content')}>
+            <button type="button" aria-label={t('Posts')} aria-pressed="true" disabled><PostIcon name="grid" size={20} /></button>
+            <button type="button" aria-label={t('Reels')} disabled><PostIcon name="reels" size={20} /></button>
+            <button type="button" aria-label={t('Tagged')} disabled><PostIcon name="tagged" size={20} /></button>
           </div>
+          <ul className="creator-profile-grid" role="list" aria-label={t('Posts')}>
+            {profilePosts.map(product => <li key={product.id}>
+              <img src={product.photo} alt={product.title} width="640" height="640" loading="lazy" decoding="async" />
+            </li>)}
+          </ul>
         </div>
-      </section>}
-      {step === 3 && <>
-        <CreatorStorefront walkthrough />
-        <a className="creator-journey-store-link" href="/creator/demo">{t('Open demo storefront')} <PostIcon name="arrow" size={16} /></a>
+        <SocialNavigation />
+      </section> : <>
+        <JourneyStatus label="nanti." />
+        <header className="creator-profile-header">
+          <button type="button" aria-label={t('Back to profile')} onClick={() => go(2, true)}><PostIcon name="back" size={20} /></button>
+          <h3>Studio Sore</h3>
+        </header>
+        <div className="creator-profile-scroll">
+          <CreatorStorefront walkthrough />
+        </div>
+        <footer className="creator-journey-shop-footer">
+          <a className="creator-journey-store-link" href="/creator/demo">{t('Open demo storefront')} <PostIcon name="arrow" size={16} /></a>
+        </footer>
       </>}
+      </div>}
     </div>
   </div>;
 }

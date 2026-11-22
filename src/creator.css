@@ -179,6 +179,7 @@ body:has(.creator-page){background:#f6f5fc}
 }
 
 /* The Instagram stages hand off to the real storefront. */
+.creator-showcase { container: creator-walkthrough / inline-size; }
 .creator-showcase-head { text-align: center; }
 .creator-showcase-head > p { margin-inline: auto; }
 .creator-showcase-note { margin-inline: auto; text-align: center; }
@@ -226,30 +227,73 @@ body:has(.creator-page){background:#f6f5fc}
   color: white;
 }
 .creator-stepper button:hover:not([aria-current]) { border-color: var(--brand); }
-.creator-journey-stage { min-width: 0; }
-@media (prefers-reduced-motion: no-preference) {
-  .creator-journey-stage { animation: creator-stage-in 150ms ease-out; }
-  @keyframes creator-stage-in { from { opacity: .75; } to { opacity: 1; } }
-}
-.creator-instagram-post, .creator-instagram-profile {
+.creator-journey-guidance {
+  display: grid;
   width: min(100%, 25rem);
   margin-inline: auto;
+}
+.creator-journey-guidance > div { grid-area: 1 / 1; }
+.creator-journey-guidance > div[aria-hidden="true"] { visibility: hidden; }
+.creator-journey-guidance h3 { margin: 0; font-size: .875rem; font-weight: 800; line-height: 1.25rem; }
+.creator-journey-guidance p { margin: .25rem 0 0; color: var(--muted); font-size: .8125rem; line-height: 1.25rem; }
+.creator-journey-guidance .creator-journey-hint { color: var(--brand-deep); font-weight: 750; }
+/* The wider layout needs 20rem for guidance, 25rem for the approved frame, and a 2rem gap. */
+@container creator-walkthrough (min-width: 47rem) {
+  .creator-post-journey {
+    max-width: 55rem;
+    margin-inline: auto;
+    grid-template-columns: minmax(20rem, 1fr) 25rem;
+    align-items: start;
+    column-gap: clamp(2rem, calc(100cqi - 45rem), 5rem);
+  }
+  .creator-stepper { grid-column: 1 / -1; }
+  .creator-journey-guidance, .creator-journey-guidance > div { align-self: center; }
+  .creator-journey-guidance h3 { font-size: 2rem; line-height: 1.2; }
+  .creator-journey-guidance p { margin-top: .75rem; font-size: 1rem; line-height: 1.6; }
+  .creator-journey-guidance .creator-journey-hint { margin-top: 1rem; font-size: .875rem; }
+}
+.creator-journey-stage {
+  position: relative;
+  width: min(100%, 25rem);
+  height: clamp(36rem, 168vw, 42rem);
+  margin-inline: auto;
+}
+.creator-journey-panel {
+  position: absolute;
+  inset: 0;
+}
+.creator-journey-shop {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  border: 1px solid #e6dff0;
+  border-radius: .75rem;
+  background: #fff;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .creator-instagram-post, .creator-journey-panel { animation: creator-stage-in 150ms ease-out; }
+  @keyframes creator-stage-in { from { opacity: .75; } to { opacity: 1; } }
+}
+.creator-instagram-post {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
   overflow: hidden;
   border: 1px solid #e6dff0;
-  border-radius: 1rem;
+  border-radius: .75rem;
   background: #fff;
   color: #241a3e;
   box-shadow: 0 6px 24px #30214e0a;
 }
-.creator-post-header, .creator-profile-header {
+.creator-post-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: .5rem;
-  padding: .25rem .75rem;
-  background: #f8f6fc;
+  padding: 0 .5rem;
+  border-bottom: 1px solid #e6dff0;
 }
-.creator-post-account, .creator-profile-header button, .creator-post-engagement button {
+.creator-post-account, .creator-post-more, .creator-profile-header button, .creator-post-engagement button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -263,7 +307,7 @@ body:has(.creator-page){background:#f6f5fc}
   cursor: pointer;
 }
 .creator-post-account { gap: .625rem; font: inherit; font-size: .875rem; }
-.creator-post-account strong { text-decoration: underline; text-decoration-color: #897d9d; text-underline-offset: .2em; }
+.creator-post-more:disabled { color: #615774; cursor: default; }
 .creator-post-avatar {
   display: grid;
   place-items: center;
@@ -280,7 +324,8 @@ body:has(.creator-page){background:#f6f5fc}
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1;
+  max-height: 20rem;
   object-fit: cover;
   background: var(--brand-wash);
 }
@@ -290,20 +335,57 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-post-engagement button[aria-pressed="true"] { color: #5335aa; }
 .creator-post-engagement button[aria-pressed="true"] svg { fill: currentColor; }
 @media (hover: hover) {
-  .creator-post-account:hover, .creator-profile-header button:hover,
+  .creator-post-account:hover, .creator-profile-header button:hover:not(:disabled),
   .creator-post-engagement button:hover:not(:disabled) { background: #efe8fc; }
 }
-.creator-post-caption { margin: .125rem .875rem .875rem; font-size: .875rem; line-height: 1.5; }
-.creator-post-caption strong { margin-inline-end: .15rem; }
-.creator-profile-header { border-bottom: 1px solid #e6dff0; }
-.creator-profile-header h3 { margin: 0; font-size: 1rem; }
-.creator-profile-body { padding: 1rem .875rem .75rem; }
-.creator-profile-identity { display: flex; align-items: center; gap: clamp(.5rem, 3vw, 1rem); }
+.creator-post-caption { margin: .125rem .875rem .75rem; font-size: .8125rem; line-height: 1.4; }
+.creator-post-caption p { margin: .25rem 0 0; }
+.creator-post-comment-count { color: #615774; }
+.creator-caption-account {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #5335aa;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: .15em;
+  cursor: pointer;
+}
+.creator-instagram-profile {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #e6dff0;
+  border-radius: .75rem;
+  background: #fff;
+  color: #241a3e;
+}
+.creator-profile-status, .creator-profile-header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  justify-items: center;
+}
+.creator-profile-status { min-height: 29px; padding-inline: .5rem; font-size: .75rem; font-weight: 750; }
+.creator-profile-header { border-bottom: 1px solid #e6dff0; padding-inline: .25rem; }
+.creator-profile-header h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.creator-profile-header button:disabled { cursor: default; color: #615774; }
+.creator-profile-scroll { min-height: 0; overflow: auto; scrollbar-width: thin; }
+.creator-profile-body { padding: .75rem .75rem .5rem; }
+.creator-profile-identity { display: flex; align-items: center; gap: .625rem; }
 .creator-profile-ring {
-  width: clamp(3.5rem, 16vw, 4.75rem);
-  border: 2px solid #897d9d;
-  box-shadow: inset 0 0 0 3px white;
-  font-size: clamp(1.2rem, 4vw, 1.6rem);
+  flex: none;
+  padding: 2px;
+  border-radius: 50%;
+  background: conic-gradient(#7750bd, #c83d85, #ed884a, #efbd63, #7750bd);
+}
+.creator-profile-ring .creator-post-avatar {
+  width: clamp(3.75rem, 19vw, 4.75rem);
+  border: 3px solid #fff;
+  font-size: 1.5rem;
 }
 .creator-profile-stats {
   display: grid;
@@ -313,11 +395,12 @@ body:has(.creator-page){background:#f6f5fc}
   margin: 0;
   text-align: center;
 }
-.creator-profile-stats > div { display: flex; flex-direction: column-reverse; gap: .2rem; }
+.creator-profile-stats > div { display: flex; flex-direction: column-reverse; }
 .creator-profile-stats dt { font-size: .75rem; color: #615774; overflow-wrap: anywhere; }
 .creator-profile-stats dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
-.creator-profile-bio { margin-top: .75rem; font-size: .875rem; line-height: 1.5; }
+.creator-profile-bio { margin-top: .625rem; font-size: .8125rem; line-height: 1.45; }
 .creator-profile-bio p { margin: 0; }
+.creator-profile-bio p:not(.creator-profile-category) { max-width: 32ch; }
 .creator-profile-category { color: #615774; }
 .creator-instagram-profile .creator-profile-link {
   display: inline-flex;
@@ -329,6 +412,42 @@ body:has(.creator-page){background:#f6f5fc}
   text-decoration: underline;
   text-underline-offset: .2em;
 }
+.creator-profile-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+  gap: .25rem;
+}
+.creator-profile-actions button, .creator-profile-tabs button {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  padding: .25rem;
+  border: 0;
+  color: #615774;
+  background: #f2eef6;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+  opacity: 1;
+}
+.creator-profile-actions button { border-radius: .375rem; }
+.creator-profile-actions button:first-child { color: #5335aa; background: #efe8fc; }
+.creator-profile-tabs, .creator-profile-grid, .creator-profile-bottom { display: grid; }
+.creator-profile-tabs, .creator-profile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.creator-profile-tabs button { border-radius: 0; background: #fff; border-bottom: 2px solid transparent; }
+.creator-profile-tabs button[aria-pressed="true"] { border-color: #5335aa; color: #5335aa; }
+.creator-profile-grid { gap: 2px; margin: 0; padding: 0; list-style: none; }
+.creator-profile-grid li { min-width: 0; background: #efe8fc; }
+.creator-profile-grid img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
+.creator-profile-bottom {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  place-items: center;
+  min-height: 44px;
+  border-top: 1px solid #e6dff0;
+}
+.creator-profile-bottom .creator-post-avatar { width: 1.375rem; font-size: .625rem; }
+.creator-journey-shop-footer { border-top: 1px solid #e6dff0; }
 .creator-post-journey .creator-journey-store-link {
   display: flex;
   width: fit-content;
@@ -343,10 +462,12 @@ body:has(.creator-page){background:#f6f5fc}
   text-underline-offset: .2em;
 }
 .creator-stepper button:focus-visible, .creator-post-account:focus-visible,
+.creator-caption-account:focus-visible, .creator-post-comment-count:focus-visible,
 .creator-profile-header :is(button, h3):focus-visible, .creator-post-engagement button:focus-visible {
   outline: 3px solid #275db4;
   outline-offset: 2px;
 }
+.creator-profile-scroll:focus-visible { outline: 3px solid #275db4; outline-offset: -3px; }
 @media (max-width: 600px) {
   .creator-stepper button { flex-direction: column; gap: .25rem; padding-inline: .25rem; font-size: .75rem; }
 }
