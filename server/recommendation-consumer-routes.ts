@@ -13,7 +13,7 @@ const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30
 /** Conservative classification. Unknown categories produce no recommendations. */
 function inferCategory(title: string): string | null {
   const text = title.toLowerCase();
-  if (/\b(sneaker|sneakers|sepatu|shoes|trainer|trainers)\b/u.test(text)) return 'sneakers';
+  if (/\b(sneaker|sneakers|sepatu|shoes|trainer|trainers)\b/u.test(text) || /\b(nb\s?530|new balance\s?530)\b/u.test(text)) return 'sneakers';
   if (/\b(headphone|headphones|earbuds|earphone|earphones)\b/u.test(text)) return 'headphones';
   if (/\b(backpack|ransel)\b/u.test(text)) return 'backpack';
   return null;
