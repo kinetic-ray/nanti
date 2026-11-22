@@ -63,7 +63,7 @@ describe('curated alternative ranking', () => {
   });
   it('limits recommendations to three and handles absent source prices', () => {
     expect(rankAlternatives(source, Array.from({ length: 6 }, (_, i) =>
-      candidate({ id: String(i) }))).toHaveLength(3);
+      candidate({ id: String(i) })))).toHaveLength(3);
     expect(rankAlternatives({ ...source, priceMinor: null }, [candidate()])).toEqual([]);
   });
 });
