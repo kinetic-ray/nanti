@@ -31,7 +31,7 @@ const actions = {
   consider: ['Kebutuhan cukup jelas dan uang belanja masih mencukupi. Tetap bandingkan harga dan kualitas sebelum membeli.', 'The need is clear and spendable funds cover the price. Compare price and quality first.'],
 } as const;
 function toMinor(raw: string): bigint | null {
-  if (!/^\\d{1,15}(?:[.,]\\d{1,2})?$/.test(raw.trim())) return null;
+  if (!/^\d{1,15}(?:[.,]\d{1,2})?$/.test(raw.trim())) return null;
   const [whole, fraction = ''] = raw.trim().replace(',', '.').split('.');
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
 }
