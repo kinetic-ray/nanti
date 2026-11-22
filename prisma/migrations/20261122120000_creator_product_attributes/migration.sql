@@ -1,0 +1,3 @@
+ALTER TABLE `CreatorProduct`
+  ADD COLUMN `color` VARCHAR(60) NULL,
+  ADD COLUMN `productType` VARCHAR(60) NULL;

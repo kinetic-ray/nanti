@@ -6,6 +6,8 @@ export type CreatorProductInput = {
   url: string;
   description: string;
   category: string;
+  color?: string | null;
+  productType?: string | null;
   priceMinor?: number | null;
   currency?: Currency | null;
 };

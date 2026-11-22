@@ -25,6 +25,8 @@ const product = z.strictObject({
   url: z.string().trim().max(2048).refine(value => Boolean(safeImportUrl(value)), 'Enter a valid product link.'),
   description: z.string().trim().max(1000),
   category: z.string().trim().max(60),
+  color: z.string().trim().max(60).transform(value => value || null).nullish(),
+  productType: z.string().trim().max(60).transform(value => value || null).nullish(),
   priceMinor: z.number().int().min(0).max(2147483647).nullish(),
   currency: z.enum(currencies).nullish(),
   photo: z.base64().max(260000).nullable().optional(),

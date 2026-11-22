@@ -7,11 +7,13 @@ import { CreatorProducts } from './creator-products.js';
 import { CreatorDesignStudio } from './creator-studio.js';
 import { CreatorStorefront } from './creator-storefront.js';
 import { LanguagePicker, useLocale } from './locale.js';
+import { Icon } from './visual.js';
 import './creator-workspace.css';
 
 const path = '/account/creator/catalog';
 const tabs = ['overview', 'products', 'appearance', 'preview', 'publishing'] as const;
 type Tab = typeof tabs[number];
+const navigationIcons = ['bookmark', 'compare', 'edit', 'privacy', 'arrow'] as const;
 
 export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: unknown }) {
   const { t } = useLocale();
@@ -75,17 +77,19 @@ export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: u
   const visible = catalog?.products.filter(product => product.published) ?? [];
   const store = catalog ? '/store/' + catalog.handle : '';
   const isLive = Boolean(catalog?.publishedDesign);
+  const hasDesignUpdate = isLive && JSON.stringify(catalog?.publishedDesign) !== JSON.stringify(savedDesign);
   return <div className="creator-workspace">
     <a className="catalog-skip" href="#creator-content">{t('Skip to content')}</a>
     <header className="catalog-header"><div className="catalog-shell catalog-top">
       <a href="/creator" className="catalog-brand">nanti<span>.</span> <small>Creator Studio</small></a>
-      <div><LanguagePicker /><a href="/account">{t('Account')}</a></div>
+      <div><LanguagePicker /><a className="catalog-account" href="/account"><Icon name="person" />{t('Account')}</a></div>
     </div></header>
-    <nav className="catalog-shell catalog-nav" aria-label={t('Creator Studio navigation')}>
+    <div className="catalog-shell catalog-layout">
+    <nav className="catalog-nav" aria-label={t('Creator Studio navigation')}>
       {tabs.map((value, index) => <button key={value} aria-current={tab === value ? 'page' : undefined}
-        type="button" onClick={() => open(value)}>{labels[index]}</button>)}
+        type="button" onClick={() => open(value)}><Icon name={navigationIcons[index]!} />{labels[index]}</button>)}
     </nav>
-    <main id="creator-content" className="catalog-shell catalog-main" ref={panel} tabIndex={-1}>
+    <main id="creator-content" className="catalog-main" ref={panel} tabIndex={-1}>
       {error && <p className="catalog-error" role="alert">{error} {error === 'Sign in to continue.'
         ? <a href="/account?next=creator">{t('Sign in again')}</a>
         : !catalog && <button type="button" onClick={() => { setError(''); setReload(value => value + 1); }}>{t('Try again')}</button>}</p>}
@@ -108,22 +112,37 @@ export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: u
         {tab === 'preview' && <div>
           <div className="catalog-heading"><h1 tabIndex={-1}>{t('Storefront preview')}</h1>
             {isLive && <a href={store}>{t('View live storefront')}</a>}</div>
-          <p>{isLive ? t('This is what visitors see now.')
+          <p>{isLive && !hasDesignUpdate ? t('This is what visitors see now.')
             : t('Private preview with your saved design and published products.')}</p>
-          <CreatorStorefront preview design={catalog.publishedDesign ?? savedDesign} catalog={{ name: catalog.name, products: visible }} />
+          <CreatorStorefront preview design={savedDesign} catalog={{ name: catalog.name, products: visible }} />
         </div>}
         <div hidden={tab !== 'publishing'}>
           <div className="catalog-heading"><h1 tabIndex={-1}>{t('Storefront publishing')}</h1></div>
           <section className="catalog-panel" aria-label={t('Storefront visibility')}>
-            <span className="catalog-badge" data-published={isLive}>{isLive ? t('Public') : t('Private')}</span>
-            <h2>{catalog.name}</h2>
-            <p>{t('Your public storefront shows published products. Save any appearance changes before publishing your design.')}</p>
+            <div className="catalog-share-heading">
+              <Icon name={isLive ? 'check' : 'privacy'} />
+              <h2>{isLive ? t('Storefront is ready to share') : t('Your storefront is private')}</h2>
+            </div>
+            <ul className="catalog-readiness">
+              <li><Icon name={visible.length ? 'check' : 'compare'} /><div>
+                <strong>{t('{published} of {total} products are published.', { published: visible.length, total: catalog.products.length })}</strong>
+                {!visible.length && <p>{catalog.products.length ? t('Publish a product from your catalog to show it here.') : t('Add your first product to get started.')}</p>}
+              </div></li>
+              <li><Icon name="edit" /><div><strong>{isLive && hasDesignUpdate ? t('Saved appearance has changes') : t('Appearance ready to preview')}</strong>
+                {hasDesignUpdate && <p>{t('Publish your saved appearance to show the changes to visitors.')}</p>}
+              </div></li>
+            </ul>
             {notice && <p role="status" className="catalog-notice">{notice}</p>}
+            {isLive && <div className="catalog-public-link">
+              <span>{t('Public storefront link')}</span>
+              <a href={store} aria-label={t('View live storefront')}>{new URL(store, window.location.origin).href}</a>
+            </div>}
             <div className="catalog-actions">
-              <button className="catalog-primary" type="button" disabled={publishing} onClick={() => void publish(true)}>{isLive
-                ? t('Publish saved design') : t('Publish storefront')}</button>
-              {isLive && <><button type="button" disabled={publishing} onClick={() => void publish(false)}>{t('Unpublish storefront')}</button>
-                <a href={store}>{t('View live storefront')}</a></>}
+              {!isLive && visible.length > 0 && <button className="catalog-primary" type="button" disabled={publishing} onClick={() => void publish(true)}>{t('Publish storefront')}</button>}
+              {!visible.length && <button type="button" className="catalog-primary" onClick={() => open('products')}>{t('Manage products')}</button>}
+              {isLive && hasDesignUpdate && <button className="catalog-primary" type="button" disabled={publishing} onClick={() => void publish(true)}>{t('Publish saved design')}</button>}
+              <button type="button" onClick={() => open('preview')}>{t('Preview storefront')}</button>
+              {isLive && <button type="button" disabled={publishing} onClick={() => void publish(false)}>{t('Unpublish storefront')}</button>}
             </div>
           </section>
           <form className="catalog-panel catalog-form catalog-settings" key={catalog.name} onSubmit={event => void saveSettings(event)}>
@@ -136,6 +155,7 @@ export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: u
         </div>
       </>}
     </main>
+    </div>
   </div>;
 }
 

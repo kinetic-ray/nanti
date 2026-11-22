@@ -50,6 +50,8 @@ it.skipIf(!databaseUrl)('isolates creator drafts and publishes only eligible cat
     await stranger!.get(productPath + '/photo').expect(404);
     await stranger!.delete(productPath).send({}).expect(404);
     await owner!.get(productPath + '/photo').expect('Content-Type', /image\/jpeg/).expect(200);
+    await owner!.patch(productPath).send({ ...input, category: 'Everyday', color: 'Natural', productType: 'Tote' }).expect(200);
+    await owner!.patch(productPath).send({ ...input, category: 'Everyday' }).expect(200);
     const publicPhoto = publicPath + '/products/' + productPath.split('/').at(-1) + '/photo';
     await owner!.put(catalog + '/publication').send({ published: true }).expect(204);
     expect((await request(app).get(publicPath).expect(200)).body.products).toEqual([]);
@@ -57,7 +59,7 @@ it.skipIf(!databaseUrl)('isolates creator drafts and publishes only eligible cat
     await owner!.put(productPath + '/publication').send({ published: true }).expect(204);
     const published = (await request(app).get(publicPath).expect(200)).body;
     expect(Object.keys(published).sort()).toEqual(['design', 'name', 'products']);
-    expect(published.products).toEqual([{ ...input, id: productPath.split('/').at(-1), currency: null, priceMinor: null, image: publicPhoto }]);
+    expect(published.products).toEqual([{ ...input, category: 'Everyday', color: 'Natural', productType: 'Tote', id: productPath.split('/').at(-1), currency: null, priceMinor: null, image: publicPhoto }]);
     await request(app).get(publicPhoto).expect('Content-Type', /image\/jpeg/).expect(200);
     await owner!.put(productPath + '/publication').send({ published: false }).expect(204);
     expect((await request(app).get(publicPath).expect(200)).body.products).toEqual([]);

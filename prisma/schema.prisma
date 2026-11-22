@@ -336,6 +336,7 @@ model OAuthAttempt {
 enum AccountTokenKind {
   verify
   reset
+  changeEmail
 }
 model PasswordCredential {
   userId       String    @id @db.Char(36)
@@ -349,6 +350,7 @@ model AccountToken {
   kind      AccountTokenKind
   tokenHash String           @unique @db.Char(64)
   expiresAt DateTime
+  pendingEmail String?      @db.VarChar(254)
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([userId, kind])
   @@index([expiresAt])
@@ -378,6 +380,8 @@ model CreatorProduct {
   url         String         @db.VarChar(2048)
   description String         @db.VarChar(1000)
   category    String         @db.VarChar(60)
+  color       String?        @db.VarChar(60)
+  productType String?        @db.VarChar(60)
   priceMinor  Int?
   currency    String?        @db.VarChar(3)
   photo       Bytes?         @db.MediumBlob
