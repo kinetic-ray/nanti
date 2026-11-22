@@ -34,7 +34,8 @@ const verification = z.strictObject({
 export function recommendationAdminRoutes(db: PrismaClient) {
   const router = Router();
   router.use((req, res, next) => {
-    if (req.get('Sec-Fetch-Site') === 'cross-site' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+      (req.get('Sec-Fetch-Site') === 'cross-site' || req.get('X-Nanti-Request') !== '1')) {
       return res.status(403).json({ error: 'Permintaan tidak dapat diverifikasi.' });
     }
     next();
