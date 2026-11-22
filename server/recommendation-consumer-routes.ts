@@ -7,7 +7,6 @@ import type { PrismaClient } from './generated/prisma/client.js';
 import { rankAlternatives, safeHttpsUrl, type RecommendationProduct } from './recommendation-matching.js';
 
 const uuid = z.uuid();
-const query = z.strictObject({ itemId: uuid, wishlistId: uuid });
 const answersSchema = z.strictObject({
   practicalNeed: z.boolean(), alreadyHave: z.boolean(), useOften: z.boolean(),
   canWait: z.boolean(), withoutDiscount: z.boolean(), socialPressure: z.boolean(),
