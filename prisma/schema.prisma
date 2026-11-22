@@ -430,6 +430,10 @@ model RecommendationRequest {
   ownerId     String                      @db.Char(36)
   productKey  String                      @db.Char(64)
   productName String                      @db.VarChar(160)
+  sourceCategory String?                  @db.VarChar(80)
+  sourcePriceMinor Int?
+  sourceCurrency String?                  @db.Char(3)
+  sourceColor String?                     @db.VarChar(80)
   status      RecommendationRequestStatus @default(pending)
   createdAt   DateTime                    @default(now())
   fulfilledAt DateTime?
