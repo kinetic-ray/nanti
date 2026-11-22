@@ -256,14 +256,14 @@ function ProductEditor({ entry, collections, load, close, saved }: {
         <button type="button" disabled={pending || index > furthest} aria-current={step === index ? 'step' : undefined} onClick={() => setStep(index)}>{index + 1}. {label}</button>
       </li>)}
     </ol>
-    <fieldset disabled={pending} hidden={step !== 0}>
+    <fieldset className="catalog-url-section" disabled={pending} hidden={step !== 0}>
       <label htmlFor="catalog-url">{t('Product link')}</label>
       <input id="catalog-url" name="url" autoComplete="off" spellCheck={false} ref={linkField} type="url" required maxLength={2048}
         placeholder="https://..." value={url} aria-invalid={Boolean(fields.url)} aria-describedby={fields.url ? 'catalog-url-error' : undefined}
         onChange={event => { setUrl(event.target.value); setFurthest(0); if (photo === 'import') { setPhoto(null); setImportedPhoto(''); } }} />
       {fields.url && <p role="alert" className="catalog-error" id="catalog-url-error">{fields.url}</p>}
     </fieldset>
-    <fieldset disabled={pending} hidden={step !== 1}>
+    <fieldset className="catalog-details-section" disabled={pending} hidden={step !== 1}>
       {importNotice && <p role="status">{importNotice}</p>}
       <label htmlFor="catalog-product-name">{t('Product name')}</label>
       <input id="catalog-product-name" name="title" autoComplete="off" ref={titleField} required maxLength={160} value={title}
@@ -296,7 +296,7 @@ function ProductEditor({ entry, collections, load, close, saved }: {
         <label>{t('Description')}<textarea rows={3} maxLength={1000} value={description} onChange={event => setDescription(event.target.value)} /></label>
       </details>
     </fieldset>
-    <fieldset disabled={pending} hidden={step !== 2}>
+    <fieldset className="catalog-category-section" disabled={pending} hidden={step !== 2}>
       <label htmlFor="catalog-category">{t('Collection (optional)')}</label>
       <select id="catalog-category" value={newCollection ? 'new' : category ? 'existing:' + category : ''} onChange={event => {
         const value = event.target.value;
