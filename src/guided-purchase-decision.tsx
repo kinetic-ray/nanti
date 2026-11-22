@@ -134,6 +134,8 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
             load={async () => {
               const result = await api<{ alternatives: RecommendationMatch[] }>(
                 '/recommendations/alternatives', { method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+                  finances: { cashMinor: finance.cashMinor.toString(), billsMinor: finance.billsMinor.toString(),
+                    setAsideMinor: finance.setAsideMinor.toString() },
                   ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
                     ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) } });
               return result.alternatives;
