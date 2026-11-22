@@ -74,6 +74,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
   }
   function answer(value: boolean | undefined) {
     const key = screeningQuestions[question];
+    if (!key) return;
     setAnswers(current => ({ ...current, [key]: value }));
     if (question === screeningQuestions.length - 1) setStage(2);
     else setQuestion(current => current + 1);
@@ -87,7 +88,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
     </div>
     {stage === 1 && <section className="decision-section">
       <p className="hint">{lang === 0 ? `Pertanyaan ${question + 1} dari ${screeningQuestions.length}` : `Question ${question + 1} of ${screeningQuestions.length}`}</p>
-      <h3 tabIndex={-1} ref={heading}>{prompts[screeningQuestions[question]][lang]}</h3>
+      <h3 tabIndex={-1} ref={heading}>{prompts[screeningQuestions[question] ?? screeningQuestions[0]!][lang]}</h3>
       <div className="answer-buttons screening-answers">
         <button type="button" onClick={() => answer(true)}>{lang === 0 ? 'Ya' : 'Yes'}</button>
         <button type="button" onClick={() => answer(false)}>{lang === 0 ? 'Tidak' : 'No'}</button>
