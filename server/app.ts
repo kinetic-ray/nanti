@@ -56,6 +56,7 @@ type Options = {
   intelligence?: IntelligenceRepository;
   prices?: Prices;
   recommendationsDb?: PrismaClient;
+  recommendationSuperadminEnabled?: boolean;
   affiliate?: AffiliateRepository;
   admin?: AdminCredentials;
   consumer?: { accounts: Accounts; providers: OAuthProviders };
@@ -75,7 +76,7 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, prices, recommendationsDb, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage,
+export function createApp({ repository, intelligence, prices, recommendationsDb, recommendationSuperadminEnabled = false, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage,
   secret, secureCookies, trustedProxy, webRoot, checkDatabase, retention }: Options) {
   const app = express();
   const api = express.Router();
@@ -151,7 +152,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   });
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
-  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies, recommendationsDb));
+  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies, recommendationsDb, recommendationSuperadminEnabled));
   api.use('/admin', (_req, res) => res.status(404).json({
     error: affiliate && admin ? 'This administrator endpoint could not be found.' : 'Administrator sign-in is not configured.',
   }));
