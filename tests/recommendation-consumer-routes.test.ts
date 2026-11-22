@@ -82,6 +82,14 @@ describe('recommendation HTTP eligibility', () => {
     expect(response.status).toBe(422);
     expect(db.curatedRecommendation.findMany).not.toHaveBeenCalled();
   });
+  it('rejects malformed financial amounts without touching the database', async () => {
+    const { app, db } = setup();
+    const response = await request(app).post('/recommendations/requests')
+      .set(headers).send({ wishlistId, itemId, answers,
+        finances: { ...finances, cashMinor: '-100' }, estimatedPriceMinor: 100000000 });
+    expect(response.status).toBe(400);
+    expect(db.recommendationRequest.upsert).not.toHaveBeenCalled();
+  });
   it('rejects an out-of-range estimated price', async () => {
     const { app } = setup();
     const result = await request(app).post('/recommendations/requests')
