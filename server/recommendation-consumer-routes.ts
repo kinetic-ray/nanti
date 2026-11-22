@@ -76,7 +76,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     });
     const source: RecommendationProduct = {
       id: item.id, title: item.name, category: sourceCategory,
-      color: /\\b(?:white|putih)\\b/iu.test(item.name) ? 'white' : /\\b(?:black|hitam)\\b/iu.test(item.name) ? 'black' : null,
+      color: /\b(?:white|putih)\b/iu.test(item.name) ? 'white' : /\b(?:black|hitam)\b/iu.test(item.name) ? 'black' : null,
       priceMinor: item.priceMinor ?? estimatedPriceMinor ?? null, currency: wishlist.currency, priceVerified: false,
       published: true, url: item.url ?? '',
     };
