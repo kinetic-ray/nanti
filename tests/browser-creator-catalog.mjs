@@ -61,14 +61,22 @@ try {
   await guest.addInitScript(() => localStorage.setItem('nanti.language', 'en'));
   await guest.addInitScript({ path: axe });
   const visitor = await guest.newPage();
+  visitor.setDefaultTimeout(12000);
   await page.goto('/creator/studio');
   await page.getByLabel('Creator name').fill('Browser Storefront');
   await page.getByRole('button', { name: 'Create creator profile' }).click();
   await page.getByRole('heading', { name: 'Make it yours.' }).waitFor();
+  const account = page.getByRole('link', { name: 'Account', exact: true });
+  assert.equal(await account.getAttribute('href'), '/account');
+  assert.equal(await account.locator('.icon-person').count(), 1);
+  await page.getByRole('button', { name: 'Publishing', exact: true }).click();
+  await page.getByText('Your storefront is private').waitFor();
+  await page.getByText('Add your first product to get started.').waitFor();
   await page.getByRole('button', { name: 'Manage products' }).click();
   await page.getByRole('button', { name: 'Add product' }).click();
   await audit(page, '.creator-workspace', 'Product editor accessibility at 390');
-  await page.getByRole('button', { name: 'Save draft' }).click();
+  if (artifacts) await page.screenshot({ path: join(artifacts, 'editor-390.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Import details' }).click();
   assert.equal(await page.locator('#catalog-url').getAttribute('aria-invalid'), 'true');
   await page.getByLabel('Product link').fill('https://example.com/bag');
   await page.getByRole('button', { name: 'Import details' }).click();
@@ -84,6 +92,7 @@ try {
     return canvas.toDataURL('image/png').split(',')[1];
   });
   await page.getByLabel('Product photo (optional)').setInputFiles({ name: 'tote.png', mimeType: 'image/png', buffer: Buffer.from(image, 'base64') });
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByRole('button', { name: 'Save draft' }).click();
   const tote = page.getByRole('listitem').filter({ hasText: 'Canvas tote' });
   await tote.getByText('Draft', { exact: true }).waitFor().catch(async failure => {
@@ -94,8 +103,27 @@ try {
   await page.getByLabel('Product link').fill('https://www.tokopedia.com/desk/fixture');
   await page.getByRole('button', { name: 'Import details' }).click();
   await page.waitForFunction(() => document.querySelector('#catalog-product-name')?.value === 'Imported desk lamp');
+  assert.equal(await page.getByLabel('Price', { exact: true }).inputValue(), '89000');
+  await page.getByLabel('Product photo (optional)').waitFor();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByRole('button', { name: 'Save draft' }).click();
   await page.getByRole('heading', { name: 'Imported desk lamp' }).waitFor();
+  await page.route('**/api/products/import/image?*', route => route.fulfill({
+    contentType: 'image/png', body: Buffer.from(image, 'base64'),
+  }));
+  await page.route('**/api/products/import', route => route.fulfill({ json: {
+    status: 'details_available', name: 'Complete fixture', price: { priceMinor: 1200000, currency: 'IDR' },
+    imagePath: '/api/products/import/image?url=fixture',
+  } }));
+  await page.getByRole('button', { name: 'Add product' }).click();
+  await page.getByLabel('Product link').fill('https://example.com/complete');
+  await page.getByRole('button', { name: 'Import details' }).click();
+  await page.getByRole('img', { name: 'Product photo', exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Product photo (optional)').count(), 0);
+  assert.equal(await page.getByLabel('Product name').inputValue(), 'Complete fixture');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await page.getByRole('heading', { name: 'Complete fixture' }).waitFor();
   await page.reload();
   await page.getByRole('button', { name: 'Products', exact: true }).click();
   await page.getByLabel('Status', { exact: true }).selectOption('published');
@@ -107,7 +135,14 @@ try {
   assert.equal(await page.locator('.catalog-card').count(), 1);
   await tote.getByRole('button', { name: 'Edit Canvas tote' }).click();
   await page.getByLabel('Product name').fill('Canvas tote updated');
+  await page.getByText('Optional product details').click();
+  await page.getByLabel('Color', { exact: true }).fill('Natural');
+  await page.getByLabel('Product type', { exact: true }).fill('Tote');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByLabel('Collection (optional)').selectOption('new');
+  await page.getByLabel('Collection name').fill('Everyday');
   await page.getByRole('button', { name: 'Save changes' }).click();
+  await tote.getByText('Natural · Tote · Everyday', { exact: true }).waitFor();
   await tote.getByRole('button', { name: 'Publish Canvas tote updated' }).click();
   await tote.getByText('Published', { exact: true }).waitFor();
   for (const width of [390, 768, 1440]) {
@@ -121,6 +156,8 @@ try {
   await preview.fill('Canvas');
   await page.getByRole('heading', { name: 'Canvas tote updated' }).waitFor();
   await page.getByRole('button', { name: 'Publishing', exact: true }).click();
+  await audit(page, '.creator-workspace', 'Publishing accessibility');
+  if (artifacts) await page.screenshot({ path: join(artifacts, 'publishing-1440.png'), fullPage: true });
   await page.getByLabel('Storefront name').fill('Updated Browser Storefront');
   await page.getByRole('button', { name: 'Save name' }).click();
   await page.getByText('Storefront name saved.').waitFor();
@@ -132,6 +169,7 @@ try {
   await visitor.goto(href);
   await visitor.getByRole('heading', { name: 'Updated Browser Storefront' }).waitFor();
   await visitor.getByRole('heading', { name: 'Canvas tote updated' }).waitFor();
+  await visitor.getByText('Natural · Tote', { exact: true }).waitFor();
   assert.equal(await visitor.getByRole('heading', { name: 'Imported desk lamp' }).count(), 0);
   for (const width of [390, 768, 1440]) {
     await visitor.setViewportSize({ width, height: 844 });

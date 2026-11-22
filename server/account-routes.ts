@@ -1,6 +1,7 @@
 import { validateDesign } from '../shared/creator-design.js';
 import { creatorCatalogRoutes, type CreatorMedia } from './creator-catalog-routes.js';
 import { developmentAccountMail } from './account-mail.js';
+import { transactionalAccountMail } from './transactional-account-mail.js';
 import { randomUUID } from 'node:crypto';
 import { Router, urlencoded } from 'express';
 import type { Request, Response } from 'express';
@@ -51,7 +52,8 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
   });
 
 
-  const sendMail = developmentAccountMail(secure);
+  const productionMail = transactionalAccountMail();
+  const sendMail = productionMail ?? developmentAccountMail(secure);
   const passwordLimit = rateLimit({
     windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many account requests. Try again in a minute.' },
@@ -60,6 +62,9 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
   async function deliver(email: string, kind: 'verify' | 'reset', creator: boolean) {
     const raw = await accounts.passwords.issue(email, kind);
     if (raw && sendMail) await sendMail(email, kind, raw, creator).catch(() => console.error('Account mail delivery failed.'));
+  }
+  async function notify(email: string, kind: 'emailChanged' | 'passwordChanged') {
+    await productionMail?.notice(email, kind).catch(() => console.error('Account security notification failed.'));
   }
   function unavailable(res: Response) {
     res.status(503).json({ error: 'Email delivery is currently unavailable.' });
@@ -240,7 +245,9 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
   });
   api.post('/password/reset', passwordLimit, async (req, res) => {
     const { code, password } = z.strictObject({ code: token, password: newPassword }).parse(req.body);
-    if (!await accounts.passwords.consume(code, 'reset', password)) return invalidCode(res);
+    const changed = await accounts.passwords.consume(code, 'reset', password);
+    if (!changed) return invalidCode(res);
+    await notify(changed.email, 'passwordChanged');
     clearSession(res);
     clearAttempts(res);
     res.sendStatus(204);
@@ -265,10 +272,37 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const current = await session(req);
     if (!current) return unauthorized(res);
     const { currentPassword, password } = z.strictObject({ currentPassword: passwordInput, password: newPassword }).parse(req.body);
-    if (!await accounts.passwords.change(current, currentPassword, password)) {
+    const changed = await accounts.passwords.change(current, currentPassword, password);
+    if (!changed) {
       res.status(403).json({ error: 'Check your current password and try again.' });
       return;
     }
+    await notify(changed.email, 'passwordChanged');
+    clearSession(res);
+    clearAttempts(res);
+    res.sendStatus(204);
+  });
+  api.post('/password/email', passwordLimit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    if (!sendMail) return unavailable(res);
+    const { email, currentPassword } = z.strictObject({ email: emailInput, currentPassword: passwordInput }).parse(req.body);
+    const pending = await accounts.passwords.requestEmailChange(current, email, currentPassword);
+    if (!pending) {
+      res.status(403).json({ error: 'Check your current password and try again.' });
+      return;
+    }
+    if (pending.raw) {
+      try { await sendMail(email, 'changeEmail', pending.raw, false); }
+      catch { return unavailable(res); }
+    }
+    res.sendStatus(202);
+  });
+  api.post('/password/email/verify', passwordLimit, async (req, res) => {
+    const { code } = z.strictObject({ code: token }).parse(req.body);
+    const previousEmail = await accounts.passwords.confirmEmailChange(code);
+    if (!previousEmail) return invalidCode(res);
+    await notify(previousEmail, 'emailChanged');
     clearSession(res);
     clearAttempts(res);
     res.sendStatus(204);
@@ -331,6 +365,30 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
   api.post('/logout', limit, async (req, res) => {
     const hash = sessionKey(req);
     if (hash) await accounts.logout(hash);
+    clearSession(res);
+    clearAttempts(res);
+    res.sendStatus(204);
+  });
+  api.get('/sessions', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    res.json({ sessions: await accounts.sessions(current) });
+  });
+  api.delete('/sessions/:id', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    const id = z.string().regex(/^[a-f0-9]{64}$/u).parse(req.params.id);
+    if (!await accounts.revokeSession(current, id)) {
+      res.status(404).json({ error: 'Session is no longer available.' });
+      return;
+    }
+    res.sendStatus(204);
+  });
+  api.post('/sessions/revoke-all', limit, async (req, res) => {
+    const current = await session(req);
+    if (!current) return unauthorized(res);
+    confirm.parse(req.body);
+    if (!await accounts.revokeAllSessions(current)) return unauthorized(res);
     clearSession(res);
     clearAttempts(res);
     res.sendStatus(204);

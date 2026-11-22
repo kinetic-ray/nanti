@@ -127,3 +127,5 @@ html:has(.storefront:not(.storefront-embedded)){overflow-anchor:none}
 .storefront-live-dialog a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; }
 .storefront-live-photo { display: block; width: min(100%, 24rem); max-height: 38dvh; object-fit: contain; }
 .storefront-profile-title, .storefront-live-dialog h2, .storefront-live-dialog p { overflow-wrap: anywhere; }
+
+.storefront-product-attributes { font-size: .8125em; overflow-wrap: anywhere; }

@@ -23,6 +23,7 @@ export type AuthNotice = keyof typeof authNotices;
 export const authChangeKey = 'nanti:account-changed';
 const providerNames = { apple: 'Apple', google: 'Google' } as const;
 const providerOrigins = { apple: 'https://appleid.apple.com', google: 'https://accounts.google.com' } as const;
+type ActiveSession = { id: string; expiresAt: string; current: boolean };
 const providerMarks = {
   google: <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
     <path fill="#4285f4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z" />
@@ -42,7 +43,7 @@ export function announceAuthChange() {
 export function AccountDialog({ status, notice, close, update }: {
   status: AccountStatus | null; notice: AuthNotice | null; close: () => void; update: (status: AccountStatus) => void;
 }) {
-  const { t, error: translateError, number } = useLocale();
+  const { t, error: translateError, number, language } = useLocale();
   const account = status?.account;
   const nextProvider = status?.available.filter(provider => !account?.providers.includes(provider)) ?? [];
   const verifyProvider = status?.available.filter(provider => account?.providers.includes(provider)) ?? [];
@@ -55,6 +56,13 @@ export function AccountDialog({ status, notice, close, update }: {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const creator = new URLSearchParams(location.search).get('next') === 'creator';
   const [deletion, setDeletion] = useState(false);
+  const [confirmingEmail] = useState(() => new URLSearchParams(location.hash.slice(1)).get('mode') === 'changeEmail');
+  const [sessions, setSessions] = useState<ActiveSession[] | null>(null);
+
+  async function loadSessions() {
+    const result = await api<{ sessions: ActiveSession[] }>('/account/sessions');
+    setSessions(result.sessions);
+  }
 
   async function run(operation: () => Promise<void>) {
     setWorking(true);
@@ -137,6 +145,8 @@ export function AccountDialog({ status, notice, close, update }: {
         update(current);
       })}>{t('Try again')}</button>
     </> :
+      confirmingEmail ? <PasswordForm delivery={false} signedIn={false} creator={false}
+        busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} /> :
       !account ? <div className="account-signin-shell">
         <PasswordForm delivery={Boolean(status.emailDelivery)} signedIn={false} creator={creator}
           busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy}
@@ -160,6 +170,8 @@ export function AccountDialog({ status, notice, close, update }: {
         {account.email && <p>{account.email} · {account.emailVerified ? 'Email terverifikasi' : 'Email belum terverifikasi'}</p>}
         {account.hasPassword && <PasswordForm delivery={false} signedIn creator={false}
           busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />}
+        {account.hasPassword && status.emailDelivery && <PasswordForm delivery signedIn emailChange creator={false}
+          busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />}
         <form className="account-section" onSubmit={profile}>
           <label>{t('Display name')}<input autoComplete="nickname" value={displayName} maxLength={100} disabled={busy}
             onChange={event => setDisplayName(event.target.value)} /></label>
@@ -178,6 +190,29 @@ export function AccountDialog({ status, notice, close, update }: {
           <button disabled={busy} onClick={() => void run(() => transition('/account/logout', 'POST', 'signed-out'))}>
             {t('Sign out on this device')}
           </button>
+          <button disabled={busy || passwordBusy} onClick={() => void run(() => transition('/account/sessions/revoke-all', 'POST', 'signed-out'))}>
+            {t('Sign out on all devices')}
+          </button>
+          <details onToggle={event => {
+            if (event.currentTarget.open) void run(loadSessions);
+          }}>
+            <summary>{t('Active sessions')}</summary>
+            {sessions?.length === 0 && <p>{t('No active sessions to show.')}</p>}
+            {sessions && sessions.length > 0 && <ul>
+              {sessions.map(item => <li key={item.id}>
+                <p>{t(item.current ? 'This session' : 'Other session')} · {t('Expires {date}', {
+                  date: new Date(item.expiresAt).toLocaleString(language === 'id' ? 'id-ID' : 'en-US', {
+                    dateStyle: 'medium', timeStyle: 'short',
+                  }),
+                })}</p>
+                {!item.current && <button type="button" disabled={busy || passwordBusy} onClick={() => void run(async () => {
+                  await api(`/account/sessions/${item.id}`, { method: 'DELETE', data: {} });
+                  await loadSessions();
+                  setMessage('Session signed out.');
+                })}>{t('Sign out this session')}</button>}
+              </li>)}
+            </ul>}
+          </details>
           <details open={deletion} onToggle={event => setDeletion(event.currentTarget.open)}>
             <summary>{t('Delete account')}</summary>
             <p>{t('This permanently deletes your account, wishlists, saved assessments, and preferences. It also signs you out on every device.')}</p>

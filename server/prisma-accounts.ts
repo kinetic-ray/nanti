@@ -156,6 +156,29 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
         }
       });
     },
+    async sessions(session: UserSession) {
+      const records = await db.userSession.findMany({ where: { userId: session.userId, expiresAt: { gt: new Date() } },
+        orderBy: [{ expiresAt: 'desc' }, { tokenHash: 'asc' }], take: 50,
+        select: { tokenHash: true, expiresAt: true } });
+      return records.map(record => ({ id: tokenHash(record.tokenHash), expiresAt: record.expiresAt.toISOString(),
+        current: record.tokenHash === session.tokenHash }));
+    },
+    async revokeSession(session: UserSession, id: string) {
+      return db.$executeRaw`DELETE FROM UserSession
+        WHERE userId = ${session.userId} AND tokenHash <> ${session.tokenHash} AND SHA2(tokenHash, 256) = ${id}`;
+    },
+    async revokeAllSessions(session: UserSession) {
+      return db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM User WHERE id = ${session.userId} FOR UPDATE`;
+        const active = await tx.userSession.deleteMany({ where: {
+          tokenHash: session.tokenHash, userId: session.userId, expiresAt: { gt: new Date() },
+        } });
+        if (!active.count) return false;
+        await tx.userSession.deleteMany({ where: { userId: session.userId } });
+        await tx.authActivity.create({ data: { userId: session.userId, kind: 'signed_out' } });
+        return true;
+      });
+    },
     async adminProfile(hash: string) {
       const current = await db.userSession.findFirst({
         where: { tokenHash: hash, expiresAt: { gt: new Date() }, user: { role: 'admin' } },

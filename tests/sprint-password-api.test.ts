@@ -78,8 +78,38 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await post('/password/change', { currentPassword: replacement, password }).expect(204);
     await http.get('/api/account/creator').expect(401);
     await post('/password/login', { email, password }).expect(204);
-    await post('/logout', {}).expect(204);
+    const remote = await other.post('/api/account/password/login').set('X-Nanti-Request', '1')
+      .send({ email, password }).expect(204);
+    const remoteCookie = remote.get('set-cookie')![0]!.split(';')[0]!;
+    const sessions = await http.get('/api/account/sessions').expect(200);
+    const current = sessions.body.sessions.find((item: { current: boolean }) => item.current);
+    const otherSession = sessions.body.sessions.find((item: { current: boolean }) => !item.current);
+    expect(sessions.body.sessions).toHaveLength(2);
+    expect(current.id).not.toBe(otherSession.id);
+    expect(otherSession.id).not.toBe(tokenHash(remoteCookie.split('=')[1]!));
+    await http.delete('/api/account/sessions/' + otherSession.id).set('X-Nanti-Request', '1').send({}).expect(204);
+    await other.get('/api/account/creator').set('Cookie', remoteCookie).expect(401);
+    await http.get('/api/account/creator').expect(200);
+    const third = await other.post('/api/account/password/login').set('X-Nanti-Request', '1')
+      .send({ email, password }).expect(204);
+    const thirdCookie = third.get('set-cookie')![0]!.split(';')[0]!;
+    await other.post('/api/account/sessions/revoke-all').set('X-Nanti-Request', '1').send({ confirm: true }).expect(401);
+    await http.post('/api/account/sessions/revoke-all').send({ confirm: true }).expect(403);
+    await post('/sessions/revoke-all', { confirm: true }).expect(204);
     await http.get('/api/account/creator').expect(401);
+    await other.get('/api/account/creator').set('Cookie', thirdCookie).expect(401);
+    const newEmail = `changed-${randomUUID()}@example.test`;
+    await post('/password/login', { email, password }).expect(204);
+    await post('/password/email', { email: newEmail, currentPassword: replacement }).expect(403);
+    await post('/password/email', { email: newEmail, currentPassword: password }).expect(202);
+    const emailCode = outbox.get('changeEmail');
+    expect(emailCode).toBeTruthy();
+    await post('/password/email/verify', { code: emailCode }).expect(204);
+    await post('/password/email/verify', { code: emailCode }).expect(400);
+    await http.get('/api/account/creator').expect(401);
+    await post('/password/login', { email, password }).expect(401);
+    await post('/password/login', { email: newEmail, password }).expect(204);
+    await db.user.delete({ where: { id: user.userId } });
   } finally {
     await db.user.deleteMany({ where: { OR: [{ password: { email } }, { identities: { some: { subjectHash: tokenHash(subject) } } }] } });
     await db.$disconnect();

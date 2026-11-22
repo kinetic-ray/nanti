@@ -5,7 +5,7 @@ import { Prisma } from './generated/prisma/client.js';
 
 const productFields = {
   id: true, title: true, url: true, description: true, category: true, priceMinor: true,
-  currency: true, hasPhoto: true,
+  currency: true, hasPhoto: true, color: true, productType: true,
 } as const;
 const orderBy = [{ createdAt: 'desc' }, { id: 'asc' }] as const;
 
