@@ -250,7 +250,7 @@ function App() {
                 <div className="actions collection-management">
                   <button className="icon-button" aria-label={t('Rename')} title={t('Rename')}
                     onClick={() => setEditor({ kind: 'list', list: selected })}><Icon name="edit" /></button>
-                  <button className="icon-button" aria-label={t('Delete wishlist')} title={t('Delete wishlist')}
+                  <button className="icon-button remove-action" aria-label={t('Delete wishlist')} title={t('Delete wishlist')}
                     onClick={() => setEditor({ kind: 'delete', list: selected })}><Icon name="trash" /></button>
                 </div>
               </div>
