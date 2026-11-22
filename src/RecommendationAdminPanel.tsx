@@ -60,7 +60,7 @@ export function RecommendationAdminPanel() {
         {product.priceMinor !== null && <p>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: product.currency }).format(product.priceMinor / 100)}</p>}
         {!product.published && <form onSubmit={event => {
           event.preventDefault();
-          const digits = (verificationPrice[product.id] ?? '').replace(/\\D/gu, '');
+          const digits = (verificationPrice[product.id] ?? '').replace(/\D/gu, '');
           const amount = Number(digits);
           if (!Number.isSafeInteger(amount * 100) || amount <= 0) {
             setError('Isi harga produk yang valid.');
@@ -74,7 +74,7 @@ export function RecommendationAdminPanel() {
             <input inputMode="numeric" required placeholder="Contoh: 750.000"
               value={verificationPrice[product.id] ?? ''}
               onChange={event => {
-                const digits = event.target.value.replace(/\\D/gu, '');
+                const digits = event.target.value.replace(/\D/gu, '');
                 setVerificationPrice(current => ({
                   ...current, [product.id]: digits ? new Intl.NumberFormat('id-ID').format(Number(digits)) : '',
                 }));
