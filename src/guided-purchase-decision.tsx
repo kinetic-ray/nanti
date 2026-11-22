@@ -143,6 +143,8 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
             requestRecommendation={async () => {
               await api('/recommendations/requests', {
                 method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+                  finances: { cashMinor: finance.cashMinor.toString(), billsMinor: finance.billsMinor.toString(),
+                    setAsideMinor: finance.setAsideMinor.toString() },
                   ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
                     ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) },
               });
@@ -150,7 +152,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
             onOpenProduct={(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }}
           />
         )}
-      <p className="hint">{lang === 0 ? 'Ini perkiraan berdasarkan jawaban dan angka yang kamu isi, bukan jaminan kondisi keuangan sehat. Uang yang kamu masukkan tidak disimpan oleh fitur ini.' : 'This is an estimate based on your answers, not a guarantee of financial health. The amounts entered here are not saved.'}</p>
+      <p className="hint">{lang === 0 ? 'Ini perkiraan berdasarkan jawaban dan angka yang kamu isi, bukan jaminan kondisi keuangan sehat. Angka uang tunai, tagihan, dan dana sisihan tidak disimpan. Jika kamu meminta rekomendasi, harga barang dapat disimpan untuk mencocokkan alternatif.' : 'This is an estimate based on your answers, not a guarantee of financial health. Your cash, bills and set-aside amounts are not stored. If you request recommendations, the item price may be saved to match alternatives.'}</p>
       <div className="actions"><button type="button" onClick={() => setStage(2)}>{lang === 0 ? 'Ubah isian' : 'Edit budget'}</button><button type="button" className="primary" onClick={close}>{lang === 0 ? 'Selesai' : 'Done'}</button></div>
     </section>}
   </div>;
