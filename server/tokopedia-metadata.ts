@@ -32,8 +32,14 @@ for (const [network, prefix] of [
   ['203.0.113.0', 24], ['224.0.0.0', 3],
 ] as const) privateAddresses.addSubnet(network, prefix);
 
-async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
-  const addresses = await resolve4(url.hostname);
+export async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
+  signal.throwIfAborted();
+  // DNS resolution does not take an AbortSignal. Enforce the same deadline before TLS starts.
+  const addresses = await new Promise<string[]>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    resolve4(url.hostname).then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
   signal.throwIfAborted();
   const address = addresses[0];
   if (!address || addresses.some((ip) => privateAddresses.check(ip))) throw new Error('Non-public DNS answer');
@@ -316,26 +322,29 @@ export async function extractTokopediaMetadata(originalUrl: string, transport: P
     return null;
   };
   const timeoutReason = () => hop > 0 ? 'destination_timeout' : 'timeout';
+  const allowed = (url: URL) => {
+    const key = listingKey(url);
+    return url.href.length <= 4096 && (identity ? key === identity : Boolean(key) || shortHosts.has(url.hostname));
+  };
   const extract = async () => {
-    if (!current) return fail('redirect_disallowed');
+    if (!current || !allowed(current)) return fail('redirect_disallowed');
     const visited = new Set<string>();
     for (; current && hop <= 4; hop++) {
       controller.signal.throwIfAborted();
       host = current.hostname;
       current.hash = '';
       const key = listingKey(current);
-      if (identity ? key !== identity : !key && !shortHosts.has(host)) return fail('redirect_disallowed');
       identity ??= key;
       if (visited.has(current.href)) return fail('redirect_limit');
-      if (current.href.length > 4096) return fail('redirect_disallowed');
       visited.add(current.href);
       const response = await transport(current, controller.signal);
       if (redirectStatuses.has(response.status)) {
         const location = response.headers.get('location');
         void response.body?.cancel().catch(() => {});
         if (!location) return fail('redirect_missing_location', response.status);
-        current = safeHttps(location, current);
-        if (!current) return fail('redirect_disallowed');
+        const next = safeHttps(location, current);
+        if (!next || !allowed(next)) return fail('redirect_disallowed', response.status);
+        current = next;
         continue;
       }
       const issue = response.status !== 200 ? 'http_failure' :

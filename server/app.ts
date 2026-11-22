@@ -34,7 +34,7 @@ const listInput = z.strictObject({ name: listName, currency: z.enum(currencies) 
 const renameInput = z.strictObject({ name: listName });
 const productLink = z.string().trim().max(2048).transform((value, context) => {
   const parsed = safeImportUrl(value);
-  if (parsed) return { parsed, original: productMerchant(parsed.hostname) === 'tokopedia' ? value : parsed.href };
+  if (parsed) return { parsed, original: value };
   context.addIssue({ code: 'custom', message: 'Enter a valid HTTP or HTTPS product link.' });
   return z.NEVER;
 });

@@ -107,3 +107,51 @@ it('revalidates the resolved listing and issues only an owner-scoped stored phot
     upload.mockRestore();
   }
 });
+
+describe.each([
+  { short: 'https://s.shopee.co.id/114aBAsydf', product: 'https://www.shopee.co.id/lamp-i.123.456' },
+  { short: 'https://tk.tokopedia.com/ZSp76BWQL/', product: listing },
+])('marketplace short-link fallback for $short', ({ short, product }) => {
+  it.each([403, 410])('retains the pasted link and destination HTTP %i', async (status) => {
+    const upstream = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(redirect(product))
+      .mockResolvedValueOnce(fixture('blocked', status));
+    const { body } = await post(appFor(upstream), 'import', short).expect(200);
+    expect(body).toMatchObject({ originalUrl: short, status: 'manual_required', name: null,
+      diagnostic: { code: 'http_failure', host: new URL(product).hostname, httpStatus: status } });
+    expect(upstream.mock.calls.map(([url]) => String(url))).toEqual([short, product]);
+  });
+});
+
+describe('Shopee product identity at the import API', () => {
+  const short = 'https://s.shopee.co.id/fixture';
+  const product = 'https://shopee.co.id/product/123/456';
+  const tags = '<meta property="og:title" content="Store page"><meta property="og:image" content="https://cf.shopee.co.id/file/demo">';
+  it.each([
+    [short, 'https://shopee.co.id/login', '', 'text/html'],
+    [product, 'https://shopee.co.id/other-i.123.789', '', 'text/html'],
+    [short, product, '<link rel="canonical" href="/product/123/789">', 'text/html'],
+    [short, product, '', 'text/html-preview'],
+  ])('keeps manual entry for %s redirected to %s with %s %s', async (original, destination, canonical, type) => {
+    const upstream = vi.fn<typeof fetch>().mockResolvedValueOnce(redirect(destination!))
+      .mockResolvedValueOnce(new Response('<head>' + tags + canonical + '</head>', { headers: { 'content-type': type! } }));
+    const { body } = await post(appFor(upstream), 'import', original).expect(200);
+    expect(body).toMatchObject({ originalUrl: original, name: null, status: 'manual_required' });
+    for (const key of ['imagePath', 'price', 'sellerName']) expect(body).not.toHaveProperty(key);
+  });
+
+  it('recognizes the same listing across slug, www and product URLs', async () => {
+    const upstream = vi.fn<typeof fetch>().mockResolvedValueOnce(redirect('https://www.shopee.co.id/lamp-i.123.456'))
+      .mockResolvedValueOnce(new Response('<head>' + tags + '<link rel="canonical" href="' + product + '"></head>',
+        { headers: { 'content-type': 'text/html; charset=utf-8' } }));
+    const { body } = await post(appFor(upstream), 'import', product).expect(200);
+    expect(body).toMatchObject({ originalUrl: product, status: 'details_available', name: 'Store page' });
+  });
+});
+
+it.each(['https://S.SHOPEE.CO.ID:443/fixture?ref=a%2fb#saved', 'https://STORE.EXAMPLE:443/p?ref=a%2fb#saved'])(
+  'preserves the pasted spelling of an unavailable product URL', async original => {
+    const { body } = await post(appFor(async () => new Response(null, { status: 410 })), 'import', original).expect(200);
+    expect(body).toMatchObject({ originalUrl: original, status: 'manual_required', name: null });
+  },
+);

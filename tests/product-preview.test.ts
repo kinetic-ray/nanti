@@ -209,3 +209,57 @@ describe('Precise IKEA diagnostics', () => {
     expect(report).toHaveBeenCalledWith('metadata_missing', 'www.ikea.com', 200);
   });
 });
+
+describe('Shopee import reliability', () => {
+  const short = new URL('https://s.shopee.co.id/114aBAsydf');
+  const listing = new URL('https://shopee.co.id/lamp-i.123.456');
+  it.each(['https://[', 'https://example.invalid/listing'])('attributes an invalid redirect to its sender', async (location) => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 302, headers: { location } }));
+    const report = vi.fn();
+    await expect(previewProductMetadata(short, fetcher, report)).resolves.toBeNull();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(report).toHaveBeenCalledWith('redirect_disallowed', short.hostname, 302);
+  });
+
+  it('ends a fragment-only redirect loop on the first response', async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 301, headers: { location: '#again' } }));
+    const report = vi.fn();
+    await expect(previewProductMetadata(short, fetcher, report)).resolves.toBeNull();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(report).toHaveBeenCalledWith('redirect_limit', short.hostname, 301);
+  });
+
+  it('skips malformed and unrelated structured metadata before reading the current listing', async () => {
+    const entries = [{ '@type': 'Product', url: '/other', name: 'Other', image: 'https://cf.shopee.co.id/other' },
+      { '@type': 'Product', url: listing.href, name: 'Lamp', image: 'https://cf.shopee.co.id/lamp' }];
+    const html = '<script type="application/ld+json">{</script><script type="application/ld+json">' +
+      JSON.stringify(entries) + '</script>';
+    await expect(previewProductMetadata(listing, async () => new Response(html, { headers: { 'content-type': 'text/html' } })))
+      .resolves.toMatchObject({ title: 'Lamp', image: 'https://cf.shopee.co.id/lamp' });
+  });
+});
+
+describe.each([
+  ['https://s.shopee.co.id/start', 6],
+  ['https://tk.tokopedia.com/start', 5],
+] as const)('redirect budget for %s', (start, budget) => {
+  it('stops at the request limit even if each redirect is unique', async () => {
+    let hops = 0;
+    const report = vi.fn();
+    await expect(previewProductMetadata(new URL(start), async () => new Response(null, {
+      status: 302, headers: { location: '/hop-' + ++hops },
+    }), report)).resolves.toBeNull();
+    expect(hops).toBe(budget);
+    expect(report.mock.calls[0]?.[0]).toBe('redirect_limit');
+  });
+});
+
+it('keeps an untrusted redirect host out of Tokopedia diagnostics', async () => {
+  const start = new URL('https://tk.tokopedia.com/start');
+  const report = vi.fn();
+  const upstream = vi.fn(async () => new Response(null, { status: 302,
+    headers: { location: 'https://untrusted.example/catalog' } }));
+  await expect(previewProductMetadata(start, upstream, report)).resolves.toBeNull();
+  expect(upstream).toHaveBeenCalledOnce();
+  expect(report).toHaveBeenCalledWith('redirect_disallowed', start.hostname, 302);
+});
