@@ -119,7 +119,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const request = await db.recommendationRequest.upsert({
       where: { ownerId_productKey: { ownerId: res.locals.ownerId, productKey: key } },
       create: { ownerId: res.locals.ownerId, productKey: key, productName: item.name,
-        sourceCategory: category, sourcePriceMinor,
+        sourceCategory: category, sourceColor, sourcePriceMinor,
         sourceCurrency: wishlist.currency },
       update: {},
       select: { id: true, status: true, createdAt: true },
