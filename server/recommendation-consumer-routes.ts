@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import type { PrismaClient } from './generated/prisma/client.js';
-import { rankAlternatives, type RecommendationProduct } from './recommendation-matching.js';
+import { rankAlternatives, safeHttpsUrl, type RecommendationProduct } from './recommendation-matching.js';
 
 const uuid = z.uuid();
 const query = z.strictObject({ itemId: uuid, wishlistId: uuid });
@@ -96,7 +96,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
         priceVerified: true, priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
       select: { id: true, title: true, url: true, priceMinor: true, currency: true },
     });
-    const valid = new Map(products.map(product => [product.id, product]));
+    const valid = new Map(products.filter(product => safeHttpsUrl(product.url)).map(product => [product.id, product]));
     res.json({ notices: notices.filter(notice => valid.has(notice.productId)).map(notice => ({
       ...notice, product: valid.get(notice.productId),
     })) });
