@@ -132,13 +132,13 @@ export function recommendationAdminRoutes(db: PrismaClient) {
           };
           if (!rankAlternatives(source, [product]).length) continue;
           await db.$transaction(async tx => {
-            const current = await tx.recommendationRequest.findUnique({ where: { id: request.id } });
-            if (current?.status !== 'pending') return;
+            const claimed = await tx.recommendationRequest.updateMany({
+              where: { id: request.id, status: 'pending' },
+              data: { status: 'fulfilled', fulfilledAt: new Date() },
+            });
+            if (!claimed.count) return;
             await tx.recommendationNotice.createMany({
               data: [{ requestId: request.id, productId: product.id }], skipDuplicates: true,
-            });
-            await tx.recommendationRequest.update({
-              where: { id: request.id }, data: { status: 'fulfilled', fulfilledAt: new Date() },
             });
           });
         }
