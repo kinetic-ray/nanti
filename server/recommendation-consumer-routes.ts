@@ -58,7 +58,10 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item } = found;
-    const key = createHash('sha256').update(item.id).digest('hex');
+    const normalizedUrl = item.url ? (() => { try { const u = new URL(item.url); return u.origin + u.pathname.replace(/\\/$/u, ''); } catch { return null; } })() : null;
+    const identity = item.productIdentityId ? `identity:${item.productIdentityId}` :
+      normalizedUrl ? `url:${normalizedUrl}` : `item:${item.id}`;
+    const key = createHash('sha256').update(identity).digest('hex');
     const request = await db.recommendationRequest.upsert({
       where: { ownerId_productKey: { ownerId: res.locals.ownerId, productKey: key } },
       create: { ownerId: res.locals.ownerId, productKey: key, productName: item.name },
