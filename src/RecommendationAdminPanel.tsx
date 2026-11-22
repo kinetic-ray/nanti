@@ -51,6 +51,8 @@ export function RecommendationAdminPanel() {
             '/products/import', { method: 'POST', data: { url } });
           return {
             ...(result.name ? { title: result.name } : {}),
+            ...(result.productUrl && /^https:\/\/(?:[a-z0-9-]+\.)*(?:tokopedia\.com|shopee\.co\.id|ikea\.com)(?:\/|$)/iu.test(result.productUrl)
+              ? { url: result.productUrl } : {}),
             ...(result.price?.currency === 'IDR' && Number.isSafeInteger(result.price.priceMinor)
               ? { priceMinor: result.price.priceMinor } : {}),
           };
