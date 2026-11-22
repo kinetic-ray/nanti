@@ -6,10 +6,18 @@ import type { PrismaClient } from '@prisma/client';
 import { rankAlternatives, type RecommendationProduct } from './recommendation-matching.js';
 
 const uuid = z.uuid();
-const productKey = z.string().regex(/^[a-f0-9]{64}$/);
 const query = z.strictObject({ itemId: uuid, wishlistId: uuid });
 const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid });
 const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30).default(20) });
+
+/** Conservative classification. Unknown categories produce no recommendations. */
+function inferCategory(title: string): string | null {
+  const text = title.toLowerCase();
+  if (/\b(sneaker|sneakers|sepatu|shoes|trainer|trainers)\b/u.test(text)) return 'sneakers';
+  if (/\b(headphone|headphones|earbuds|earphone|earphones)\b/u.test(text)) return 'headphones';
+  if (/\b(backpack|ransel)\b/u.test(text)) return 'backpack';
+  return null;
+}
 
 /** Consumer-only endpoints. Never accept an ownerId from request parameters. */
 export function recommendationConsumerRoutes(db: PrismaClient) {
@@ -34,8 +42,9 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
       where: { published: true, currency: wishlist.currency, priceVerified: true },
       take: 500, orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
     });
+    const sourceCategory = inferCategory(item.name);
     const source: RecommendationProduct = {
-      id: item.id, title: item.name, category: item.category ?? null,
+      id: item.id, title: item.name, category: sourceCategory,
       priceMinor: item.priceMinor, currency: wishlist.currency, priceVerified: false,
       published: true, url: item.url ?? '',
     };
