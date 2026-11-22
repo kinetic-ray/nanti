@@ -151,7 +151,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   });
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
-  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
+  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies, recommendationsDb));
   api.use('/admin', (_req, res) => res.status(404).json({
     error: affiliate && admin ? 'This administrator endpoint could not be found.' : 'Administrator sign-in is not configured.',
   }));
