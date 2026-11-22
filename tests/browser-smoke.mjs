@@ -75,11 +75,11 @@ try {
   await page.goto('/');
   await step('Indonesian default, Phase 1 CRUD, exact Indonesian currency', async () => {
     assert.equal(await page.locator('html').getAttribute('lang'), 'id');
-    await button(page, 'Buat kategori').click();
-    const form = dialog('Kategori baru');
-    await form.getByLabel('Nama kategori').fill('Rencana kamar');
+    await button(page, 'Buat wishlist').click();
+    const form = dialog('Kategori wishlist baru');
+    await form.getByLabel('Nama kategori wishlist').fill('Rencana kamar');
     assert.equal(await form.getByLabel('Mata uang').inputValue(), 'IDR');
-    await button(form, 'Simpan kategori').click();
+    await button(form, 'Simpan wishlist').click();
     await shown(page.getByRole('heading', { name: 'Rencana kamar', exact: true }));
     const fixture = await page.request.get('/api/wishlists');
     wishlistId = (await fixture.json())[0].id;
