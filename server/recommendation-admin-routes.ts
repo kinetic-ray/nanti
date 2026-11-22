@@ -23,7 +23,7 @@ const productInput = z.strictObject({
   currency: z.enum(['IDR', 'USD', 'SGD', 'MYR']),
   priority: z.number().int().min(-100).max(100).default(0),
 });
-const publication = z.strictObject({ published: z.boolean() });
+const publication = z.strictObject({ published: z.boolean(), after: uuid.optional() });
 const verification = z.strictObject({
   priceMinor: z.number().int().positive().max(2_000_000_000),
   checkedUrl: z.string().trim().max(2048),
@@ -94,7 +94,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     const id = parsedId.data;
     const parsed = publication.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Status publikasi tidak valid.' });
-    const { published } = parsed.data;
+    const { published, after } = parsed.data;
     if (published) {
       const item = await db.curatedRecommendation.findUnique({ where: { id } });
       if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
@@ -115,7 +115,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (published && product && product.priceVerifiedAt &&
       product.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000) {
       // Replay-safe: unique(requestId, productId) prevents duplicate notices.
-      let cursor: string | undefined;
+      let cursor: string | undefined = after;
       let batchesProcessed = 0;
       // Bound request work to avoid monopolizing a serverless invocation.
       for (; batchesProcessed < 2; batchesProcessed++) {
@@ -149,7 +149,8 @@ export function recommendationAdminRoutes(db: PrismaClient) {
         if (requests.length < 100) break;
       }
     }
-    res.json({ product, fulfillment: published ? 'bounded; repeat publication to resume pending matches' : 'disabled' });
+    res.json({ product, fulfillment: published ? 'bounded' : 'disabled',
+      nextCursor: published ? cursor : null });
   });
   router.get('/requests', async (_req, res) => {
     const requests = await db.recommendationRequest.findMany({
