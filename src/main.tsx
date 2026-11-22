@@ -26,6 +26,7 @@ const LiveCreatorStorefront = lazy(() => import('./creator-workspace.js').then((
 const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ CreatorStorefront }) => ({ default: CreatorStorefront })));
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
+const RecommendationInbox = lazy(() => import('./RecommendationInbox.js').then(({ RecommendationInbox }) => ({ default: RecommendationInbox })));
 
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
@@ -50,6 +51,7 @@ function App() {
   const [showAccount, setShowAccount] = useState(/^\/account\/?$/u.test(location.pathname));
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [sharedLink, setSharedLink] = useState(() => sharedProductLink(new URL(location.href)));
   const [sharedDraft, setSharedDraft] = useState(() => sharedProductLink(new URL(location.href)));
@@ -199,6 +201,7 @@ function App() {
           <span className="brand-symbol" aria-hidden="true" />
           <div className="brand">nanti<span>.</span></div>
         </div>
+        <button type="button" className="text-button" onClick={() => setRecommendationsOpen(true)}>Kabar alternatif</button>
         <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
           openAlerts={() => setAlertsOpen(true)} signIn={() => {
             setShowAccount(true);
@@ -339,6 +342,9 @@ function App() {
       {tools && list && <Suspense fallback={<p role="status" className="sr-only">{t('Opening purchase tools…')}</p>}>
         <PurchaseTools list={list} lists={lists ?? []} selection={tools} close={() => setTools(null)} drafts={drafts}
           onPriceUpdate={() => setRevision(value => value + 1)} />
+      </Suspense>}
+      {recommendationsOpen && <Suspense fallback={<p role="status">Memuat kabar alternatif…</p>}>
+        <RecommendationInbox close={() => setRecommendationsOpen(false)} />
       </Suspense>}
       {alertsOpen && <Suspense fallback={<p role="status" className="sr-only">{t('Loading price alerts…')}</p>}>
         <PriceAlerts close={() => setAlertsOpen(false)} onRead={() => setRevision(value => value + 1)} />
