@@ -1064,3 +1064,8 @@ body:has(.consumer) { background: #f8f6fc; }
 /* Hamburger navigation: recognizable Creator icon with aligned label. */
 .consumer #masthead-navigation a { display: flex; align-items: center; gap: .65rem; }
 .consumer #masthead-navigation a .icon { flex: 0 0 auto; }
+
+/* Destructive actions: red icon with a restrained hover/focus treatment. */
+.consumer .icon-button.remove-action { color: #b42336; }
+.consumer .icon-button.remove-action:hover, .consumer .icon-button.remove-action:focus-visible { color: #8e192a; background: #fff0f2; }
+.consumer .icon-edit-pencil { display: inline-block; flex: none; vertical-align: middle; }
