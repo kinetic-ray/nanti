@@ -11,6 +11,7 @@ CREATE TABLE `CuratedRecommendation` (
   `priceMinor` INTEGER NULL,
   `currency` CHAR(3) NOT NULL,
   `priceVerified` BOOLEAN NOT NULL DEFAULT false,
+  `priceVerifiedAt` DATETIME(3) NULL,
   `published` BOOLEAN NOT NULL DEFAULT false,
   `priority` INTEGER NOT NULL DEFAULT 0,
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
