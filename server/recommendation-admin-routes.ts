@@ -46,15 +46,20 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     res.json({ products });
   });
   router.post('/catalog', async (req, res) => {
-    const data = productInput.parse(req.body);
+    const parsed = productInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Periksa kembali data produk yang diisi.' });
+    const data = parsed.data;
     const product = await db.curatedRecommendation.create({
       data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false },
     });
     res.status(201).json(product);
   });
   router.patch('/catalog/:id', async (req, res) => {
-    const id = uuid.parse(req.params.id);
-    const data = productInput.parse(req.body);
+    const id = uuid.safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: 'ID produk tidak valid.' });
+    const parsed = productInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Periksa kembali data produk yang diisi.' });
+    const data = parsed.data;
     const result = await db.curatedRecommendation.updateMany({
       where: { id }, data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false },
     });
@@ -62,8 +67,12 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     res.json(await db.curatedRecommendation.findUnique({ where: { id } }));
   });
   router.post('/catalog/:id/verify-price', async (req, res) => {
-    const id = uuid.parse(req.params.id);
-    const evidence = verification.parse(req.body);
+    const parsedId = uuid.safeParse(req.params.id);
+    if (!parsedId.success) return res.status(400).json({ error: 'ID produk tidak valid.' });
+    const id = parsedId.data;
+    const parsed = verification.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Periksa data verifikasi harga.' });
+    const evidence = parsed.data;
     const item = await db.curatedRecommendation.findUnique({ where: { id } });
     if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
     const checked = safeAdminUrl(evidence.checkedUrl);
@@ -80,7 +89,9 @@ export function recommendationAdminRoutes(db: PrismaClient) {
   });
   router.patch('/catalog/:id/publication', async (req, res) => {
     const id = uuid.parse(req.params.id);
-    const { published } = publication.parse(req.body);
+    const parsed = publication.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Status publikasi tidak valid.' });
+    const { published } = parsed.data;
     if (published) {
       const item = await db.curatedRecommendation.findUnique({ where: { id } });
       if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
