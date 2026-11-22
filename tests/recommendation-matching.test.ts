@@ -10,8 +10,8 @@ const source: RecommendationProduct = {
 const candidate = (changes: Partial<RecommendationProduct> = {}): RecommendationProduct => ({
   id: 'brodo', title: 'Brodo Nexus White', category: 'sneakers',
   color: 'white', style: 'retro', useCase: 'casual',
-  priceMinor: 80000000, currency: 'IDR', priceVerified: true,
-  published: true, url: 'https://example.com/brodo', ...changes,
+  priceMinor: 80000000, currency: 'IDR', priceVerified: true, priceVerifiedAt: new Date(),
+  published: true, url: 'https://www.tokopedia.com/brodo/nexus', ...changes,
 });
 describe('curated alternative ranking', () => {
   it('matches relevant cheaper products without external services', () => {
@@ -45,6 +45,13 @@ describe('curated alternative ranking', () => {
       title: 'Generic Footwear', color: null, style: null, useCase: null,
     })], { manuallyLinkedIds: ['brodo'] });
     expect(result).toHaveLength(1);
+  });
+  it('rejects stale or missing verification timestamps', () => {
+    expect(rankAlternatives(source, [candidate({ priceVerifiedAt: null })])).toEqual([]);
+    expect(rankAlternatives(source, [candidate({ priceVerifiedAt: new Date(Date.now() - 8 * 86_400_000) })])).toEqual([]);
+  });
+  it('accepts equivalent shoe categories', () => {
+    expect(rankAlternatives({ ...source, category: 'sepatu' }, [candidate({ category: 'sneakers' })])).toHaveLength(1);
   });
   it('limits recommendations to three and handles absent source prices', () => {
     expect(rankAlternatives(source, Array.from({ length: 6 }, (_, i) =>
