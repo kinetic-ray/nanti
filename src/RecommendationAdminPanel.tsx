@@ -3,7 +3,7 @@ import { api, errorMessage } from './api.js';
 import { RecommendationCatalogForm, type CuratedCatalogDraft } from './RecommendationCatalogForm.js';
 
 type CatalogItem = CuratedCatalogDraft & {
-  id: string; published: boolean; priceVerified: boolean; priceVerifiedAt: string | null;
+  id: string; published: boolean; priceVerified: boolean; priceVerifiedAt: string | null; fulfillmentCursor?: string | null;
 };
 type PendingRequest = { id: string; productName: string; status: string; createdAt: string };
 const base = '/admin/recommendations';
@@ -109,10 +109,10 @@ export function RecommendationAdminPanel() {
             });
             if (result.nextCursor) setContinuations(current => ({ ...current, [product.id]: result.nextCursor! }));
           })}>Terbitkan</button>}
-        {continuations[product.id] && <button type="button" disabled={busy !== ''}
+        {(continuations[product.id] || product.fulfillmentCursor) && <button type="button" disabled={busy !== ''}
           onClick={() => void mutate(product.id, async () => {
             const result = await api<{ nextCursor: string | null }>(`${base}/catalog/${product.id}/publication`, {
-              method: 'PATCH', data: { published: true, after: continuations[product.id] },
+              method: 'PATCH', data: { published: true, after: continuations[product.id] || product.fulfillmentCursor },
             });
             setContinuations(current => {
               const updated = { ...current };
