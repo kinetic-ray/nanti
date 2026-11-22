@@ -95,8 +95,8 @@ export function rankAlternatives(
   if (!category) return [];
   const eligible = candidates.filter(item =>
     item.id !== source.id && item.published && item.priceVerified &&
-    (!item.priceVerifiedAt || (item.priceVerifiedAt.getTime() <= Date.now() &&
-      item.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000)) &&
+    (item.priceVerifiedAt instanceof Date && item.priceVerifiedAt.getTime() <= Date.now() &&
+      item.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000) &&
     Number.isSafeInteger(item.priceMinor) && (item.priceMinor ?? 0) > 0 &&
     (item.priceMinor ?? Infinity) < (source.priceMinor ?? 0) &&
     item.currency === source.currency && norm(item.category) === category &&
