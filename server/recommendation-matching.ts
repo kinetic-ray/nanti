@@ -14,6 +14,7 @@ export interface RecommendationProduct {
   priceMinor: number | null;
   currency: string;
   priceVerified: boolean;
+  priceVerifiedAt?: Date | null;
   published: boolean;
   url: string;
   priority?: number;
@@ -28,7 +29,7 @@ export interface RecommendationOptions {
   manuallyLinkedIds?: readonly string[];
 }
 const synonyms: Record<string, string> = {
-  sneakers: 'sneaker', shoes: 'shoe', trainers: 'sneaker', trainerss: 'sneaker',
+  sneakers: 'shoe', sneaker: 'shoe', shoes: 'shoe', trainers: 'shoe', trainer: 'shoe',
   sepatu: 'shoe', putih: 'white', hitam: 'black', kasual: 'casual',
   running: 'runner', runners: 'runner', lifestyle: 'casual',
   chunky: 'chunky', retro: 'retro', sporty: 'sport',
@@ -69,12 +70,14 @@ function content(product: RecommendationProduct): string {
   return [product.title, product.category, product.color, product.style, product.useCase, product.description]
     .filter(Boolean).join(' ');
 }
-function safeHttpsUrl(value: string): boolean {
+export function safeHttpsUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password &&
-      !['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(url.hostname.toLowerCase()) &&
-      !url.hostname.endsWith('.localhost');
+    const hostname = url.hostname.toLowerCase();
+    const allowed = hostname === 'shopee.co.id' || hostname.endsWith('.shopee.co.id') ||
+      hostname === 'tokopedia.com' || hostname.endsWith('.tokopedia.com') ||
+      hostname === 'ikea.com' || hostname.endsWith('.ikea.com');
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port && allowed;
   } catch { return false; }
 }
 /**
@@ -92,6 +95,8 @@ export function rankAlternatives(
   if (!category) return [];
   const eligible = candidates.filter(item =>
     item.id !== source.id && item.published && item.priceVerified &&
+    (!item.priceVerifiedAt || (item.priceVerifiedAt.getTime() <= Date.now() &&
+      item.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000)) &&
     Number.isSafeInteger(item.priceMinor) && (item.priceMinor ?? 0) > 0 &&
     (item.priceMinor ?? Infinity) < (source.priceMinor ?? 0) &&
     item.currency === source.currency && norm(item.category) === category &&
