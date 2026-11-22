@@ -51,7 +51,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (!parsed.success) return res.status(400).json({ error: 'Periksa kembali data produk yang diisi.' });
     const data = parsed.data;
     const product = await db.curatedRecommendation.create({
-      data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false },
+      data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false, fulfillmentCursor: null },
     });
     res.status(201).json(product);
   });
@@ -83,7 +83,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     }
     const changed = await db.curatedRecommendation.updateMany({
       where: { id, url: checked.href },
-      data: { priceMinor: evidence.priceMinor, priceVerified: true, priceVerifiedAt: new Date(), published: false },
+      data: { priceMinor: evidence.priceMinor, priceVerified: true, priceVerifiedAt: new Date(), published: false, fulfillmentCursor: null },
     });
     if (!changed.count) return res.status(409).json({ error: 'Link produk berubah. Muat ulang dan periksa lagi.' });
     res.json({ product: await db.curatedRecommendation.findUnique({ where: { id } }),
