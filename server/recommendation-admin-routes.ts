@@ -56,7 +56,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     const id = uuid.parse(req.params.id);
     const data = productInput.parse(req.body);
     const result = await db.curatedRecommendation.updateMany({
-      where: { id }, data: { ...data, priceVerified: false, published: false },
+      where: { id }, data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false },
     });
     if (!result.count) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
     res.json(await db.curatedRecommendation.findUnique({ where: { id } }));
