@@ -37,7 +37,7 @@ export function RecommendationCatalogForm({ importLink, saveDraft, initialDraft 
       const parsed = new URL(link.trim());
       if (parsed.protocol !== 'https:') throw new Error('Gunakan link HTTPS yang valid.');
       const imported = await importLink(parsed.href);
-      setDraft({ ...blank(parsed.href), ...imported, url: parsed.href, currency: 'IDR', priority: 0 });
+      setDraft({ ...blank(parsed.href), ...imported, currency: 'IDR', priority: 0 });
       setStep('review');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Detail produk belum bisa diambil. Coba lagi.');
