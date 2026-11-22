@@ -73,14 +73,24 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
-    const normalizedUrl = item.url ? (() => { try { const u = new URL(item.url); return u.origin + u.pathname.replace(/\/$/u, ''); } catch { return null; } })() : null;
+    const normalizedUrl = item.url ? (() => {
+      try {
+        const u = new URL(item.url);
+        if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+        return u.origin + u.pathname.replace(/\/$/u, '');
+      } catch { return null; }
+    })() : null;
     const identity = item.productIdentityId ? `identity:${item.productIdentityId}` :
       normalizedUrl ? `url:${normalizedUrl}` : `item:${item.id}`;
     const key = createHash('sha256').update(identity).digest('hex');
+    const category = inferCategory(item.name);
+    if (!category || !Number.isSafeInteger(item.priceMinor) || (item.priceMinor ?? 0) <= 0) {
+      return res.status(422).json({ error: 'Produk perlu kategori dan harga yang jelas sebelum meminta alternatif.' });
+    }
     const request = await db.recommendationRequest.upsert({
       where: { ownerId_productKey: { ownerId: res.locals.ownerId, productKey: key } },
       create: { ownerId: res.locals.ownerId, productKey: key, productName: item.name,
-        sourceCategory: inferCategory(item.name), sourcePriceMinor: item.priceMinor,
+        sourceCategory: category, sourcePriceMinor: item.priceMinor,
         sourceCurrency: wishlist.currency },
       update: {},
       select: { id: true, status: true, createdAt: true },
