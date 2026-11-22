@@ -23,7 +23,8 @@ function inferCategory(title: string): string | null {
 export function recommendationConsumerRoutes(db: PrismaClient) {
   const router = Router();
   router.use((req, res, next) => {
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('Sec-Fetch-Site') === 'cross-site') {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+      (req.get('Sec-Fetch-Site') === 'cross-site' || req.get('X-Nanti-Request') !== '1')) {
       return res.status(403).json({ error: 'Permintaan tidak dapat diverifikasi.' });
     }
     next();
