@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { evaluateScreening } from '../shared/screening.js';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
@@ -7,7 +8,11 @@ import { rankAlternatives, safeHttpsUrl, type RecommendationProduct } from './re
 
 const uuid = z.uuid();
 const query = z.strictObject({ itemId: uuid, wishlistId: uuid });
-const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid });
+const answersSchema = z.strictObject({
+  practicalNeed: z.boolean(), alreadyHave: z.boolean(), useOften: z.boolean(),
+  canWait: z.boolean(), withoutDiscount: z.boolean(), socialPressure: z.boolean(),
+});
+const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema });
 const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30).default(20) });
 
 /** Conservative classification. Unknown categories produce no recommendations. */
@@ -69,7 +74,11 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
   router.post('/requests', requestLimit, async (req, res) => {
     const parsed = requestBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
-    const { itemId, wishlistId } = parsed.data;
+    const { itemId, wishlistId, answers } = parsed.data;
+    const screening = evaluateScreening(answers, null, new Date().toISOString().slice(0, 10));
+    if (screening.outcome !== 'green' || screening.unanswered.length > 0) {
+      return res.status(422).json({ error: 'Alternatif hanya tersedia untuk kebutuhan yang jelas, bukan pembelian impulsif.' });
+    }
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
