@@ -90,6 +90,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     repository: prismaWishlists(db),
     intelligence,
     prices: prismaPrices(db),
+    recommendationsDb: db,
     affiliate: prismaAffiliate(db),
     consumer: { accounts, providers },
     admin: env.NANTI_ADMIN_USERNAME && env.NANTI_ADMIN_PASSWORD_HASH ? {
