@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { safeAdminUrl } from './product-identity.js';
+import { rankAlternatives, type RecommendationProduct } from './recommendation-matching.js';
 
 const uuid = z.uuid();
 const productInput = z.strictObject({
@@ -81,7 +82,41 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     }
     const result = await db.curatedRecommendation.updateMany({ where: { id }, data: { published } });
     if (!result.count) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
-    res.json(await db.curatedRecommendation.findUnique({ where: { id } }));
+    const product = await db.curatedRecommendation.findUnique({ where: { id } });
+    if (published && product) {
+      // Replay-safe: unique(requestId, productId) prevents duplicate notices.
+      let cursor: string | undefined;
+      for (;;) {
+        const requests = await db.recommendationRequest.findMany({
+          where: { status: 'pending', sourceCategory: product.category,
+            sourceCurrency: product.currency, sourcePriceMinor: { gt: product.priceMinor ?? 0 } },
+          orderBy: { id: 'asc' }, take: 100,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        if (!requests.length) break;
+        for (const request of requests) {
+          const source: RecommendationProduct = {
+            id: request.id, title: request.productName, category: request.sourceCategory,
+            color: request.sourceColor, priceMinor: request.sourcePriceMinor,
+            currency: request.sourceCurrency ?? '', priceVerified: false, published: true, url: '',
+          };
+          if (!rankAlternatives(source, [product]).length) continue;
+          await db.$transaction(async tx => {
+            const current = await tx.recommendationRequest.findUnique({ where: { id: request.id } });
+            if (current?.status !== 'pending') return;
+            await tx.recommendationNotice.createMany({
+              data: [{ requestId: request.id, productId: product.id }], skipDuplicates: true,
+            });
+            await tx.recommendationRequest.update({
+              where: { id: request.id }, data: { status: 'fulfilled', fulfilledAt: new Date() },
+            });
+          });
+        }
+        cursor = requests[requests.length - 1].id;
+        if (requests.length < 100) break;
+      }
+    }
+    res.json(product);
   });
   router.get('/requests', async (_req, res) => {
     const requests = await db.recommendationRequest.findMany({
