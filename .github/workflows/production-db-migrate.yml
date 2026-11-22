@@ -41,6 +41,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Inspect pending migrations
+        continue-on-error: true # Prisma exits nonzero when migrations are pending
         run: npx prisma migrate status
       - name: Apply reviewed migrations
         run: npm run db:migrate
