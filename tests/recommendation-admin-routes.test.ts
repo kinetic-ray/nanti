@@ -68,6 +68,23 @@ describe('recommendation admin HTTP lifecycle', () => {
     expect(response.status).toBe(409);
     expect(db.curatedRecommendation.updateMany).not.toHaveBeenCalled();
   });
+  it('persists continuation after scanning the bounded 200-request window', async () => {
+    const verified = { ...product, priceVerified: true, priceVerifiedAt: new Date() };
+    const { app, db } = setup(verified);
+    const page = (offset: number) => Array.from({ length: 100 }, (_, index) => ({
+      id: `${String(offset + index + 1).padStart(8, '0')}-1111-4111-8111-111111111111`,
+      productName: 'Unrelated Generic Product', sourceCategory: 'sneakers',
+      sourceCurrency: 'IDR', sourcePriceMinor: 90000000, sourceColor: null,
+    }));
+    db.recommendationRequest.findMany.mockResolvedValueOnce(page(0)).mockResolvedValueOnce(page(100));
+    const response = await request(app).patch(`/admin/recommendations/catalog/${id}/publication`)
+      .set(headers).send({ published: true });
+    expect(response.status).toBe(200);
+    expect(response.body.nextCursor).toBe(page(100)[99]?.id);
+    expect(db.recommendationRequest.findMany).toHaveBeenCalledTimes(2);
+    expect(db.curatedRecommendation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { fulfillmentCursor: page(100)[99]?.id } }));
+  });
   it('publishes only with fresh price verification', async () => {
     const verified = { ...product, priceVerified: true, priceVerifiedAt: new Date() };
     const { app, db } = setup(verified);
