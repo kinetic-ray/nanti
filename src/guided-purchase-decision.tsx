@@ -133,7 +133,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
             canNotify={false}
             load={async () => {
               const result = await api<{ alternatives: RecommendationMatch[] }>(
-                `/recommendations/alternatives?wishlistId=${encodeURIComponent(list.id)}&itemId=${encodeURIComponent(item.id)}`);
+                '/recommendations/alternatives', { method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers } });
               return result.alternatives;
             }}
             requestRecommendation={async () => {
