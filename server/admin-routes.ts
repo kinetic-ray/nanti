@@ -41,7 +41,7 @@ const handleAffiliateProblem: ErrorRequestHandler = (error: unknown, _req, res, 
   res.status(error.status).json({ error: error.message });
 };
 
-export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCredentials, secret: string, secure: boolean, recommendationsDb?: PrismaClient) {
+export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCredentials, secret: string, secure: boolean, recommendationsDb?: PrismaClient, recommendationSuperadminEnabled = false) {
   const router = Router();
   const scope = adminCredentialScope(credentials, secret);
   const cookie = secure ? '__Host-nanti-admin' : 'nanti-admin';
@@ -86,7 +86,7 @@ export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCr
     res.clearCookie(cookie, options).sendStatus(204);
   });
 
-  if (recommendationsDb) router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
+  if (recommendationsDb && recommendationSuperadminEnabled) router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
 
   router.get('/opportunities', async (req, res) => {
     res.json(await affiliate.listOpportunities(page.parse(req.query).after));
