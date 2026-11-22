@@ -1,0 +1,49 @@
+name: Production database migration (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type MIGRATE_PRODUCTION to authorize schema changes'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nanti-production-database-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'MIGRATE_PRODUCTION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Checkout migration files
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify database secret is configured
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL GitHub secret is missing."
+            exit 1
+          fi
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Inspect pending migrations
+        continue-on-error: true # Prisma exits nonzero when migrations are pending
+        run: npx prisma migrate status
+      - name: Apply reviewed migrations
+        run: npm run db:migrate
+      - name: Verify migration status
+        run: npx prisma migrate status

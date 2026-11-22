@@ -53,19 +53,26 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     throw new Error('Invalid database configuration. Check DATABASE_URL and DATABASE_CA_CERT_BASE64.');
   }
   const checkDatabase = async () => {
-    await db.$transaction([
-      db.dataOwner.findFirst({ select: { id: true } }),
-      // Check the latest Item schema even when there are no wishlists.
-      // Verify the item columns required by wishlist reads before accepting traffic.
-      db.item.findFirst({ select: { id: true, imageKey: true, sellerName: true } }),
-      // Account initialization reads this column for linked Google identities.
-      db.authIdentity.findFirst({ select: { avatarUrl: true } }),
-      db.creatorProfile.findFirst({ select: { handle: true, publishedDesign: true } }),
-      db.creatorProduct.findFirst({ select: { id: true, hasPhoto: true } }),
-      db.priceObservation.findFirst({ select: { id: true } }),
-      db.priceTarget.findFirst({ select: { itemId: true } }),
-      db.priceAlert.findFirst({ select: { id: true } }),
-    ]);
+    // Keep schema checks isolated so a missing column can be attributed to its model.
+    // Never log query arguments, database URLs, or driver error messages.
+    const checks = [
+      ['DataOwner', () => db.dataOwner.findFirst({ select: { id: true } })],
+      ['Item', () => db.item.findFirst({ select: { id: true, imageKey: true, sellerName: true } })],
+      ['AuthIdentity', () => db.authIdentity.findFirst({ select: { avatarUrl: true } })],
+      ['CreatorProfile', () => db.creatorProfile.findFirst({ select: { handle: true, publishedDesign: true } })],
+      ['CreatorProduct', () => db.creatorProduct.findFirst({ select: { id: true, hasPhoto: true } })],
+      ['PriceObservation', () => db.priceObservation.findFirst({ select: { id: true } })],
+      ['PriceTarget', () => db.priceTarget.findFirst({ select: { itemId: true } })],
+      ['PriceAlert', () => db.priceAlert.findFirst({ select: { id: true } })],
+    ] as const;
+    for (const [model, check] of checks) {
+      try {
+        await check();
+      } catch (error) {
+        console.error('Database schema check failed', { model });
+        throw error;
+      }
+    }
   };
   const intelligence = prismaIntelligence(db);
   const accounts = prismaAccounts(db);

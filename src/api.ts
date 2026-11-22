@@ -16,6 +16,9 @@ export async function api<T>(path: string, options: {
   }).catch(() => { throw new Error('Could not reach Nanti. Try again.'); });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
+    if (response.status === 503 && payload?.code === 'database_unavailable') {
+      throw new Error('Database temporarily unavailable. Try again shortly.');
+    }
     throw new Error(payload?.error ?? 'Could not reach Nanti. Try again.');
   }
   if (response.status === 204 || !response.headers.get('content-type')?.includes('application/json')) {

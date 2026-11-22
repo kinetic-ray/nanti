@@ -122,7 +122,11 @@ function App() {
     if (!activeId) return;
     const controller = new AbortController();
     api<Wishlist>(`/wishlists/${activeId}`, { signal: controller.signal }).then(
-      setDetail,
+      (wishlist) => {
+        if (controller.signal.aborted) return;
+        setDetail(wishlist);
+        setDetailError('');
+      },
       (error: unknown) => { if (!controller.signal.aborted) setDetailError(errorMessage(error)); },
     );
     return () => controller.abort();
