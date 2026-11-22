@@ -46,6 +46,14 @@ describe('curated alternative ranking', () => {
     })], { manuallyLinkedIds: ['brodo'] });
     expect(result).toHaveLength(1);
   });
+  it('rejects lookalike marketplace domains and credential-bearing URLs', () => {
+    expect(rankAlternatives(source, [
+      candidate({ id: 'lookalike', url: 'https://tokopedia.com.evil.example/item' }),
+      candidate({ id: 'subdomain', url: 'https://evil-tokopedia.com/item' }),
+      candidate({ id: 'credentials', url: 'https://user:pass@www.tokopedia.com/item' }),
+      candidate({ id: 'port', url: 'https://www.tokopedia.com:8443/item' }),
+    ])).toEqual([]);
+  });
   it('rejects stale or missing verification timestamps', () => {
     expect(rankAlternatives(source, [candidate({ priceVerifiedAt: null })])).toEqual([]);
     expect(rankAlternatives(source, [candidate({ priceVerifiedAt: new Date(Date.now() - 8 * 86_400_000) })])).toEqual([]);
