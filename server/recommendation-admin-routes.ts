@@ -117,7 +117,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (published && product && product.priceVerifiedAt &&
       product.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000) {
       // Replay-safe: unique(requestId, productId) prevents duplicate notices.
-      let cursor: string | undefined = after;
+      let cursor: string | undefined = after ?? product.fulfillmentCursor ?? undefined;
       let batchesProcessed = 0;
       // Bound request work to avoid monopolizing a serverless invocation.
       for (; batchesProcessed < 2; batchesProcessed++) {
@@ -151,6 +151,12 @@ export function recommendationAdminRoutes(db: PrismaClient) {
         if (requests.length < 100) { cursor = undefined; break; }
         continuation = cursor ?? null;
       }
+    }
+    if (published) {
+      await db.curatedRecommendation.updateMany({ where: { id, published: true },
+        data: { fulfillmentCursor: continuation } });
+    } else {
+      await db.curatedRecommendation.updateMany({ where: { id }, data: { fulfillmentCursor: null } });
     }
     res.json({ product, fulfillment: published ? 'bounded' : 'disabled',
       nextCursor: published ? continuation : null });
