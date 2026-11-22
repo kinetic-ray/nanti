@@ -26,6 +26,8 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     windowMs: 60 * 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Terlalu banyak permintaan. Coba lagi nanti, ya.' },
   });
+  const readLimit = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Terlalu banyak permintaan. Coba lagi sebentar.' } });
   async function ownedItem(ownerId: string, wishlistId: string, itemId: string) {
     const wishlist = await db.wishlist.findFirst({
       where: { id: wishlistId, ownerId }, include: { items: true },
@@ -33,8 +35,10 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const item = wishlist?.items.find(entry => entry.id === itemId);
     return item && wishlist ? { item, wishlist } : null;
   }
-  router.get('/alternatives', async (req, res) => {
-    const { itemId, wishlistId } = query.parse(req.query);
+  router.get('/alternatives', readLimit, async (req, res) => {
+    const parsed = query.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
+    const { itemId, wishlistId } = parsed.data;
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
@@ -55,7 +59,9 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     res.json({ alternatives, hasMore: false });
   });
   router.post('/requests', requestLimit, async (req, res) => {
-    const { itemId, wishlistId } = requestBody.parse(req.body);
+    const parsed = requestBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
+    const { itemId, wishlistId } = parsed.data;
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
@@ -73,8 +79,10 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     });
     res.status(200).json({ request, message: 'Siap, permintaanmu sudah kami catat.' });
   });
-  router.get('/notifications', async (req, res) => {
-    const { limit } = noticePage.parse(req.query);
+  router.get('/notifications', readLimit, async (req, res) => {
+    const parsed = noticePage.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Parameter notifikasi tidak valid.' });
+    const { limit } = parsed.data;
     const notices = await db.recommendationNotice.findMany({
       where: { request: { ownerId: res.locals.ownerId } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -94,7 +102,9 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     })) });
   });
   router.patch('/notifications/:id/read', async (req, res) => {
-    const id = uuid.parse(req.params.id);
+    const parsed = uuid.safeParse(req.params.id);
+    if (!parsed.success) return res.status(400).json({ error: 'ID notifikasi tidak valid.' });
+    const id = parsed.data;
     const result = await db.recommendationNotice.updateMany({
       where: { id, request: { ownerId: res.locals.ownerId } },
       data: { readAt: new Date() },
