@@ -417,6 +417,7 @@ model CuratedRecommendation {
   priceMinor     Int?
   currency       String   @db.Char(3)
   priceVerified  Boolean  @default(false)
+  priceVerifiedAt DateTime?
   published      Boolean  @default(false)
   priority       Int      @default(0)
   createdAt      DateTime @default(now())
