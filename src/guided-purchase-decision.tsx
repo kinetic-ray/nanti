@@ -128,6 +128,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
         assessment.screening.outcome === 'green' && (
           <AlternativeRecommendations
             eligible
+            currency={list.currency}
             canNotify={false}
             load={async () => {
               const result = await api<{ alternatives: RecommendationMatch[] }>(
