@@ -131,8 +131,12 @@ function parsePdpCache(script: string, url: URL) {
 
   const queries = Object.keys(query).filter((key) => {
     if (!key.startsWith('pdpMainInfo(') || !key.endsWith(')')) return false;
-    const args = record(JSON.parse(key.slice('pdpMainInfo('.length, -1)));
-    return args?.shopDomain === shop && args?.productKey === slug;
+    try {
+      const args = record(JSON.parse(key.slice('pdpMainInfo('.length, -1)));
+      return args?.shopDomain === shop && args?.productKey === slug;
+    } catch {
+      return false;
+    }
   });
   if (queries.length !== 1 || !queries[0]) return null;
   const entry = resolve(query[queries[0]], 'pdpMainInfo');
@@ -167,18 +171,50 @@ function parsePdpCache(script: string, url: URL) {
   return { title: text(content?.name), storeName: text(basic?.shopName), imageUrl: image(photos, url), price, ambiguousPrice };
 }
 
-function parseMetadata(html: string, url: URL, originalUrl: string): ProductMetadata | null {
+function localGraphResolver(entries: unknown[], url: URL) {
+  const listing = listingKey(url);
+  const keyFor = (value: unknown) => {
+    const id = text(value);
+    const reference = id && safeHttps(id, url);
+    return listing && reference && listingKey(reference) === listing && (!reference.search || reference.search === url.search)
+      ? reference.hash || null : null;
+  };
+  const nodes = new Map<string, Record<string, unknown> | null>();
+  for (const entry of entries) {
+    const node = record(entry);
+    const key = keyFor(node?.['@id']);
+    if (node && key) nodes.set(key, nodes.has(key) ? null : node);
+  }
+  return (value: unknown): Record<string, unknown> | undefined => {
+    const node = record(value);
+    if (!node || Object.keys(node).length !== 1 || !('@id' in node)) return node;
+    const key = keyFor(node['@id']);
+    return key ? nodes.get(key) ?? undefined : undefined;
+  };
+}
+
+type MetadataResult = { metadata: ProductMetadata } | { issue: string };
+
+function parseMetadata(html: string, url: URL, originalUrl: string): MetadataResult {
   const identity = listingKey(url);
   const matches = (candidate: string) => {
     const reference = safeHttps(candidate, url);
-    return reference !== null && listingKey(reference) === identity;
+    return identity !== null && reference !== null && listingKey(reference) === identity;
+  };
+  const hasDifferentQuery = (candidate: string | null) => {
+    const query = candidate ? safeHttps(candidate, url)?.search : undefined;
+    return Boolean(query && query !== url.search);
   };
   const tags = new Map<string, string[]>();
   const pageUrls: string[] = [];
-  const products: Record<string, unknown>[] = [];
+  const products: { product: Record<string, unknown>; resolve: ReturnType<typeof localGraphResolver> }[] = [];
   let state: Record<string, unknown> | undefined;
   let hydration: ReturnType<typeof parsePdpCache> = null;
   let hasReferencedProduct = false;
+  let malformed = false;
+  let pageIssue: string | undefined;
+  let headingIssue: string | undefined;
+  let hasVariants = false;
   const nodes: DefaultTreeAdapterTypes.ChildNode[] = [...parse(html).childNodes];
   while (nodes.length) {
     const node = nodes.pop()!;
@@ -188,6 +224,15 @@ function parseMetadata(html: string, url: URL, originalUrl: string): ProductMeta
     if (!('tagName' in node)) continue;
     const attr = (name: string) => node.attrs.find((entry) => entry.name === name)?.value;
     const inHead = node.parentNode && 'tagName' in node.parentNode && node.parentNode.tagName === 'head';
+    if ((node.tagName === 'title' && inHead) || node.tagName === 'h1') {
+      const label = node.childNodes.map(child => 'value' in child ? child.value : '').join('').trim();
+      const issue = /^(verify (that )?you are human|captcha|human verification)[.!]?$/iu.test(label) ? 'captcha_required' :
+        /^(access denied|request blocked|akses ditolak|forbidden)[.!]?$/iu.test(label) ? 'access_blocked' :
+        /^(too many requests|rate limit exceeded)[.!]?$/iu.test(label) ? 'rate_limited' : undefined;
+      if (node.tagName === 'title') pageIssue ??= issue;
+      else headingIssue ??= issue;
+    }
+    if (node.tagName === 'form' && /^(captcha-form|challenge-form)$/iu.test(attr('id') ?? '')) pageIssue = 'captcha_required';
     if (node.tagName === 'meta' && inHead) {
       const key = (attr('property') ?? attr('name'))?.toLowerCase();
       const value = text(attr('content'));
@@ -220,50 +265,74 @@ function parseMetadata(html: string, url: URL, originalUrl: string): ProductMeta
         const productUrl = text(basic?.url);
         if (productUrl && matches(productUrl)) state = layout;
       } else {
-        for (const root of [parsed].flat()) {
+        const entries = [parsed].flat().flatMap(root => {
           const graph = record(root)?.['@graph'];
-          for (const entry of [root, ...(Array.isArray(graph) ? graph : [])]) {
-            const product = record(entry);
-            const reference = text(product?.url) ?? text(product?.['@id']);
-            if (!product || !tagged(product['@type'], 'Product') || !reference) continue;
-            hasReferencedProduct = true;
-            if (matches(reference)) products.push(product);
+          return [root, ...(Array.isArray(graph) ? graph : [])];
+        });
+        const resolve = localGraphResolver(entries, url);
+        const primary = new Set<unknown>();
+        for (const entry of entries) {
+          const page = record(entry);
+          const reference = text(page?.url) ?? text(page?.['@id']);
+          if (page && tagged(page['@type'], 'WebPage') && reference && matches(reference)) {
+            const entity = resolve(page.mainEntity);
+            if (entity) primary.add(entity);
+          }
+        }
+        for (const entry of new Set([...entries, ...primary])) {
+          const product = record(entry);
+          if (!product) continue;
+          const reference = text(product.url) ?? text(product['@id']);
+          const isListing = reference ? matches(reference) : primary.has(product);
+          if (isListing && tagged(product['@type'], 'ProductGroup')) hasVariants = true;
+          if (!tagged(product['@type'], 'Product')) continue;
+          if (reference) hasReferencedProduct = true;
+          if (isListing) {
+            hasVariants ||= product.isVariantOf != null || hasDifferentQuery(reference);
+            products.push({ product, resolve });
           }
         }
       }
     } catch {
-      // A malformed metadata script does not invalidate other sources.
+      malformed = true;
     }
   }
 
   pageUrls.push(...(tags.get('og:url') ?? []));
-  if (pageUrls.some((value) => !matches(value)) ||
-      (!products.length && !state && !hydration && (!pageUrls.length || hasReferencedProduct))) return null;
+  if (pageIssue) return { issue: pageIssue };
+  if (headingIssue && !products.length && !state && !hydration) return { issue: headingIssue };
+  if (pageUrls.some((value) => !matches(value)) || (!products.length && !state && !hydration && hasReferencedProduct)) {
+    return { issue: 'listing_mismatch' };
+  }
+  if (!products.length && !state && !hydration && !pageUrls.length) {
+    return { issue: malformed ? 'metadata_malformed' : 'metadata_missing' };
+  }
   const firstTag = (key: string) => tags.get(key)?.[0];
   const basic = record(state?.basicInfo);
-  const title = products.map((product) => text(product.name)).find(Boolean) ?? text(firstTag('og:title')) ?? text(firstTag('twitter:title')) ?? text(basic?.name) ?? hydration?.title ?? null;
+  const title = products.map(({ product }) => text(product.name)).find(Boolean) ?? text(firstTag('og:title')) ?? text(firstTag('twitter:title')) ?? text(basic?.name) ?? hydration?.title ?? null;
   const imageUrl = image(tags.get('og:image'), url) ?? image(tags.get('og:image:secure_url'), url) ??
     image(tags.get('twitter:image'), url) ?? image(tags.get('twitter:image:src'), url) ??
-    products.map((product) => image(product.image, url)).find(Boolean) ?? image(basic?.image, url) ?? hydration?.imageUrl ?? null;
+    products.map(({ product, resolve }) => image([product.image].flat().map(value => resolve(value) ?? value), url)).find(Boolean) ??
+    image(basic?.image, url) ?? hydration?.imageUrl ?? null;
 
   const prices: Price[] = [];
   const sellers = new Set<string>();
-  let ambiguous = hydration?.ambiguousPrice ?? false;
+  let ambiguous = hasVariants || Boolean(hydration?.ambiguousPrice);
   if (hydration?.price) prices.push(hydration.price);
   if (hydration?.storeName) sellers.add(hydration.storeName);
-  for (const product of products) {
+  for (const { product, resolve } of products) {
     if (product.offers == null) continue;
     const offers = [product.offers].flat();
     if (offers.length !== 1) ambiguous = true;
     for (const entry of offers) {
-      const offer = record(entry);
+      const offer = resolve(entry);
       const reference = text(offer?.url);
-      if (reference && !matches(reference)) { ambiguous = true; continue; }
+      if (reference && (!matches(reference) || hasDifferentQuery(reference))) { ambiguous = true; continue; }
       const price = offer && tagged(offer['@type'], 'Offer') && offer.lowPrice == null && offer.highPrice == null
         ? exactPrice(offer.price, offer.priceCurrency) : null;
       if (price) prices.push(price);
       else ambiguous = true;
-      const seller = text(record(offer?.seller)?.name);
+      const seller = text(resolve(offer?.seller)?.name);
       if (seller) sellers.add(seller);
     }
   }
@@ -279,17 +348,17 @@ function parseMetadata(html: string, url: URL, originalUrl: string): ProductMeta
   if (stateSeller) sellers.add(stateSeller);
   const price = !ambiguous && prices.every((candidate) => candidate.amount === prices[0]?.amount) ? prices[0] ?? null : null;
   const storeName = sellers.size === 1 ? [...sellers][0] ?? null : null;
-  if (!title && !price && !imageUrl && !storeName) return null;
-  return { source: 'tokopedia', originalUrl, productUrl: 'https://www.tokopedia.com' + identity, title, price, imageUrl, storeName };
+  if (!title && !price && !imageUrl && !storeName) return { issue: malformed ? 'metadata_malformed' : 'metadata_missing' };
+  return { metadata: { source: 'tokopedia', originalUrl, productUrl: 'https://www.tokopedia.com' + identity, title, price, imageUrl, storeName } };
 }
 
-async function readHtml(response: Response): Promise<string | null> {
+async function readHtml(response: Response): Promise<{ html: string } | { issue: string }> {
   const encoding = response.headers.get('content-encoding');
-  if (response.status !== 200 || !/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ||
-      (encoding && encoding.toLowerCase() !== 'identity') || Number(response.headers.get('content-length')) > maxBytes ||
-      !response.body) {
+  const issue = encoding && encoding.toLowerCase() !== 'identity' ? 'unsupported_encoding' :
+    Number(response.headers.get('content-length')) > maxBytes ? 'response_too_large' : !response.body ? 'empty_response' : null;
+  if (issue || !response.body) {
     void response.body?.cancel().catch(() => {});
-    return null;
+    return { issue: issue ?? 'empty_response' };
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -298,13 +367,27 @@ async function readHtml(response: Response): Promise<string | null> {
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) return html + decoder.decode();
+      if (done) return bytes ? { html: html + decoder.decode() } : { issue: 'empty_response' };
       bytes += value.byteLength;
-      if (bytes > maxBytes) return null;
+      if (bytes > maxBytes) return { issue: 'response_too_large' };
       html += decoder.decode(value, { stream: true });
     }
   } finally {
     void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+function tokopediaHttpIssue(response: Response, shortLink: boolean) {
+  if (response.headers.get('cf-mitigated')?.toLowerCase() === 'challenge') return 'captcha_required';
+  switch (response.status) {
+    case 200: return null;
+    case 401: return 'authentication_required';
+    case 403: return 'access_blocked';
+    case 404:
+    case 410: return shortLink ? 'short_link_unavailable' : 'listing_unavailable';
+    case 429: return 'rate_limited';
+    default: return 'http_failure';
   }
 }
 
@@ -347,16 +430,21 @@ export async function extractTokopediaMetadata(originalUrl: string, transport: P
         current = next;
         continue;
       }
-      const issue = response.status !== 200 ? 'http_failure' :
-        !/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ? 'not_html' :
-        !response.body ? 'empty_response' : !key ? 'metadata_missing' : null;
+      const issue = tokopediaHttpIssue(response, shortHosts.has(current.hostname)) ??
+        (!/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ? 'not_html' : null);
       if (issue) {
         void response.body?.cancel().catch(() => {});
         return fail(issue, response.status);
       }
-      const html = await readHtml(response);
-      const metadata = html === null ? null : parseMetadata(html, current, originalUrl);
-      return metadata ?? fail('metadata_missing', response.status);
+      const page = await readHtml(response);
+      if ('issue' in page) return fail(page.issue, response.status);
+      const result = parseMetadata(page.html, current, originalUrl);
+      if (!key) {
+        const reason = 'issue' in result && ['captcha_required', 'access_blocked', 'rate_limited'].includes(result.issue)
+          ? result.issue : 'short_link_unresolved';
+        return fail(reason, response.status);
+      }
+      return 'issue' in result ? fail(result.issue, response.status) : result.metadata;
     }
     return fail('redirect_limit');
   };
@@ -412,7 +500,14 @@ export function downloadShopeeImage(value: string): Promise<Buffer | null> {
   return downloadMarketplaceJpeg(url, (target, signal) => requestPublicPage(target, signal, 'image/jpeg'));
 }
 
-async function downloadMarketplaceJpeg(url: URL, transport: PageRequest): Promise<Buffer | null> {
+export function downloadMarketplaceImage(merchant: 'tokopedia' | 'shopee', value: string, transport: PageRequest =
+  (url, signal) => requestPublicPage(url, signal, 'image/jpeg,image/png,image/webp')): Promise<Buffer | null> {
+  const url = value.length <= 2048 ? safeHttps(value) : null;
+  const hosts = merchant === 'tokopedia' ? imageHosts : /(^|\.)susercontent\.com$/u;
+  return url && hosts.test(url.hostname) ? downloadMarketplaceJpeg(url, transport, true) : Promise.resolve(null);
+}
+
+async function downloadMarketplaceJpeg(url: URL, transport: PageRequest, allowRasterFormats = false): Promise<Buffer | null> {
   const signal = AbortSignal.timeout(4000);
   try {
     const response = await Promise.race([
@@ -420,7 +515,8 @@ async function downloadMarketplaceJpeg(url: URL, transport: PageRequest): Promis
       new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
     ]);
     // CDN URLs are expected to be final. Never fetch an image redirect.
-    if (response.status !== 200 || !/^image\/jpeg(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') ||
+    const allowedTypes = allowRasterFormats ? /^image\/(jpeg|png|webp)(?:\s*;|$)/i : /^image\/jpeg(?:\s*;|$)/i;
+    if (response.status !== 200 || !allowedTypes.test(response.headers.get('content-type') ?? '') ||
         Number(response.headers.get('content-length')) > maxImageBytes || !response.body) {
       void response.body?.cancel().catch(() => {});
       return null;
@@ -442,7 +538,7 @@ async function downloadMarketplaceJpeg(url: URL, transport: PageRequest): Promis
       reader.releaseLock();
     }
     const bytes = Buffer.concat(chunks, size);
-    return boundedJpeg(bytes) ? bytes : null;
+    return allowRasterFormats || boundedJpeg(bytes) ? bytes : null;
   } catch {
     return null;
   }

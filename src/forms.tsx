@@ -302,8 +302,8 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
     const sellerName = preview?.merchant === 'tokopedia' && preview.originalUrl === originalUrl
       ? preview.sellerName ?? (item?.url === originalUrl ? item.sellerName : null)
       : item?.url === originalUrl ? item.sellerName : null;
-    const saveTokopediaImage = !item && !imageKey && !uploadedImage && preview?.merchant === 'tokopedia' &&
-      preview.originalUrl === originalUrl && Boolean(preview.imagePath);
+    const saveMarketplaceImage = !item && !imageKey && !uploadedImage && preview?.originalUrl === originalUrl &&
+      (preview.canSaveImage === true || preview.merchant === 'tokopedia');
     submitting.current = true;
     setBusy(true);
     try {
@@ -322,11 +322,14 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
           ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
         return;
       }
-      if (saveTokopediaImage) saveRequestKey.current ??= crypto.randomUUID();
+      if (saveMarketplaceImage) saveRequestKey.current ??= crypto.randomUUID();
       await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey, sellerName,
-        ...(saveTokopediaImage && { saveTokopediaImage: true, tokopediaProductUrl: preview?.productUrl }),
+        ...(saveMarketplaceImage && { saveMarketplaceImage: true, tokopediaProductUrl: preview?.productUrl,
+          ...(preview?.tokopediaImageProof && preview.imagePath && {
+            tokopediaImage: { url: preview.imagePath, proof: preview.tokopediaImageProof },
+          }) }),
         ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) },
-        saveTokopediaImage ? saveRequestKey.current ?? undefined : undefined);
+        saveMarketplaceImage ? saveRequestKey.current ?? undefined : undefined);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -388,6 +391,17 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
           <p>{(() => {
             const messages: Record<string, [string, string]> = {
               http_failure: ['Server toko menolak atau gagal memproses permintaan preview.', 'The store rejected or failed the preview request.'],
+              access_blocked: ['Tokopedia membatasi pemeriksaan otomatis. Kamu bisa isi detail secara manual.', 'Tokopedia blocked the automatic lookup. You can enter the details manually.'],
+              captcha_required: ['Tokopedia meminta verifikasi manusia. Kamu bisa isi detail secara manual.', 'Tokopedia requested human verification. You can enter the details manually.'],
+              authentication_required: ['Tokopedia meminta kamu masuk untuk membuka halaman ini.', 'Tokopedia requires sign-in to open this page.'],
+              rate_limited: ['Tokopedia membatasi jumlah permintaan. Coba lagi nanti atau isi detail secara manual.', 'Tokopedia is limiting requests. Try again later or enter the details manually.'],
+              short_link_unavailable: ['Tautan pendek sudah tidak tersedia atau kedaluwarsa. Coba URL produk lengkap.', 'This short link is unavailable or expired. Try the full product URL.'],
+              short_link_unresolved: ['Tautan pendek belum mengarah ke halaman produk. Coba URL produk lengkap.', 'The short link did not lead to a product page. Try the full product URL.'],
+              listing_unavailable: ['Halaman produk sudah tidak tersedia. Kamu bisa isi detail secara manual.', 'The product page is unavailable. You can enter the details manually.'],
+              metadata_malformed: ['Detail produk dari Tokopedia tidak bisa dibaca. Kamu bisa isi detail secara manual.', 'Nanti could not read the product details. You can enter them manually.'],
+              listing_mismatch: ['Halaman mengarah ke produk lain. Periksa URL atau isi detail secara manual.', 'The page refers to a different product. Check the URL or enter the details manually.'],
+              response_too_large: ['Halaman terlalu besar untuk diperiksa. Kamu bisa isi detail secara manual.', 'The page is too large to check. You can enter the details manually.'],
+              unsupported_encoding: ['Format halaman tidak bisa dibaca. Kamu bisa isi detail secara manual.', 'Nanti could not read the page format. You can enter the details manually.'],
               timeout: ['Server toko tidak merespons dalam batas waktu.', 'The store did not respond before the timeout.'],
               destination_timeout: ['Tujuan redirect tidak merespons tepat waktu.', 'The redirect destination timed out.'],
               request_error: ['Koneksi server ke toko gagal. Detail jaringan tidak tersedia.', 'The server could not connect to the store. Network details are unavailable.'],

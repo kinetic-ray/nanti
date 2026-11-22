@@ -11,6 +11,7 @@ export type ProductImport = {
   price?: { priceMinor: number; currency: Currency };
   imagePath?: string;
   canSaveImage?: boolean;
+  tokopediaImageProof?: string;
   productUrl?: string;
   sellerName?: string;
   diagnostic?: { code: string; host: string; httpStatus?: number };

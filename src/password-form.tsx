@@ -11,9 +11,9 @@ const labels: Record<Mode, Message> = {
   email: 'Change email address', changeEmail: 'Verify new email address',
 };
 const success = 'If the email address is eligible, we’ll send a link.';
-export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBusy, alternatives, emailChange }: {
+export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBusy, alternatives, emailChange, returnToAccount }: {
   delivery: boolean; signedIn: boolean; creator: boolean; busy: boolean; setPasswordBusy: (busy: boolean) => void;
-  alternatives?: ReactNode; emailChange?: boolean;
+  alternatives?: ReactNode; emailChange?: boolean; returnToAccount?: boolean;
 }) {
   const { t } = useLocale();
   const [link] = useState(() => new URLSearchParams(location.hash.slice(1)));
@@ -26,8 +26,8 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
   const entryMode = mode === 'login' || mode === 'register';
   const passwordHintId = useId();
   const passwordHint = mode === 'verify' ? 'Enter the password you chose when you created your account.'
-    : mode === 'login' || mode === 'email' || mode === 'changeEmail' ? null : 'Use at least 15 characters.';
-  const canResend = delivery && (mode === 'forgot' || (failed && notice && (mode === 'login' || mode === 'verify')));
+    : ['register', 'reset', 'change'].includes(mode) ? 'Use at least 15 characters.' : null;
+  const canResend = delivery && ['login', 'register', 'forgot', 'verify'].includes(mode);
   const formRef = useRef<HTMLFormElement>(null);
   const focusAfterChange = useRef(false);
   useLayoutEffect(() => {
@@ -49,6 +49,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     setMode(next);
     setShow(false);
     setNotice(null);
+    setFailed(false);
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +81,10 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
         return;
       }
       if (mode === 'verify' || mode === 'reset') {
+        if (returnToAccount) {
+          location.replace('/account');
+          return;
+        }
         switchMode('login');
         setNotice(mode === 'verify' ? 'Email verified. You can sign in now.' : 'Password updated. Please sign in again.');
       } else setNotice(mode === 'email' ? 'Check your new email address for a verification link.' : success);
@@ -130,8 +135,9 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
           <button type="submit" className="primary" disabled={busy}>{t(labels[mode])}</button>
         </form>
         {notice && <p className={failed ? 'error' : undefined} role={failed ? 'alert' : 'status'}>{t(notice)}</p>}
-        {!signedIn && (!entryMode || (delivery && mode === 'login')) && <div className="actions">
-          {!entryMode && <button type="button" disabled={busy} onClick={() => switchMode('login')}>{t('Back to sign in')}</button>}
+        {!signedIn && (!entryMode || delivery) && <div className="actions">
+          {returnToAccount ? <a href="/account">{t('Back to account')}</a> :
+            !entryMode && <button type="button" disabled={busy} onClick={() => switchMode('login')}>{t('Back to sign in')}</button>}
           {delivery && mode === 'login' && <button type="button" disabled={busy}
             onClick={() => switchMode('forgot')}>{t(labels.forgot)}</button>}
           {canResend && <button type="button" disabled={busy}

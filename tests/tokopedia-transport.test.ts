@@ -37,6 +37,15 @@ it('validates Shopee DNS answers before opening a socket', async () => {
   expect(request).not.toHaveBeenCalled();
 });
 
+it('rejects a Tokopedia DNS response containing a non-public address before opening a socket', async () => {
+  vi.mocked(request).mockClear();
+  vi.mocked(resolve4).mockResolvedValueOnce(['23.46.152.213', '192.168.1.2']);
+  const diagnostic = vi.fn();
+  await expect(extractTokopediaMetadata('https://www.tokopedia.com/shop/lamp', undefined, diagnostic)).resolves.toBeNull();
+  expect(request).not.toHaveBeenCalled();
+  expect(diagnostic).toHaveBeenCalledWith('request_error', 'www.tokopedia.com', undefined);
+});
+
 it('ends a pending DNS lookup at the request deadline', async () => {
   const { requestPublicPage } = await import('../server/tokopedia-metadata.js');
   const controller = new AbortController();

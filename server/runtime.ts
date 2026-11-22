@@ -12,6 +12,7 @@ import { prismaPrices } from './prisma-prices.js';
 import { prismaWishlists } from './prisma-wishlists.js';
 import { createProductMedia } from './product-media.js';
 import { createImageStorage } from './image-storage.js';
+import { createMysqlImageStorage } from './mysql-image-storage.js';
 import { previewProduct, previewProductMetadata } from './product-preview.js';
 import { productMerchant } from '../shared/product-import.js';
 
@@ -59,6 +60,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     const checks = [
       ['DataOwner', () => db.dataOwner.findFirst({ select: { id: true } })],
       ['Item', () => db.item.findFirst({ select: { id: true, imageKey: true, sellerName: true } })],
+      ['ProductImage', () => db.productImage.findFirst({ select: { id: true } })],
       ['AuthIdentity', () => db.authIdentity.findFirst({ select: { avatarUrl: true } })],
       ['CreatorProfile', () => db.creatorProfile.findFirst({ select: { handle: true, publishedDesign: true } })],
       ['CreatorProduct', () => db.creatorProduct.findFirst({ select: { id: true, hasPhoto: true } })],
@@ -77,12 +79,15 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
   };
   const intelligence = prismaIntelligence(db);
   const accounts = prismaAccounts(db);
+  const mysqlImages = createMysqlImageStorage(db);
   const prune = () => Promise.allSettled([
     intelligence.prune(new Date(Date.now() - assessmentRetentionDays * 86_400_000)),
     accounts.prune(),
+    mysqlImages.prune(),
   ]).then((results) => {
     if (results[0]?.status === 'rejected') console.error('Could not clear expired assessment data.');
     if (results[1]?.status === 'rejected') console.error('Could not clear expired account data.');
+    if (results[2]?.status === 'rejected') console.error('Could not clear expired product image uploads.');
     if (results.some(({ status }) => status === 'rejected')) throw new Error('Retention cleanup failed.');
   });
   const ikeaMetadataAllowed = env.NANTI_IKEA_METADATA_PERMISSION === 'granted';
@@ -111,6 +116,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     },
     productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
     imageStorage: createImageStorage(environment),
+    mysqlImages,
     secret: env.SESSION_SECRET,
     secureCookies: production || environment.AUTH_PUBLIC_ORIGIN?.startsWith('https://') === true,
     trustedProxy: options.vercel ? 1 : env.NANTI_TRUST_PROXY,

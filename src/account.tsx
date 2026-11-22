@@ -56,7 +56,10 @@ export function AccountDialog({ status, notice, close, update }: {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const creator = new URLSearchParams(location.search).get('next') === 'creator';
   const [deletion, setDeletion] = useState(false);
-  const [confirmingEmail] = useState(() => new URLSearchParams(location.hash.slice(1)).get('mode') === 'changeEmail');
+  const [recovering] = useState(() => {
+    const link = new URLSearchParams(location.hash.slice(1));
+    return Boolean(link.get('token')) && ['verify', 'reset', 'changeEmail'].includes(link.get('mode') ?? '');
+  });
   const [sessions, setSessions] = useState<ActiveSession[] | null>(null);
 
   async function loadSessions() {
@@ -145,7 +148,8 @@ export function AccountDialog({ status, notice, close, update }: {
         update(current);
       })}>{t('Try again')}</button>
     </> :
-      confirmingEmail ? <PasswordForm delivery={false} signedIn={false} creator={false}
+      recovering && account ? <PasswordForm delivery={Boolean(status.emailDelivery)} signedIn={false} creator={creator}
+        returnToAccount
         busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} /> :
       !account ? <div className="account-signin-shell">
         <PasswordForm delivery={Boolean(status.emailDelivery)} signedIn={false} creator={creator}
@@ -167,7 +171,7 @@ export function AccountDialog({ status, notice, close, update }: {
             {t('Import guest data')}
           </button>
         </section>}
-        {account.email && <p>{account.email} · {account.emailVerified ? 'Email terverifikasi' : 'Email belum terverifikasi'}</p>}
+        {account.email && <p>{account.email} · {t(account.emailVerified ? 'Email verified' : 'Email unverified')}</p>}
         {account.hasPassword && <PasswordForm delivery={false} signedIn creator={false}
           busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />}
         {account.hasPassword && status.emailDelivery && <PasswordForm delivery signedIn emailChange creator={false}
