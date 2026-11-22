@@ -35,7 +35,8 @@ function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
   const { t, money, number, language } = useLocale();
   const [tool, setTool] = useState<'decision' | 'prices' | null>(null);
   const merchant = item.url ? safeProductUrl(item.url) : null;
-  return <Dialog title={tool === 'decision' ? (language === 'id' ? 'Bantu putuskan beli' : 'Help me decide') : item.name} busy={false} close={close} focusHeading className="decision product-dialog">\n    {tool === 'decision' ? <GuidedPurchaseDecision list={list} item={item} close={() => setTool(null)} /> : <>
+  return <Dialog title={tool === 'decision' ? (language === 'id' ? 'Bantu putuskan beli' : 'Help me decide') : item.name} busy={false} close={close} focusHeading className="decision product-dialog">
+    {tool === 'decision' ? <GuidedPurchaseDecision list={list} item={item} close={() => setTool(null)} /> : <>
     <div className="product-overview">
       <ProductMedia item={item} listId={list.id} />
       <div className="product-facts">
