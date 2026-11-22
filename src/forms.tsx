@@ -148,7 +148,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
   const { t, decimal, money, language, error: localError } = useLocale();
   const [url, setUrl] = useState(item?.url ?? initialUrl ?? '');
   const [name, setName] = useState(item?.name ?? '');
-  const [price, setPrice] = useState(item?.priceMinor == null ? '' : formatProductPriceInput((item.priceMinor / 100).toFixed(2).replace('.', ','), 'id'));
+  const [price, setPrice] = useState(item?.priceMinor == null ? '' : formatProductPriceInput(language === 'id' ? (item.priceMinor / 100).toFixed(2).replace('.', ',') : (item.priceMinor / 100).toFixed(2), language));
   const [quantity, setQuantity] = useState(item?.quantity.toString() ?? '1');
   const [lookup, setLookup] = useState('');
   const [preview, setPreview] = useState<ProductImport | null>(null);
