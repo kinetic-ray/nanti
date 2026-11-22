@@ -116,7 +116,9 @@ export function recommendationAdminRoutes(db: PrismaClient) {
       product.priceVerifiedAt.getTime() >= Date.now() - 7 * 86_400_000) {
       // Replay-safe: unique(requestId, productId) prevents duplicate notices.
       let cursor: string | undefined;
-      for (;;) {
+      let batchesProcessed = 0;
+      // Bound request work to avoid monopolizing a serverless invocation.
+      for (; batchesProcessed < 2; batchesProcessed++) {
         const requests = await db.recommendationRequest.findMany({
           where: { status: 'pending', sourceCategory: product.category,
             sourceCurrency: product.currency, sourcePriceMinor: { gt: product.priceMinor ?? 0 } },
@@ -147,7 +149,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
         if (requests.length < 100) break;
       }
     }
-    res.json(product);
+    res.json({ product, fulfillment: published ? 'bounded; repeat publication to resume pending matches' : 'disabled' });
   });
   router.get('/requests', async (_req, res) => {
     const requests = await db.recommendationRequest.findMany({
