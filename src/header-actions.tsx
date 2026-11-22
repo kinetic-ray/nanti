@@ -101,7 +101,7 @@ export function HeaderActions({ account, ready, unread, openAlerts, signIn, sign
         </svg>
       </button>
       <nav className="masthead-menu-panel" id="masthead-navigation" aria-label={t('Site navigation')} hidden={open !== 'navigation'}>
-        <a href="/creator" onClick={() => setOpen(null)}>{t('Creator')}</a>
+        <a href="/creator" onClick={() => setOpen(null)}><Icon name="bookmark" /> <span>{t('Creator')}</span></a>
       </nav>
     </div>
   </div>;
