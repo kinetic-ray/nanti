@@ -15,6 +15,7 @@ export function RecommendationAdminPanel() {
   const [refresh, setRefresh] = useState(0);
   const [unavailable, setUnavailable] = useState(false);
   const [verificationPrice, setVerificationPrice] = useState<Record<string, string>>({});
+  const [continuations, setContinuations] = useState<Record<string, string>>({});
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
@@ -84,9 +85,24 @@ export function RecommendationAdminPanel() {
           <button type="submit" disabled={busy !== ''}>Konfirmasi harga</button>
         </form>}
         {!product.published && <button type="button" disabled={busy !== '' || !product.priceVerified}
-          onClick={() => void mutate(product.id, () => api(`${base}/catalog/${product.id}/publication`, {
-            method: 'PATCH', data: { published: true },
-          }))}>Terbitkan</button>}
+          onClick={() => void mutate(product.id, async () => {
+            const result = await api<{ nextCursor: string | null }>(`${base}/catalog/${product.id}/publication`, {
+              method: 'PATCH', data: { published: true },
+            });
+            if (result.nextCursor) setContinuations(current => ({ ...current, [product.id]: result.nextCursor! }));
+          })}>Terbitkan</button>}
+        {continuations[product.id] && <button type="button" disabled={busy !== ''}
+          onClick={() => void mutate(product.id, async () => {
+            const result = await api<{ nextCursor: string | null }>(`${base}/catalog/${product.id}/publication`, {
+              method: 'PATCH', data: { published: true, after: continuations[product.id] },
+            });
+            setContinuations(current => {
+              const updated = { ...current };
+              if (result.nextCursor) updated[product.id] = result.nextCursor;
+              else delete updated[product.id];
+              return updated;
+            });
+          })}>Lanjutkan pencocokan</button>}
         {product.published && <button type="button" disabled={busy !== ''}
           onClick={() => void mutate(product.id, () => api(`${base}/catalog/${product.id}/publication`, {
             method: 'PATCH', data: { published: false },
