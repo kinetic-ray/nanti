@@ -22,6 +22,12 @@ function inferCategory(title: string): string | null {
 /** Consumer-only endpoints. Never accept an ownerId from request parameters. */
 export function recommendationConsumerRoutes(db: PrismaClient) {
   const router = Router();
+  router.use((req, res, next) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('Sec-Fetch-Site') === 'cross-site') {
+      return res.status(403).json({ error: 'Permintaan tidak dapat diverifikasi.' });
+    }
+    next();
+  });
   const requestLimit = rateLimit({
     windowMs: 60 * 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Terlalu banyak permintaan. Coba lagi nanti, ya.' },
