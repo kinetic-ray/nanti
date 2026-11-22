@@ -60,6 +60,10 @@ describe('recommendation HTTP eligibility', () => {
     expect(result.status).toBe(200);
     expect(db.recommendationRequest.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ sourcePriceMinor: 100000000 }) }));
+    const payload = db.recommendationRequest.upsert.mock.calls[0]?.[0]?.create;
+    expect(payload).not.toHaveProperty('cashMinor');
+    expect(payload).not.toHaveProperty('billsMinor');
+    expect(payload).not.toHaveProperty('setAsideMinor');
   });
   it('does not expose a wishlist belonging to another owner', async () => {
     const { app, db } = setup();
