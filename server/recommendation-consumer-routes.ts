@@ -12,8 +12,8 @@ const answersSchema = z.strictObject({
   practicalNeed: z.boolean(), alreadyHave: z.boolean(), useOften: z.boolean(),
   canWait: z.boolean(), withoutDiscount: z.boolean(), socialPressure: z.boolean(),
 });
-const financeSchema = z.strictObject({ cashMinor: z.string().regex(/^\\d{1,18}$/u),
-  billsMinor: z.string().regex(/^\\d{1,18}$/u), setAsideMinor: z.string().regex(/^\\d{1,18}$/u) });
+const financeSchema = z.strictObject({ cashMinor: z.string().regex(/^\d{1,18}$/u),
+  billsMinor: z.string().regex(/^\d{1,18}$/u), setAsideMinor: z.string().regex(/^\d{1,18}$/u) });
 const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema, finances: financeSchema,
   estimatedPriceMinor: z.number().int().positive().max(2_000_000_000).optional() });
 const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30).default(20) });
