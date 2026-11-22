@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { safeAdminUrl } from './product-identity.js';
+import { safeHttpsUrl } from './recommendation-matching.js';
 import { rankAlternatives, type RecommendationProduct } from './recommendation-matching.js';
 
 const uuid = z.uuid();
@@ -9,7 +10,7 @@ const productInput = z.strictObject({
   title: z.string().trim().min(2).max(160),
   url: z.string().trim().max(2048).transform((value, ctx) => {
     const url = safeAdminUrl(value);
-    if (url) return url.href;
+    if (url && safeHttpsUrl(url.href)) return url.href;
     ctx.addIssue({ code: 'custom', message: 'Gunakan link HTTPS produk yang valid.' });
     return z.NEVER;
   }),
@@ -47,7 +48,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
   router.post('/catalog', async (req, res) => {
     const data = productInput.parse(req.body);
     const product = await db.curatedRecommendation.create({
-      data: { ...data, priceVerified: false, published: false },
+      data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false },
     });
     res.status(201).json(product);
   });
@@ -66,11 +67,11 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     const item = await db.curatedRecommendation.findUnique({ where: { id } });
     if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
     const checked = safeAdminUrl(evidence.checkedUrl);
-    if (!checked || checked.href !== item.url) {
+    if (!checked || !safeHttpsUrl(checked.href) || checked.href !== item.url) {
       return res.status(422).json({ error: 'Periksa harga di link produk yang tersimpan, lalu coba lagi.' });
     }
     const updated = await db.curatedRecommendation.update({
-      where: { id }, data: { priceMinor: evidence.priceMinor, priceVerified: true, published: false },
+      where: { id }, data: { priceMinor: evidence.priceMinor, priceVerified: true, priceVerifiedAt: new Date(), published: false },
     });
     res.json({ product: updated, message: 'Harga sudah dikonfirmasi. Periksa detail sebelum publikasi.' });
   });
@@ -80,7 +81,8 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (published) {
       const item = await db.curatedRecommendation.findUnique({ where: { id } });
       if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
-      if (!item.priceVerified || !item.priceMinor) {
+      if (!item.priceVerified || !item.priceMinor || !item.priceVerifiedAt ||
+        item.priceVerifiedAt.getTime() < Date.now() - 7 * 86_400_000) {
         return res.status(409).json({
           error: 'Harga belum terverifikasi. Produk tetap menjadi draf sampai ada verifikasi harga.',
         });
