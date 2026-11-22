@@ -137,10 +137,10 @@ try {
   await signInEntry.click();
   await button(signIn, 'Lanjut sebagai tamu').click();
   await signIn.waitFor({ state: 'hidden' });
-  await button(guest, 'Buat wishlist').click();
-  const create = modal(guest, 'Wishlist baru');
-  await create.getByLabel('Nama wishlist').fill('Wishlist tamu');
-  await button(create, 'Simpan wishlist').click();
+  await button(guest, 'Buat kategori').click();
+  const create = modal(guest, 'Kategori baru');
+  await create.getByLabel('Nama kategori').fill('Wishlist tamu');
+  await button(create, 'Simpan kategori').click();
   const list = guest.getByRole('heading', { name: 'Wishlist tamu', exact: true });
   await visible(list);
   await signInEntry.click();
