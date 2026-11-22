@@ -44,6 +44,8 @@ jobs:
         run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
       - name: Typecheck
         run: npm run typecheck
+      - name: Build application
+        run: npm run build
       - name: Run recommendation unit tests
         run: npx vitest run tests/recommendation-matching.test.ts tests/recommendation-fulfillment.test.ts
 
