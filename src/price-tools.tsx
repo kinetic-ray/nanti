@@ -22,7 +22,7 @@ const invalidPrice = 'Enter a price up to 9,999,999.99 with at most two decimal 
 export function PriceDetails({ listId, item, close, onUpdate }: {
   listId: string; item: Item; close: () => void; onUpdate: () => void;
 }) {
-  const { t, money, date, decimal, number, language, error: localError } = useLocale();
+  const { t, money, date, number, language, error: localError } = useLocale();
   const path = `/wishlists/${listId}/items/${item.id}/prices`;
   const editorId = useId();
   const [page, setPage] = useState<ItemPrices | null>(null);
