@@ -11,7 +11,8 @@ const answersSchema = z.strictObject({
   practicalNeed: z.boolean(), alreadyHave: z.boolean(), useOften: z.boolean(),
   canWait: z.boolean(), withoutDiscount: z.boolean(), socialPressure: z.boolean(),
 });
-const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema });
+const requestBody = z.strictObject({ itemId: uuid, wishlistId: uuid, answers: answersSchema,
+  estimatedPriceMinor: z.number().int().positive().safe().max(2_000_000_000).optional() });
 const noticePage = z.strictObject({ limit: z.coerce.number().int().min(1).max(30).default(20) });
 
 /** Conservative classification. Unknown categories produce no recommendations. */
@@ -50,7 +51,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
   router.post('/alternatives', readLimit, async (req, res) => {
     const parsed = requestBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
-    const { itemId, wishlistId, answers } = parsed.data;
+    const { itemId, wishlistId, answers, estimatedPriceMinor } = parsed.data;
     const screening = evaluateScreening(answers, null, new Date().toISOString().slice(0, 10));
     if (screening.outcome !== 'green' || screening.unanswered.length > 0) {
       return res.status(422).json({ error: 'Alternatif hanya tersedia untuk kebutuhan yang jelas.' });
@@ -66,7 +67,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const sourceCategory = inferCategory(item.name);
     const source: RecommendationProduct = {
       id: item.id, title: item.name, category: sourceCategory,
-      priceMinor: item.priceMinor, currency: wishlist.currency, priceVerified: false,
+      priceMinor: item.priceMinor ?? estimatedPriceMinor ?? null, currency: wishlist.currency, priceVerified: false,
       published: true, url: item.url ?? '',
     };
     const alternatives = rankAlternatives(source, candidates.map(product => ({
@@ -96,13 +97,14 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
       normalizedUrl ? `url:${normalizedUrl}` : `item:${item.id}`;
     const key = createHash('sha256').update(identity).digest('hex');
     const category = inferCategory(item.name);
-    if (!category || !Number.isSafeInteger(item.priceMinor) || (item.priceMinor ?? 0) <= 0) {
+    const sourcePriceMinor = item.priceMinor ?? estimatedPriceMinor ?? null;
+    if (!category || !Number.isSafeInteger(sourcePriceMinor) || (sourcePriceMinor ?? 0) <= 0) {
       return res.status(422).json({ error: 'Produk perlu kategori dan harga yang jelas sebelum meminta alternatif.' });
     }
     const request = await db.recommendationRequest.upsert({
       where: { ownerId_productKey: { ownerId: res.locals.ownerId, productKey: key } },
       create: { ownerId: res.locals.ownerId, productKey: key, productName: item.name,
-        sourceCategory: category, sourcePriceMinor: item.priceMinor,
+        sourceCategory: category, sourcePriceMinor,
         sourceCurrency: wishlist.currency },
       update: {},
       select: { id: true, status: true, createdAt: true },
