@@ -13,7 +13,7 @@ export type CreatorProductInput = {
 };
 
 export type StorefrontProduct = CreatorProductInput & { id: string; image: string | null };
-export type CatalogProduct = StorefrontProduct & { published: boolean };
+export type CatalogProduct = StorefrontProduct & { published: boolean; createdAt?: string };
 export type CreatorCatalog = {
   name: string;
   handle: string;

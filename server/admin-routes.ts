@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { PrismaClient } from './generated/prisma/client.js';
+import { adminWorkspaceRoutes } from './admin-workspace-routes.js';
 import { recommendationAdminRoutes } from './recommendation-admin-routes.js';
 import type { CookieOptions, ErrorRequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
@@ -86,6 +87,7 @@ export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCr
     res.clearCookie(cookie, options).sendStatus(204);
   });
 
+  if (recommendationsDb) router.use('/workspace', adminWorkspaceRoutes(recommendationsDb, credentials.username));
   if (recommendationsDb && recommendationSuperadminEnabled) router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
 
   router.get('/opportunities', async (req, res) => {

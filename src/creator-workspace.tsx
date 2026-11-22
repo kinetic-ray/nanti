@@ -1,163 +1,253 @@
-﻿import { useEffect, useRef, useState } from 'react';
-import type { CreatorCatalog, PublicStorefront } from '../shared/creator-catalog.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { BarChart3, CircleCheck, Clock3, ExternalLink, Eye, FileText, LayoutDashboard, LogOut, Package, Palette, Plus, Settings, Store, UserRound } from 'lucide-react';
+import type { CreatorCatalog, PublicStorefront } from '../shared/creator-catalog.js';
 import { validateDesign } from '../shared/creator-design.js';
+import { announceAuthChange } from './account.js';
+import { AdminWorkspace, WorkspaceAnalytics, WorkspaceEmpty, WorkspaceHeading, WorkspaceLoading, WorkspaceStats, WorkspaceThumbnail, useWorkspaceSection } from './admin-workspace.js';
 import { api, errorMessage } from './api.js';
 import { CreatorProducts } from './creator-products.js';
 import { CreatorDesignStudio } from './creator-studio.js';
 import { CreatorStorefront } from './creator-storefront.js';
 import { LanguagePicker, useLocale } from './locale.js';
-import { Icon } from './visual.js';
 import './creator-workspace.css';
 
 const path = '/account/creator/catalog';
-const tabs = ['overview', 'products', 'appearance', 'preview', 'publishing'] as const;
-type Tab = typeof tabs[number];
-const navigationIcons = ['bookmark', 'compare', 'edit', 'privacy', 'arrow'] as const;
+const sections = ['overview', 'products', 'storefront', 'appearance', 'preview', 'settings', 'analytics'] as const;
 
 export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: unknown }) {
-  const { t } = useLocale();
-  const [tab, setTab] = useState<Tab>('overview');
-  const [openedAppearance, setOpenedAppearance] = useState(false);
+  const { language, t, date, error } = useLocale();
+  const l = (id: string, en: string) => language === 'id' ? id : en;
+  const section = useWorkspaceSection(sections, 'overview');
+  const active = section.active;
+  const [openedAppearance, setOpenedAppearance] = useState(active === 'appearance');
+  const [startDraft, setStartDraft] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CreatorCatalog>();
-  const [error, setError] = useState('');
+  const [loadFailure, setLoadFailure] = useState('');
+  const [failure, setFailure] = useState('');
   const [notice, setNotice] = useState('');
-  const [publishing, setPublishing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [reload, setReload] = useState(0);
   const [savedDesign, setSavedDesign] = useState(() => validateDesign(draft));
-  const panel = useRef<HTMLElement>(null);
-  const labels = [t('Overview'), t('Products'), t('Appearance'),
-    t('Preview'), t('Publishing')];
+  const unpublish = useRef<HTMLDialogElement>(null);
+  const catalogRequest = useRef(0);
 
-  async function load() {
-    setCatalog(await api<CreatorCatalog>(path));
-  }
   useEffect(() => {
-    const controller = new AbortController();
-    api<CreatorCatalog>(path, { signal: controller.signal }).then(setCatalog, failure => {
-      if (!controller.signal.aborted) setError(errorMessage(failure));
-    });
-    return () => controller.abort();
-  }, [reload]);
+    if (active === 'appearance') setOpenedAppearance(true);
+  }, [active]);
 
-  function open(next: Tab) {
-    setTab(next);
-    if (next === 'appearance') setOpenedAppearance(true);
-    if (catalog) setError('');
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const requestId = ++catalogRequest.current;
+    try {
+      const data = await api<CreatorCatalog>(path, { signal });
+      if (requestId === catalogRequest.current && !signal?.aborted) {
+        setCatalog(data);
+        setLoadFailure('');
+      }
+    } catch (problem) {
+      if (requestId === catalogRequest.current && !signal?.aborted) throw problem;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (active === 'analytics') return;
+    const controller = new AbortController();
+    void load(controller.signal).catch(problem => setLoadFailure(errorMessage(problem)));
+    return () => controller.abort();
+  }, [active, load, reload]);
+
+  async function updateStore(operation: () => Promise<unknown>, feedback: string) {
+    setBusy(true);
+    setFailure('');
     setNotice('');
-    requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>(':scope > div:not([hidden]) h1')?.focus());
+    try {
+      await operation();
+      setNotice(feedback);
+      await load();
+    } catch (problem) {
+      setFailure(errorMessage(problem));
+    } finally { setBusy(false); }
   }
 
   async function publish(published: boolean) {
-    setPublishing(true);
-    setError('');
-    setNotice('');
-    try {
+    await updateStore(async () => {
       await api(path + '/publication', { method: 'PUT', data: { published } });
-      await load();
-      setNotice(published ? t('Storefront published.') : t('Storefront unpublished.'));
-    } catch (failure) { setError(errorMessage(failure)); }
-    finally { setPublishing(false); }
+      unpublish.current?.close();
+    }, t(published ? 'Storefront published.' : 'Storefront unpublished.'));
   }
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get('name') ?? '').trim();
-    setError('');
-    setNotice('');
-    setPublishing(true);
+    if (!name) {
+      setFailure(t('Enter a creator name.'));
+      event.currentTarget.querySelector('input')?.focus();
+      return;
+    }
+    await updateStore(() => api(path + '/settings', { method: 'PATCH', data: { name } }), t('Storefront name saved.'));
+  }
+
+  async function signOut() {
+    setSigningOut(true);
+    setFailure('');
     try {
-      await api(path + '/settings', { method: 'PATCH', data: { name } });
-      await load();
-      setNotice(t('Storefront name saved.'));
-    } catch (failure) { setError(errorMessage(failure)); }
-    finally { setPublishing(false); }
+      await api('/account/logout', { method: 'POST' });
+      announceAuthChange();
+      location.replace('/account?next=creator');
+    } catch (problem) {
+      setFailure(errorMessage(problem));
+      setSigningOut(false);
+    }
+  }
+
+  function addProduct() {
+    setStartDraft(crypto.randomUUID());
+    section.open('products');
   }
 
   const visible = catalog?.products.filter(product => product.published) ?? [];
   const store = catalog ? '/store/' + catalog.handle : '';
   const isLive = Boolean(catalog?.publishedDesign);
   const hasDesignUpdate = isLive && JSON.stringify(catalog?.publishedDesign) !== JSON.stringify(savedDesign);
-  return <div className="creator-workspace">
-    <a className="catalog-skip" href="#creator-content">{t('Skip to content')}</a>
-    <header className="catalog-header"><div className="catalog-shell catalog-top">
-      <a href="/creator" className="catalog-brand">nanti<span>.</span> <small>Creator Studio</small></a>
-      <div><LanguagePicker /><a className="catalog-account" href="/account"><Icon name="person" />{t('Account')}</a></div>
-    </div></header>
-    <div className="catalog-shell catalog-layout">
-    <nav className="catalog-nav" aria-label={t('Creator Studio navigation')}>
-      {tabs.map((value, index) => <button key={value} aria-current={tab === value ? 'page' : undefined}
-        type="button" onClick={() => open(value)}><Icon name={navigationIcons[index]!} />{labels[index]}</button>)}
-    </nav>
-    <main id="creator-content" className="catalog-main" ref={panel} tabIndex={-1}>
-      {error && <p className="catalog-error" role="alert">{error} {error === 'Sign in to continue.'
-        ? <a href="/account?next=creator">{t('Sign in again')}</a>
-        : !catalog && <button type="button" onClick={() => { setError(''); setReload(value => value + 1); }}>{t('Try again')}</button>}</p>}
-      {!error && !catalog && <p role="status">{t('Loading your storefront…')}</p>}
-      {catalog && <>
-        <div hidden={tab !== 'overview'}>
-          <div className="catalog-heading"><h1 tabIndex={-1}>{t('Make it yours.')}</h1>
-            {isLive && <a href={store}>{t('View live storefront')}</a>}</div>
-          <section className="catalog-panel" aria-label={t('Storefront overview')}>
-            <span className="catalog-badge" data-published={isLive}>{isLive ? t('Storefront live') : t('Storefront private')}</span>
-            <h2>{catalog.name}</h2>
-            <p>{catalog.products.length ? t('{published} of {total} products are published.', { published: visible.length, total: catalog.products.length }) : t('Add your first recommendation. Preview your storefront before opening it to visitors.')}</p>
-            <button type="button" className="catalog-primary" onClick={() => open('products')}>{t('Manage products')}</button>
-          </section>
-        </div>
-        <div hidden={tab !== 'products'}><CreatorProducts catalog={catalog} load={load} openPublishing={() => open('publishing')} /></div>
-        {openedAppearance && <div hidden={tab !== 'appearance'}>
-          <CreatorDesignStudio ownerId={ownerId} draft={draft} catalog={{ name: catalog.name, products: visible }} onSaved={setSavedDesign} />
-        </div>}
-        {tab === 'preview' && <div>
-          <div className="catalog-heading"><h1 tabIndex={-1}>{t('Storefront preview')}</h1>
-            {isLive && <a href={store}>{t('View live storefront')}</a>}</div>
-          <p>{isLive && !hasDesignUpdate ? t('This is what visitors see now.')
-            : t('Private preview with your saved design and published products.')}</p>
-          <CreatorStorefront preview design={savedDesign} catalog={{ name: catalog.name, products: visible }} />
-        </div>}
-        <div hidden={tab !== 'publishing'}>
-          <div className="catalog-heading"><h1 tabIndex={-1}>{t('Storefront publishing')}</h1></div>
-          <section className="catalog-panel" aria-label={t('Storefront visibility')}>
-            <div className="catalog-share-heading">
-              <Icon name={isLive ? 'check' : 'privacy'} />
-              <h2>{isLive ? t('Storefront is ready to share') : t('Your storefront is private')}</h2>
+  const labels = {
+    overview: t('Overview'), products: t('Products'), storefront: l('Etalase', 'Storefront'), appearance: t('Appearance'),
+    preview: t('Storefront preview'), settings: l('Pengaturan', 'Settings'), analytics: l('Analitik', 'Analytics'),
+  };
+  const catalogSection = active !== 'analytics';
+  return <AdminWorkspace name={l('Studio Kreator', 'Creator Studio')} section={section} language={language}
+    items={[
+      { id: 'overview', label: labels.overview, icon: LayoutDashboard },
+      { id: 'products', label: labels.products, icon: Package },
+      { id: 'storefront', label: labels.storefront, icon: Store },
+      { id: 'appearance', label: labels.appearance, icon: Palette },
+      { id: 'preview', label: labels.preview, icon: Eye, hidden: true },
+      { id: 'analytics', label: labels.analytics, icon: BarChart3 },
+      { id: 'settings', label: labels.settings, icon: Settings },
+    ]}
+    account={catalog?.name ?? l('Kreator', 'Creator')}
+    accountActions={<>
+      <a href="/account"><UserRound size={16} aria-hidden="true" />{t('Account')}</a>
+      <button type="button" disabled={signingOut} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />{l('Keluar', 'Sign out')}</button>
+    </>}
+    secondaryActions={<LanguagePicker />}>
+    {catalogSection && !catalog && <>
+      <WorkspaceHeading title={labels[active]} />
+      {loadFailure ? <div className="aw-error aw-actions" role="alert">
+        <span>{error(loadFailure)}</span>
+        {loadFailure === 'Sign in to continue.' ? <a href="/account?next=creator">{t('Sign in again')}</a>
+          : <button type="button" onClick={() => { setLoadFailure(''); setReload(value => value + 1); }}>{t('Try again')}</button>}
+      </div> : <WorkspaceLoading label={t('Loading your storefront…')} />}
+    </>}
+    {failure && !unpublish.current?.open && <p className="aw-error" role="alert">{error(failure)} {failure === 'Sign in to continue.'
+      ? <a href="/account?next=creator">{t('Sign in again')}</a> : <button type="button"
+        onClick={() => { setFailure(''); void load().catch(problem => setFailure(errorMessage(problem))); }}>{t('Try again')}</button>}</p>}
+    {catalog && <>
+      {active === 'overview' && <>
+        <WorkspaceHeading title={labels.overview}
+          description={l('Pantau katalog dan aktivitas produk etalasemu.', 'Review your catalog and recent storefront product activity.')}
+          action={<button type="button" className="aw-primary" onClick={addProduct}><Plus size={17} aria-hidden="true" />{t('Add product')}</button>} />
+        <WorkspaceStats locale={language === 'id' ? 'id-ID' : 'en-US'} items={[
+          { label: l('Total produk', 'Total products'), value: catalog.products.length, icon: Package },
+          { label: l('Produk terbit', 'Published products'), value: visible.length, icon: CircleCheck },
+          { label: l('Produk draf', 'Draft products'), value: catalog.products.length - visible.length, icon: FileText },
+        ]} />
+        <section className="aw-card" aria-labelledby="creator-activity">
+          <header className="aw-card-header"><div><h2 id="creator-activity">{l('Aktivitas produk terbaru', 'Recent product activity')}</h2>
+            <p>{l('Produk yang terakhir ditambahkan ke katalog.', 'Products most recently added to your catalog.')}</p></div>
+            <button type="button" onClick={() => section.open('products')}>{t('Manage products')}</button>
+          </header>
+          {catalog.products.length ? <ul className="aw-activity">{catalog.products.slice(0, 5).map(item => <li key={item.id}>
+            <WorkspaceThumbnail name={item.title} image={item.image} />
+            <div><strong>{item.title}</strong><p className="aw-muted">{l('Ditambahkan ke katalog', 'Added to catalog')}</p></div>
+            <span className="aw-badge" data-live={item.published}>{t(item.published ? 'Published' : 'Draft')}</span>
+            {item.createdAt && <time dateTime={item.createdAt}>{date(item.createdAt)}</time>}
+          </li>)}</ul> : <WorkspaceEmpty icon={Clock3} title={l('Belum ada aktivitas produk', 'No product activity yet')}
+            description={l('Produk yang kamu tambahkan akan muncul di sini.', 'Products you add will appear here.')} />}
+        </section>
+        <section className="aw-card"><header className="aw-card-header">
+          <div><h2>{catalog.name}</h2><p>{l('Etalase kreator', 'Creator storefront')}</p></div>
+          <div className="aw-actions"><span className="aw-badge" data-live={isLive}>{t(isLive ? 'Storefront live' : 'Storefront private')}</span>
+            <button type="button" onClick={() => section.open('storefront')}>{l('Kelola etalase', 'Manage storefront')}</button></div>
+        </header></section>
+      </>}
+      <div hidden={active !== 'products'}>
+        <CreatorProducts catalog={catalog} load={load} openPublishing={() => section.open('storefront')} startDraft={startDraft} />
+      </div>
+      {openedAppearance && <div hidden={active !== 'appearance'}>
+        <WorkspaceHeading title={labels.appearance} description={l('Atur desain dan urutan konten etalase.', 'Customize your storefront design and section order.')} />
+        <CreatorDesignStudio ownerId={ownerId} draft={draft} catalog={{ name: catalog.name, products: visible }} onSaved={setSavedDesign} />
+      </div>}
+      {active === 'preview' && <>
+        <WorkspaceHeading title={labels.preview}
+          description={t(isLive && !hasDesignUpdate ? 'This is what visitors see now.' : 'Private preview with your saved design and published products.')}
+          action={<button type="button" onClick={() => section.open('storefront')}>{l('Kembali ke etalase', 'Back to storefront settings')}</button>} />
+        <CreatorStorefront preview design={savedDesign} catalog={{ name: catalog.name, products: visible }} />
+      </>}
+      {active === 'storefront' && <>
+        <WorkspaceHeading title={labels.storefront} description={l('Kelola nama dan publikasi etalasemu.', 'Manage your storefront name and publication.')}
+          action={<button type="button" onClick={() => section.open('preview')}><Eye size={17} aria-hidden="true" />{t('Preview storefront')}</button>} />
+        <div className="aw-section-stack">
+          <section className="aw-card" aria-labelledby="storefront-publication">
+            <header className="aw-card-header"><h2 id="storefront-publication">{t('Storefront visibility')}</h2>
+              <span className="aw-badge" data-live={isLive}>{t(isLive ? 'Storefront live' : 'Storefront private')}</span></header>
+            <div className="aw-card-body aw-section-stack">
+              <p>{t('{published} of {total} products are published.', { published: visible.length, total: catalog.products.length })}</p>
+              {hasDesignUpdate && <p>{t('Publish your saved appearance to show the changes to visitors.')}</p>}
+              {!visible.length && <p>{t(catalog.products.length ? 'Publish a product from your catalog to show it here.' : 'Add your first product to get started.')}</p>}
+              {notice && <p className="aw-notice" role="status">{notice}</p>}
+              {isLive && <p className="aw-public-link"><a href={store} target="_blank" rel="noopener noreferrer">
+                <ExternalLink size={16} aria-hidden="true" />{t('View live storefront')}</a></p>}
+              <div className="aw-actions">
+                {!isLive && visible.length > 0 && <button className="aw-primary" type="button" disabled={busy} onClick={() => void publish(true)}>{t('Publish storefront')}</button>}
+                {!visible.length && <button type="button" onClick={() => section.open('products')}>{t('Manage products')}</button>}
+                {hasDesignUpdate && <button className="aw-primary" type="button" disabled={busy} onClick={() => void publish(true)}>{t('Publish saved design')}</button>}
+                {isLive && <button type="button" disabled={busy} onClick={() => { setFailure(''); unpublish.current?.showModal(); }}>{t('Unpublish storefront')}</button>}
+              </div>
             </div>
-            <ul className="catalog-readiness">
-              <li><Icon name={visible.length ? 'check' : 'compare'} /><div>
-                <strong>{t('{published} of {total} products are published.', { published: visible.length, total: catalog.products.length })}</strong>
-                {!visible.length && <p>{catalog.products.length ? t('Publish a product from your catalog to show it here.') : t('Add your first product to get started.')}</p>}
-              </div></li>
-              <li><Icon name="edit" /><div><strong>{isLive && hasDesignUpdate ? t('Saved appearance has changes') : t('Appearance ready to preview')}</strong>
-                {hasDesignUpdate && <p>{t('Publish your saved appearance to show the changes to visitors.')}</p>}
-              </div></li>
-            </ul>
-            {notice && <p role="status" className="catalog-notice">{notice}</p>}
-            {isLive && <div className="catalog-public-link">
-              <span>{t('Public storefront link')}</span>
-              <a href={store} aria-label={t('View live storefront')}>{new URL(store, window.location.origin).href}</a>
-            </div>}
-            <div className="catalog-actions">
-              {!isLive && visible.length > 0 && <button className="catalog-primary" type="button" disabled={publishing} onClick={() => void publish(true)}>{t('Publish storefront')}</button>}
-              {!visible.length && <button type="button" className="catalog-primary" onClick={() => open('products')}>{t('Manage products')}</button>}
-              {isLive && hasDesignUpdate && <button className="catalog-primary" type="button" disabled={publishing} onClick={() => void publish(true)}>{t('Publish saved design')}</button>}
-              <button type="button" onClick={() => open('preview')}>{t('Preview storefront')}</button>
-              {isLive && <button type="button" disabled={publishing} onClick={() => void publish(false)}>{t('Unpublish storefront')}</button>}
-            </div>
           </section>
-          <form className="catalog-panel catalog-form catalog-settings" key={catalog.name} onSubmit={event => void saveSettings(event)}>
-            <h2>{t('Storefront settings')}</h2>
-            <label htmlFor="storefront-name">{t('Storefront name')}</label>
-            <input id="storefront-name" name="name" defaultValue={catalog.name} required maxLength={100} disabled={publishing} />
-            <p>{t('Visitors see this name on your storefront. Your storefront link stays the same.')}</p>
-            <button type="submit" disabled={publishing}>{t('Save name')}</button>
+          <form className="aw-card" key={catalog.name} onSubmit={event => void saveSettings(event)}>
+            <header className="aw-card-header"><h2>{t('Storefront settings')}</h2></header>
+            <div className="aw-card-body aw-section-stack">
+              <label className="aw-field">{t('Storefront name')}
+                <input name="name" defaultValue={catalog.name} required maxLength={100} disabled={busy}
+                  aria-describedby="storefront-name-hint" />
+                <small id="storefront-name-hint">{t('Visitors see this name on your storefront. Your storefront link stays the same.')}</small>
+              </label>
+              <div><button type="submit" disabled={busy}>{t('Save name')}</button></div>
+            </div>
           </form>
         </div>
+        <dialog ref={unpublish} className="aw-dialog" aria-labelledby="unpublish-storefront-title"
+          onCancel={event => { if (busy) event.preventDefault(); }}>
+          <h2 id="unpublish-storefront-title">{t('Unpublish storefront')}</h2>
+          <p>{l('Pengunjung tidak bisa membuka etalase sampai kamu menerbitkannya lagi.', 'Visitors cannot open your storefront until you publish it again.')}</p>
+          {failure && <p className="aw-error" role="alert">{error(failure)}</p>}
+          <div className="aw-actions">
+            <button type="button" autoFocus disabled={busy} onClick={() => unpublish.current?.close()}>{t('Cancel')}</button>
+            <button type="button" className="aw-danger" disabled={busy} onClick={() => void publish(false)}>{t('Unpublish storefront')}</button>
+          </div>
+        </dialog>
       </>}
-    </main>
-    </div>
-  </div>;
+      {active === 'settings' && <>
+        <WorkspaceHeading title={labels.settings} description={l('Kelola profil kreator dan akun Nanti.', 'Manage your creator profile and Nanti account.')} />
+        <div className="aw-section-stack">
+          <section className="aw-card"><header className="aw-card-header"><h2>{l('Profil kreator', 'Creator profile')}</h2></header>
+            <div className="aw-card-body aw-actions"><strong>{catalog.name}</strong>
+              <button type="button" onClick={() => section.open('storefront')}>{l('Ubah nama etalase', 'Change storefront name')}</button></div>
+          </section>
+          <section className="aw-card"><header className="aw-card-header"><h2>{l('Akun Nanti', 'Nanti account')}</h2></header>
+            <div className="aw-card-body aw-section-stack"><p>{l('Kelola nama akun, metode masuk, dan kata sandi dari pengaturan akun.', 'Manage your account name, sign-in methods, and password in account settings.')}</p>
+              <div><a href="/account" className="aw-button">{l('Buka pengaturan akun', 'Open account settings')}</a></div>
+            </div>
+          </section>
+        </div>
+      </>}
+    </>}
+    {active === 'analytics' && <WorkspaceAnalytics language={language} />}
+  </AdminWorkspace>;
 }
+
 
 export function LiveCreatorStorefront() {
   const { language } = useLocale();
