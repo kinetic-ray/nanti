@@ -86,7 +86,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
   router.post('/requests', requestLimit, async (req, res) => {
     const parsed = requestBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
-    const { itemId, wishlistId, answers, estimatedPriceMinor } = parsed.data;
+    const { itemId, wishlistId, answers, finances, estimatedPriceMinor } = parsed.data;
     const screening = evaluateScreening(answers, null, new Date().toISOString().slice(0, 10));
     if (screening.outcome !== 'green' || screening.unanswered.length > 0) {
       return res.status(422).json({ error: 'Alternatif hanya tersedia untuk kebutuhan yang jelas, bukan pembelian impulsif.' });
