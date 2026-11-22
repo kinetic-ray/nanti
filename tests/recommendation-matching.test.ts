@@ -67,3 +67,18 @@ describe('curated alternative ranking', () => {
     expect(rankAlternatives({ ...source, priceMinor: null }, [candidate()])).toEqual([]);
   });
 });
+
+
+describe('estimated source prices', () => {
+  it('allows a cheaper curated product when the source price is a user estimate', () => {
+    const estimatedSource = { ...source, priceMinor: 120000000, priceVerified: false };
+    expect(rankAlternatives(estimatedSource, [candidate({ priceMinor: 80000000 })])).toHaveLength(1);
+  });
+  it('never recommends a product that is not cheaper than the estimate', () => {
+    const estimatedSource = { ...source, priceMinor: 70000000, priceVerified: false };
+    expect(rankAlternatives(estimatedSource, [candidate({ priceMinor: 80000000 })])).toHaveLength(0);
+  });
+  it('does not return alternatives without a valid comparable source price', () => {
+    expect(rankAlternatives({ ...source, priceMinor: null }, [candidate()])).toHaveLength(0);
+  });
+});
