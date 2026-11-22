@@ -24,3 +24,15 @@ export function assessPurchase(answers: ScreeningAnswers, finances: DecisionFina
     : screening.outcome === 'yellow' ? 'reflect' : 'consider';
   return { screening, safeToSpend, gap, share, financialRisk, decision } as const;
 }
+
+// Match grouping only for the selected locale; do not guess mixed separators.
+export function parseBudgetAmount(raw: string, language: 'id' | 'en'): bigint | null {
+  const value = raw.trim();
+  const match = language === 'id'
+    ? /^(\d+|\d{1,3}(?:\.\d{3})+)(?:,(\d{1,2}))?$/.exec(value)
+    : /^(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?$/.exec(value);
+  const whole = match?.[1]?.replace(/[.,]/g, '');
+  if (!whole || whole.length > 15) return null;
+  const fraction = match?.[2] ?? '';
+  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
+}

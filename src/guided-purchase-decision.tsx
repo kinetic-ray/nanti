@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { assessPurchase } from '../shared/purchase-decision.js';
+import { assessPurchase, parseBudgetAmount } from '../shared/purchase-decision.js';
 import { screeningQuestions } from '../shared/screening.js';
 import type { ScreeningAnswers } from '../shared/screening.js';
 import type { Item, Wishlist } from '../shared/wishlist.js';
@@ -30,11 +30,6 @@ const actions = {
   reflect: ['Kondisi uang memungkinkan, tetapi alasan membeli belum cukup kuat. Bandingkan manfaat dan alternatif.', 'Your finances may allow it, but your reasons are not yet strong. Compare benefits and alternatives.'],
   consider: ['Kebutuhan cukup jelas dan uang belanja masih mencukupi. Tetap bandingkan harga dan kualitas sebelum membeli.', 'The need is clear and spendable funds cover the price. Compare price and quality first.'],
 } as const;
-function toMinor(raw: string): bigint | null {
-  if (!/^\\d{1,15}(?:[.,]\\d{1,2})?$/.test(raw.trim())) return null;
-  const [whole, fraction = ''] = raw.trim().replace(',', '.').split('.');
-  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
-}
 export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; item: Item; close: () => void }) {
   const { language, money } = useLocale();
   const lang = language === 'id' ? 0 : 1;
@@ -48,9 +43,13 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
   const [error, setError] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const fixedPrice = item.priceMinor === null ? null : BigInt(item.priceMinor) * BigInt(item.quantity);
-  const priceValue = fixedPrice ?? toMinor(price);
-  const finance = priceValue !== null && toMinor(cash) !== null && toMinor(bills) !== null && toMinor(aside) !== null
-    ? { priceMinor: priceValue, cashMinor: toMinor(cash)!, billsMinor: toMinor(bills)!, setAsideMinor: toMinor(aside)! } : null;
+  const currentQuestion = screeningQuestions[question] ?? screeningQuestions[0];
+  const priceValue = fixedPrice ?? parseBudgetAmount(price, language);
+  const cashValue = parseBudgetAmount(cash, language);
+  const billsValue = parseBudgetAmount(bills, language);
+  const asideValue = parseBudgetAmount(aside, language);
+  const finance = priceValue !== null && cashValue !== null && billsValue !== null && asideValue !== null
+    ? { priceMinor: priceValue, cashMinor: cashValue, billsMinor: billsValue, setAsideMinor: asideValue } : null;
   const assessment = finance ? assessPurchase(answers, finance) : null;
   useEffect(() => { heading.current?.focus(); }, [stage, question]);
   function next() {
@@ -62,8 +61,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
     setStage(3);
   }
   function answer(value: boolean | undefined) {
-    const key = screeningQuestions[question];
-    setAnswers(current => ({ ...current, [key]: value }));
+    setAnswers(current => ({ ...current, [currentQuestion]: value }));
     if (question === screeningQuestions.length - 1) setStage(2);
     else setQuestion(current => current + 1);
   }
@@ -76,7 +74,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
     </div>
     {stage === 1 && <section className="decision-section">
       <p className="hint">{lang === 0 ? `Pertanyaan ${question + 1} dari ${screeningQuestions.length}` : `Question ${question + 1} of ${screeningQuestions.length}`}</p>
-      <h3 tabIndex={-1} ref={heading}>{prompts[screeningQuestions[question]][lang]}</h3>
+      <h3 tabIndex={-1} ref={heading}>{prompts[currentQuestion][lang]}</h3>
       <div className="answer-buttons screening-answers">
         <button type="button" onClick={() => answer(true)}>{lang === 0 ? 'Ya' : 'Yes'}</button>
         <button type="button" onClick={() => answer(false)}>{lang === 0 ? 'Tidak' : 'No'}</button>
