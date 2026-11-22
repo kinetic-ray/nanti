@@ -30,7 +30,7 @@ const readinessAdvice = {
 export function PurchaseTiming({ list, item, path, close }: {
   list: Wishlist; item?: Item; path: string; close: () => void;
 }) {
-  const { t, number, money, decimal, date, language, error: localError } = useLocale();
+  const { t, number, money, date, language, error: localError } = useLocale();
   const [values, setValues] = useState<Partial<Record<keyof TimingInput, string>>>({});
   const [plan, setPlan] = useState<PurchasePlan>([]);
   const [result, setResult] = useState<TimingPreview | null>(null);
