@@ -35,6 +35,8 @@ function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
   const { t, money, number, language } = useLocale();
   const [tool, setTool] = useState<'decision' | 'prices' | null>(null);
   const merchant = item.url ? safeProductUrl(item.url) : null;
+  // Render one modal at a time. Nested native dialogs can cause blank overlays and focus/history conflicts.
+  if (tool === 'decision') return <GuidedPurchaseDecision list={list} item={item} close={() => setTool(null)} />;
   return <Dialog title={item.name} busy={false} close={close} focusHeading className="decision product-dialog">
     <div className="product-overview">
       <ProductMedia item={item} listId={list.id} />
@@ -59,6 +61,5 @@ function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
     </div>
     <div className="form-actions detail-footer"><button type="button" onClick={close}>{t('Close')}</button></div>
     {tool === 'prices' && <PriceDetails listId={list.id} item={item} close={() => setTool(null)} onUpdate={onPriceUpdate} />}
-    {tool === 'decision' && <GuidedPurchaseDecision list={list} item={item} close={() => setTool(null)} />}
   </Dialog>;
 }

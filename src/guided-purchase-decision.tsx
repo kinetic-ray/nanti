@@ -30,10 +30,19 @@ const actions = {
   reflect: ['Kondisi uang memungkinkan, tetapi alasan membeli belum cukup kuat. Bandingkan manfaat dan alternatif.', 'Your finances may allow it, but your reasons are not yet strong. Compare benefits and alternatives.'],
   consider: ['Kebutuhan cukup jelas dan uang belanja masih mencukupi. Tetap bandingkan harga dan kualitas sebelum membeli.', 'The need is clear and spendable funds cover the price. Compare price and quality first.'],
 } as const;
-function toMinor(raw: string): bigint | null {
-  if (!/^\\d{1,15}(?:[.,]\\d{1,2})?$/.test(raw.trim())) return null;
-  const [whole, fraction = ''] = raw.trim().replace(',', '.').split('.');
-  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
+export function formatMoneyInput(raw: string, language: 'id' | 'en'): string {
+  const separator = language === 'id' ? '.' : ',';
+  // Keep entry simple: digits are whole currency units, grouped as they are typed.
+  // Paste from another locale is supported by stripping grouping marks.
+  const digits = raw.replace(/[^\d]/g, '').slice(0, 15);
+  if (!digits) return '';
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, separator);
+}
+export function toMinor(raw: string): bigint | null {
+  const trimmed = raw.trim();
+  if (!/^\d{1,15}$|^\d{1,3}(?:[.,]\d{3}){1,4}$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/[.,]/g, '');
+  return BigInt(digits) * 100n;
 }
 export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; item: Item; close: () => void }) {
   const { language, money } = useLocale();
@@ -90,10 +99,10 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
       <p><strong>{lang === 0 ? 'Harga barang' : 'Item price'}: </strong>{fixedPrice === null ? (lang === 0 ? 'Belum ada harga' : 'Price unknown') : currency(fixedPrice)}</p>
       <form noValidate autoComplete="off" onSubmit={event => { event.preventDefault(); next(); }}>
         <div className="guided-fields">
-          {fixedPrice === null && <label>{lang === 0 ? 'Perkiraan harga barang' : 'Estimated item price'}<input inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} placeholder="0" required /></label>}
-          <label>{lang === 0 ? 'Uang yang kamu punya' : 'Money you have'}<input inputMode="decimal" value={cash} onChange={event => setCash(event.target.value)} placeholder="0" required /></label>
-          <label>{lang === 0 ? 'Pengeluaran yang harus dibayar' : 'Expenses you still need to pay'}<input inputMode="decimal" value={bills} onChange={event => setBills(event.target.value)} placeholder="0" required /><small className="hint">{lang === 0 ? 'Misalnya makan, kos, cicilan, dan tagihan yang belum dibayar.' : 'For example food, rent, installments and unpaid bills.'}</small></label>
-          <label>{lang === 0 ? 'Uang yang ingin kamu sisihkan' : 'Money you want to set aside'}<input inputMode="decimal" value={aside} onChange={event => setAside(event.target.value)} placeholder="0" required /><small className="hint">{lang === 0 ? 'Misalnya tabungan atau dana darurat yang tidak ingin dipakai.' : 'For example savings or emergency money you want to protect.'}</small></label>
+          {fixedPrice === null && <label>{lang === 0 ? 'Perkiraan harga barang' : 'Estimated item price'}<input inputMode="numeric" value={price} onChange={event => setPrice(formatMoneyInput(event.target.value, language))} placeholder="0" required /></label>}
+          <label>{lang === 0 ? 'Uang yang kamu punya' : 'Money you have'}<input inputMode="numeric" value={cash} onChange={event => setCash(formatMoneyInput(event.target.value, language))} placeholder="0" required /></label>
+          <label>{lang === 0 ? 'Pengeluaran yang harus dibayar' : 'Expenses you still need to pay'}<input inputMode="numeric" value={bills} onChange={event => setBills(formatMoneyInput(event.target.value, language))} placeholder="0" required /><small className="hint">{lang === 0 ? 'Misalnya makan, kos, cicilan, dan tagihan yang belum dibayar.' : 'For example food, rent, installments and unpaid bills.'}</small></label>
+          <label>{lang === 0 ? 'Uang yang ingin kamu sisihkan' : 'Money you want to set aside'}<input inputMode="numeric" value={aside} onChange={event => setAside(formatMoneyInput(event.target.value, language))} placeholder="0" required /><small className="hint">{lang === 0 ? 'Misalnya tabungan atau dana darurat yang tidak ingin dipakai.' : 'For example savings or emergency money you want to protect.'}</small></label>
         </div>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="actions"><button type="button" onClick={() => { setStage(1); setQuestion(screeningQuestions.length - 1); }}>{lang === 0 ? 'Kembali' : 'Back'}</button><button className="primary" type="submit">{lang === 0 ? 'Lihat hasil' : 'See result'}</button></div>
