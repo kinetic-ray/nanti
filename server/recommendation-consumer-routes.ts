@@ -64,7 +64,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const { item, wishlist } = found;
     const comparisonPrice = item.priceMinor ?? estimatedPriceMinor;
     if (!comparisonPrice || !['save', 'alternative'].includes(assessPurchase(answers, {
-      priceMinor: BigInt(comparisonPrice), cashMinor: BigInt(finances.cashMinor),
+      priceMinor: BigInt(comparisonPrice) * BigInt(item.priceMinor === null ? 1 : item.quantity), cashMinor: BigInt(finances.cashMinor),
       billsMinor: BigInt(finances.billsMinor), setAsideMinor: BigInt(finances.setAsideMinor),
     }).decision)) return res.status(422).json({ error: 'Alternatif hanya tersedia ketika kondisi keuangan memerlukan pilihan lebih hemat.' });
     const candidates = await db.curatedRecommendation.findMany({
@@ -107,7 +107,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const category = inferCategory(item.name);
     const sourcePriceMinor = item.priceMinor ?? estimatedPriceMinor ?? null;
     if (sourcePriceMinor && !['save', 'alternative'].includes(assessPurchase(answers, {
-      priceMinor: BigInt(sourcePriceMinor), cashMinor: BigInt(finances.cashMinor),
+      priceMinor: BigInt(sourcePriceMinor) * BigInt(item.priceMinor === null ? 1 : item.quantity), cashMinor: BigInt(finances.cashMinor),
       billsMinor: BigInt(finances.billsMinor), setAsideMinor: BigInt(finances.setAsideMinor),
     }).decision)) return res.status(422).json({ error: 'Permintaan alternatif hanya untuk kebutuhan dengan keterbatasan anggaran.' });
     if (!category || !Number.isSafeInteger(sourcePriceMinor) || (sourcePriceMinor ?? 0) <= 0) {
