@@ -85,6 +85,16 @@ describe('recommendation admin HTTP lifecycle', () => {
     expect(db.curatedRecommendation.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { fulfillmentCursor: page(100)[99]?.id } }));
   });
+  it('resumes from the saved cursor after admin refresh', async () => {
+    const saved = '00000100-1111-4111-8111-111111111111';
+    const verified = { ...product, priceVerified: true, priceVerifiedAt: new Date(), fulfillmentCursor: saved };
+    const { app, db } = setup(verified);
+    const response = await request(app).patch(`/admin/recommendations/catalog/${id}/publication`)
+      .set(headers).send({ published: true });
+    expect(response.status).toBe(200);
+    expect(db.recommendationRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: { id: saved }, skip: 1 }));
+  });
   it('publishes only with fresh price verification', async () => {
     const verified = { ...product, priceVerified: true, priceVerifiedAt: new Date() };
     const { app, db } = setup(verified);
