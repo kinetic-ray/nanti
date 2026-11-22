@@ -63,7 +63,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (!parsed.success) return res.status(400).json({ error: 'Periksa kembali data produk yang diisi.' });
     const data = parsed.data;
     const result = await db.curatedRecommendation.updateMany({
-      where: { id }, data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false },
+      where: { id }, data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false, fulfillmentCursor: null },
     });
     if (!result.count) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
     res.json(await db.curatedRecommendation.findUnique({ where: { id } }));
