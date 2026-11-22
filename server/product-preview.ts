@@ -3,7 +3,7 @@ import type { DefaultTreeAdapterTypes } from 'parse5';
 import { isIkeaMetadataLink, productMerchant } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import { currencies, parsePrice } from '../shared/wishlist.js';
-import { extractTokopediaMetadata } from './tokopedia-metadata.js';
+import { extractTokopediaMetadata, requestPublicPage } from './tokopedia-metadata.js';
 
 type Diagnostic = (reason: string, host: string, status?: number) => void;
 type ProductPreview = { title: string | null; image: string | null; price: NonNullable<ProductImport['price']> | null; sellerName?: string; productUrl?: string };
@@ -34,8 +34,8 @@ export async function previewProductMetadata(url: URL, request?: typeof fetch, o
       ...(metadata.storeName && { sellerName: metadata.storeName.slice(0, 160) }),
     };
   }
-  request ??= fetch;
   if (merchant === 'shopee') return previewMarketplaceMetadata(url, request, onDiagnostic);
+  request ??= fetch;
   if (!isIkeaMetadataLink(url)) {
     onDiagnostic?.('adapter_disabled', url.hostname);
     return null;
@@ -147,7 +147,7 @@ const shopeeHosts = new Set([
 ]);
 function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase().replace(/^www\./u, '')); }
 
-async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
+async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | undefined, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
   const diagnostic = (reason: string, host: string, status?: number) => {
     // No full URLs, query strings, affiliate codes or product identifiers in logs.
     console.info('[product-import]', { merchant: productMerchant(initial.hostname), host, reason, ...(status === undefined ? {} : { status }) });
@@ -157,21 +157,25 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
   let hop = 0;
   try {
     current.hash = '';
+    const allowed = (url: URL) => url.protocol === 'https:' && isShopeeHost(url.hostname) &&
+      !url.username && !url.password && !url.port && url.href.length <= 4096;
+    if (!allowed(current)) { diagnostic('redirect_disallowed', current.hostname); return null; }
+    const visited = new Set<string>();
     for (hop = 0; hop < 6; hop++) {
-      if (current.protocol !== 'https:' || !isShopeeHost(current.hostname) ||
-          current.username || current.password || current.port) {
-        diagnostic('redirect_disallowed', current.hostname);
-        return null;
-      }
-      const response = await request(current, {
-        redirect: 'manual', signal: AbortSignal.timeout(3500),
-        headers: { accept: 'text/html' },
-      });
+      visited.add(current.href);
+      const signal = AbortSignal.timeout(3500);
+      const response = request
+        ? await request(current, { redirect: 'manual', signal, headers: { accept: 'text/html' } })
+        : await requestPublicPage(current, signal);
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location');
         await response.body?.cancel();
         if (!location) { diagnostic('redirect_missing_location', current.hostname, response.status); return null; }
-        current = new URL(location, current);
+        const target = URL.parse(location, current);
+        if (!target || !allowed(target)) { diagnostic('redirect_disallowed', current.hostname, response.status); return null; }
+        target.hash = '';
+        if (visited.has(target.href)) { diagnostic('redirect_limit', current.hostname, response.status); return null; }
+        current = target;
         continue;
       }
       if (!response.ok || !/^text\/html\b/i.test(response.headers.get('content-type') ?? '') ||
@@ -222,6 +226,13 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
               if (!value || typeof value !== 'object' || !('@type' in value)) continue;
               const kind = value['@type'];
               if (kind !== 'Product' && !(Array.isArray(kind) && kind.includes('Product'))) continue;
+              const listingMatches = !('url' in value) || (typeof value.url === 'string' && (() => {
+                try {
+                  const listed = new URL(value.url, current.origin);
+                  return listed.origin === current.origin && listed.pathname.replace(/\/$/u, '') === current.pathname.replace(/\/$/u, '');
+                } catch { return false; }
+              })());
+              if (!listingMatches) continue;
               if ('name' in value && typeof value.name === 'string') structuredTitle ??= value.name;
               const photos = 'image' in value ? value.image : null;
               const photo = Array.isArray(photos) ? photos[0] : photos;
@@ -231,13 +242,7 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
               // Aggregate/variant price ranges must not become a fabricated exact price.
               const rawOffers = 'offers' in value ? value.offers : null;
               const singleOffer = Array.isArray(rawOffers) ? (rawOffers.length === 1 ? rawOffers[0] : null) : rawOffers;
-              const listingMatches = !('url' in value) || (typeof value.url === 'string' && (() => {
-                try {
-                  const listed = new URL(value.url, current.origin);
-                  return listed.origin === current.origin && listed.pathname.replace(/\/$/u, '') === current.pathname.replace(/\/$/u, '');
-                } catch { return false; }
-              })());
-              if (listingMatches && singleOffer && typeof singleOffer === 'object' &&
+              if (singleOffer && typeof singleOffer === 'object' &&
                   '@type' in singleOffer && singleOffer['@type'] === 'Offer' &&
                   'price' in singleOffer && 'priceCurrency' in singleOffer) {
                 const offer = parseOffer(singleOffer.price, singleOffer.priceCurrency);
@@ -264,15 +269,15 @@ async function previewMarketplaceMetadata(initial: URL, request: typeof fetch, o
           const parsed = new URL(candidate, current);
           // Only publicly hosted Shopee image-CDN URLs; no arbitrary image fetching.
           const host = parsed.hostname.toLowerCase();
-          if (parsed.protocol === 'https:' && !parsed.username && !parsed.password &&
+          if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port && parsed.href.length <= 2048 &&
               (host === 'susercontent.com' || host.endsWith('.susercontent.com') ||
                host === 'shopee.co.id' || host.endsWith('.shopee.co.id'))) {
-            image = parsed.href.slice(0, 2048);
+            image = parsed.href;
             break;
           }
         } catch { /* Invalid image URL. */ }
       }
-      if (!title && !image) diagnostic('metadata_missing', current.hostname, response.status);
+      if (!title && !image && !price) diagnostic('metadata_missing', current.hostname, response.status);
       return title || image || price ? { title, image, price } : null;
     }
     diagnostic('redirect_limit', current.hostname);

@@ -107,3 +107,18 @@ it('revalidates the resolved listing and issues only an owner-scoped stored phot
     upload.mockRestore();
   }
 });
+
+describe.each([
+  { short: 'https://s.shopee.co.id/114aBAsydf', product: 'https://www.shopee.co.id/lamp-i.123.456' },
+  { short: 'https://tk.tokopedia.com/ZSp76BWQL/', product: listing },
+])('marketplace short-link fallback for $short', ({ short, product }) => {
+  it.each([403, 410])('retains the pasted link and destination HTTP %i', async (status) => {
+    const upstream = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(redirect(product))
+      .mockResolvedValueOnce(fixture('blocked', status));
+    const { body } = await post(appFor(upstream), 'import', short).expect(200);
+    expect(body).toMatchObject({ originalUrl: short, status: 'manual_required', name: null,
+      diagnostic: { code: 'http_failure', host: new URL(product).hostname, httpStatus: status } });
+    expect(upstream.mock.calls.map(([url]) => String(url))).toEqual([short, product]);
+  });
+});

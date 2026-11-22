@@ -32,8 +32,14 @@ for (const [network, prefix] of [
   ['203.0.113.0', 24], ['224.0.0.0', 3],
 ] as const) privateAddresses.addSubnet(network, prefix);
 
-async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
-  const addresses = await resolve4(url.hostname);
+export async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
+  signal.throwIfAborted();
+  // DNS resolution does not take an AbortSignal. Enforce the same deadline before TLS starts.
+  const addresses = await new Promise<string[]>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    resolve4(url.hostname).then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
   signal.throwIfAborted();
   const address = addresses[0];
   if (!address || addresses.some((ip) => privateAddresses.check(ip))) throw new Error('Non-public DNS answer');
