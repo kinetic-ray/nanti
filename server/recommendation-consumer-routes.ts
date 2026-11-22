@@ -107,6 +107,7 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
       normalizedUrl ? `url:${normalizedUrl}` : `item:${item.id}`;
     const key = createHash('sha256').update(identity).digest('hex');
     const category = inferCategory(item.name);
+    const sourceColor = /\b(?:white|putih)\b/iu.test(item.name) ? 'white' : /\b(?:black|hitam)\b/iu.test(item.name) ? 'black' : null;
     const sourcePriceMinor = item.priceMinor ?? estimatedPriceMinor ?? null;
     if (sourcePriceMinor && !['save', 'alternative'].includes(assessPurchase(answers, {
       priceMinor: BigInt(sourcePriceMinor) * BigInt(item.priceMinor === null ? 1 : item.quantity), cashMinor: BigInt(finances.cashMinor),
