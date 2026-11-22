@@ -9,9 +9,10 @@ export interface AlternativeRecommendationsProps {
   requestRecommendation: () => Promise<void>;
   onOpenProduct: (url: string) => void;
   canNotify: boolean;
+  currency?: string;
 }
 export function AlternativeRecommendations({
-  eligible, load, requestRecommendation, onOpenProduct, canNotify,
+  eligible, load, requestRecommendation, onOpenProduct, canNotify, currency = 'IDR',
 }: AlternativeRecommendationsProps) {
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
@@ -79,6 +80,9 @@ export function AlternativeRecommendations({
                   <li key={product.id}>
                     <strong>{product.title}</strong>
                     <p>{reasons.join(' · ')}</p>
+                    {product.priceMinor !== null && <p><strong>{new Intl.NumberFormat('id-ID', {
+                      style: 'currency', currency,
+                    }).format(product.priceMinor / 100)}</strong></p>}
                     <button type="button" onClick={() => onOpenProduct(product.url)}>
                       Lihat produk
                     </button>
