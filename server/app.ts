@@ -1,6 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import express from 'express';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from './generated/prisma/client.js';
 import { recommendationConsumerRoutes } from './recommendation-consumer-routes.js';
 import type { ErrorRequestHandler, Response } from 'express';
 import cookieParser from 'cookie-parser';
