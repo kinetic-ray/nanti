@@ -67,10 +67,10 @@ try {
   assert.equal(readiness.ok(), true);
   assert.equal((await readiness.json()).status, 'ready');
   await page.goto('/');
-  await button(page, 'Buat kategori').click();
-  const wishlist = modal('Kategori baru');
-  await wishlist.getByLabel('Nama kategori').fill('MVP browser fixture');
-  await button(wishlist, 'Simpan kategori').click();
+  await button(page, 'Buat wishlist').click();
+  const wishlist = modal('Kategori wishlist baru');
+  await wishlist.getByLabel('Nama kategori wishlist').fill('MVP browser fixture');
+  await button(wishlist, 'Simpan wishlist').click();
   await visible(page.getByRole('heading', { name: 'MVP browser fixture', exact: true }));
   list = (await (await page.request.get('/api/wishlists')).json()).find(entry => entry.name === 'MVP browser fixture');
   await add('Lampu manual', '60000,50');
