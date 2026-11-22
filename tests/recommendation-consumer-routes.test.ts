@@ -6,9 +6,10 @@ import { recommendationConsumerRoutes } from '../server/recommendation-consumer-
 
 const wishlistId = '11111111-1111-4111-8111-111111111111';
 const itemId = '22222222-2222-4222-8222-222222222222';
+const finances = { cashMinor: '50000000', billsMinor: '10000000', setAsideMinor: '10000000' };
 const answers = { practicalNeed: true, alreadyHave: false, useOften: true,
   canWait: true, withoutDiscount: true, socialPressure: false };
-const item = { id: itemId, name: 'New Balance 540 White', priceMinor: null,
+const item = { id: itemId, name: 'New Balance 540 White', priceMinor: null, quantity: 1,
   productIdentityId: null, url: 'https://www.tokopedia.com/store/nb540' };
 
 function setup(ownerId = 'owner-a') {
@@ -33,14 +34,14 @@ describe('recommendation HTTP eligibility', () => {
   it('rejects requests without the CSRF header', async () => {
     const { app, db } = setup();
     const result = await request(app).post('/recommendations/requests')
-      .send({ wishlistId, itemId, answers, estimatedPriceMinor: 100000000 });
+      .send({ wishlistId, itemId, answers, finances, estimatedPriceMinor: 100000000 });
     expect(result.status).toBe(403);
     expect(db.recommendationRequest.upsert).not.toHaveBeenCalled();
   });
   it('blocks FOMO before database access', async () => {
     const { app, db } = setup();
     const result = await request(app).post('/recommendations/alternatives')
-      .set(headers).send({ wishlistId, itemId,
+      .set(headers).send({ wishlistId, itemId, finances,
         answers: { ...answers, practicalNeed: false, socialPressure: true, withoutDiscount: false },
         estimatedPriceMinor: 100000000 });
     expect(result.status).toBe(422);
@@ -49,7 +50,7 @@ describe('recommendation HTTP eligibility', () => {
   it('rejects incomplete screening', async () => {
     const { app } = setup();
     const result = await request(app).post('/recommendations/requests')
-      .set(headers).send({ wishlistId, itemId, answers: { practicalNeed: true } });
+      .set(headers).send({ wishlistId, itemId, finances, answers: { practicalNeed: true } });
     expect(result.status).toBe(400);
   });
   it('accepts a manual estimate for an owned product with missing price', async () => {
