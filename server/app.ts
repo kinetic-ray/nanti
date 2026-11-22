@@ -22,7 +22,10 @@ import type { AffiliateRepository } from './prisma-affiliate.js';
 import { purchaseDestinationRoutes } from './purchase-destinations.js';
 import type { createProductMedia } from './product-media.js';
 import type { createImageStorage } from './image-storage.js';
-import { boundedJpeg, downloadTokopediaImage } from './tokopedia-metadata.js';
+import { boundedJpeg, downloadMarketplaceImage, downloadShopeeImage, downloadTokopediaImage } from './tokopedia-metadata.js';
+import { type createMysqlImageStorage, mysqlImageId, newMysqlImageKey, ProductImageWriteError } from './mysql-image-storage.js';
+import { compressProductImage } from './product-image-jpeg.js';
+import { signTokopediaImage, verifyTokopediaImage } from './tokopedia-image-proof.js';
 import { accountRoutes } from './account-routes.js';
 import type { Accounts } from './prisma-accounts.js';
 import type { OAuthProviders } from './oauth-providers.js';
@@ -64,6 +67,8 @@ type Options = {
   lookupMetadata?: (url: URL, request?: typeof fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) => ReturnType<typeof previewProductMetadata>;
   productMedia?: ReturnType<typeof createProductMedia>;
   imageStorage?: ReturnType<typeof createImageStorage>;
+  mysqlImages?: ReturnType<typeof createMysqlImageStorage>;
+  marketplaceImageRequest?: Parameters<typeof downloadMarketplaceImage>[2];
   secret: string;
   secureCookies: boolean;
   trustedProxy?: string | number;
@@ -76,8 +81,8 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, prices, recommendationsDb, recommendationSuperadminEnabled = false, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage,
-  secret, secureCookies, trustedProxy, webRoot, checkDatabase, retention }: Options) {
+export function createApp({ repository, intelligence, prices, recommendationsDb, recommendationSuperadminEnabled = false, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage, mysqlImages,
+  marketplaceImageRequest, secret, secureCookies, trustedProxy, webRoot, checkDatabase, retention }: Options) {
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
@@ -192,6 +197,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     message: { error: 'Too many image uploads. Try again shortly.' },
   });
   api.post('/uploads/product-image', limitImageUpload, async (req, res) => {
+    if (mysqlImages) return res.status(410).json({ error: 'Refresh to use the secure image uploader.' });
     if (!imageStorage) return res.status(503).json({ error: 'Image uploads are not configured.' });
     if (imageStorage.provider === 'r2') return res.status(410).json({ error: 'Refresh to use the secure image uploader.' });
     const { contentType, size } = z.strictObject({
@@ -204,11 +210,19 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
 
   api.post('/uploads/product-image/content', limitImageUpload,
     express.raw({ type: 'image/jpeg', limit: 195_000, inflate: false }), async (req, res) => {
-      if (!imageStorage) return res.status(503).json({ error: 'Image uploads are not configured.' });
+      if (!mysqlImages && !imageStorage) return res.status(503).json({ error: 'Image uploads are not configured.' });
       if (!Buffer.isBuffer(req.body) || !boundedJpeg(req.body)) {
         return res.status(400).json({ error: 'Choose a valid JPEG photo.' });
       }
       const owner = res.locals.ownerId as string;
+      if (mysqlImages) {
+        const bytes = await compressProductImage(req.body);
+        if (!bytes) return res.status(400).json({ error: 'Choose a valid JPEG photo.' });
+        const key = await mysqlImages.storeJpeg(owner, bytes).catch(() => null);
+        if (!key) return res.status(502).json({ error: 'Image upload failed. Try again.' });
+        return res.status(201).json({ key });
+      }
+      if (!imageStorage) return res.sendStatus(503);
       const { key } = imageStorage.createUpload(owner);
       const stored = await imageStorage.storeJpeg(owner, req.body, key).catch(() => null);
       if (!stored) {
@@ -219,13 +233,16 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     });
 
   api.get('/wishlists/:listId/items/:itemId/uploaded-image', async (req, res) => {
-    if (!imageStorage) return notFound(res);
     const list = await repository.find(res.locals.ownerId, uuid.parse(req.params.listId));
     const item = list?.items.find(entry => entry.id === uuid.parse(req.params.itemId));
-    if (!item?.imageKey || !imageStorage.validKey(list!.scopeId ?? res.locals.ownerId, item.imageKey)) return notFound(res);
-    const image = await imageStorage.readJpeg(item.imageKey);
-    if (!image) return notFound(res);
-    res.set('Cache-Control', 'private, no-store').type('image/jpeg').send(image);
+    if (!item?.imageKey) return notFound(res);
+    const mysqlKey = mysqlImageId(item.imageKey);
+    const image = mysqlKey
+      ? await mysqlImages?.readJpeg(item.imageKey, item.id)
+      : imageStorage?.validKey(list?.scopeId ?? res.locals.ownerId, item.imageKey)
+        ? await imageStorage.readJpeg(item.imageKey) : null;
+    if (!image || (mysqlImages && !mysqlKey && !boundedJpeg(image))) return notFound(res);
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }).type('image/jpeg').send(image);
   });
 
   api.get('/wishlists/:listId/items/:itemId/image', rateLimit({
@@ -262,23 +279,38 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     if (!await repository.remove(res.locals.ownerId, uuid.parse(req.params.listId))) return notFound(res);
     res.sendStatus(204);
   });
-  api.post('/wishlists/:listId/items', async (req, res) => {
+  const limitMarketplaceSave = rateLimit({
+    windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
+    skip: req => !req.body?.saveMarketplaceImage && !req.body?.saveTokopediaImage,
+    message: { error: 'Too many store photo requests. Try again shortly.' },
+  });
+  api.post('/wishlists/:listId/items', limitMarketplaceSave, async (req, res) => {
     const listId = uuid.parse(req.params.listId);
-    const { saveTokopediaImage, tokopediaProductUrl, ...input } = itemInput.extend({
+    const { saveMarketplaceImage, saveTokopediaImage, tokopediaProductUrl, tokopediaImage, ...input } = itemInput.extend({
+      saveMarketplaceImage: z.literal(true).optional(),
       saveTokopediaImage: z.literal(true).optional(), tokopediaProductUrl: z.string().max(2048).optional(),
+      tokopediaImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
     }).parse(req.body);
     const owner = res.locals.ownerId as string;
-    if (input.imageKey && (!imageStorage || !imageStorage.validKey(owner, input.imageKey) ||
-      !await imageStorage.exists(input.imageKey))) return res.status(400).json({ error: 'Image upload was not verified.' });
-    if (!saveTokopediaImage || input.imageKey) {
-      if (!await repository.addItem(owner, listId, input)) return notFound(res);
+    if (input.imageKey && !(mysqlImages && mysqlImageId(input.imageKey)) &&
+      (mysqlImages || !imageStorage?.validKey(owner, input.imageKey) || !await imageStorage.exists(input.imageKey))) {
+      return res.status(400).json({ error: 'Image upload was not verified.' });
+    }
+    if ((!saveMarketplaceImage && !saveTokopediaImage) || input.imageKey) {
+      try {
+        if (!await repository.addItem(owner, listId, input)) return notFound(res);
+      } catch (error) {
+        if (error instanceof ProductImageWriteError) return res.status(400).json({ error: error.message });
+        throw error;
+      }
       return res.sendStatus(201);
     }
 
     const requestId = uuid.parse(req.get('Idempotency-Key'));
     const listing = input.url && safeImportUrl(input.url);
-    if (!listing || productMerchant(listing.hostname) !== 'tokopedia') {
-      return res.status(400).json({ error: 'Enter a valid Tokopedia product link.' });
+    const merchant = listing && productMerchant(listing.hostname);
+    if (!listing || (merchant !== 'tokopedia' && (merchant !== 'shopee' || !saveMarketplaceImage))) {
+      return res.status(400).json({ error: 'Enter a valid Shopee or Tokopedia product link.' });
     }
 
     const list = await repository.find(owner, listId);
@@ -293,6 +325,43 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const existing = list.items.find(item => item.id === requestId);
     if (existing) return replay(existing);
 
+    if (mysqlImages) {
+      let photo: Buffer | null = null;
+      try {
+        const loadPhoto = async (url: string) => {
+          const bytes = await downloadMarketplaceImage(merchant, url, marketplaceImageRequest);
+          return bytes ? compressProductImage(bytes, true) : null;
+        };
+        const verifiedImage = merchant === 'tokopedia' && tokopediaImage && tokopediaProductUrl &&
+          verifyTokopediaImage(secret, { owner, listing: listing.href, product: tokopediaProductUrl, image: tokopediaImage.url },
+            tokopediaImage.proof) ? tokopediaImage.url : null;
+        if (verifiedImage) photo = await loadPhoto(verifiedImage);
+        if (!photo) {
+          const metadata = await lookupMetadata?.(listing);
+          if (metadata?.image && metadata.image !== verifiedImage &&
+              (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl)) {
+            photo = await loadPhoto(metadata.image);
+          }
+        }
+      } catch {
+        // Metadata and download failures still allow a text-only save.
+      }
+      if (photo) {
+        try {
+          if (await repository.addItem(owner, listId, { ...input, imageKey: newMysqlImageKey() }, requestId, photo)) {
+            return res.status(201).json({ photoStatus: 'saved' });
+          }
+        } catch (error) {
+          if (!(error instanceof ProductImageWriteError)) throw error;
+        }
+      }
+      if (await repository.addItem(owner, listId, { ...input, imageKey: null }, requestId)) {
+        return res.status(201).json({ photoStatus: 'unavailable' });
+      }
+      const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
+      return saved ? replay(saved) : notFound(res);
+    }
+
     const discard = async (key: string) => {
       if (!await imageStorage?.discard(key).catch(() => false)) {
         console.warn('Could not remove an unattached product photo.');
@@ -304,8 +373,9 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       try {
         // Recheck the original product link. No client-provided CDN URL is fetched.
         const metadata = await lookupMetadata(listing);
+        const download = merchant === 'tokopedia' ? downloadTokopediaImage : downloadShopeeImage;
         const bytes = metadata?.image && (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl) &&
-          await downloadTokopediaImage(metadata.image);
+          await download(metadata.image);
         if (bytes) {
           const scope = list.scopeId ?? owner;
           allocatedKey = imageStorage.createUpload(scope).key;
@@ -334,42 +404,34 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     if (writeError) throw writeError;
     return notFound(res);
   });
-  async function removeUnusedR2Image(key: string) {
-    try {
-      if (repository.imageReferenced && !await repository.imageReferenced(key) && !await imageStorage?.discard(key)) {
-        console.warn('Could not remove an unused product photo.');
-      }
-    } catch {
-      console.warn('Could not remove an unused product photo.');
-    }
-  }
-
-  async function previousR2Image(owner: string, listId: string, itemId: string) {
-    if (imageStorage?.provider !== 'r2' || !repository.imageReferenced) return null;
-    const list = await repository.find(owner, listId);
-    const key = list?.items.find(item => item.id === itemId)?.imageKey;
-    return key && imageStorage.validKey(list?.scopeId ?? owner, key) ? key : null;
-  }
-
   api.put('/wishlists/:listId/items/:itemId', async (req, res) => {
     const listId = uuid.parse(req.params.listId);
     const itemId = uuid.parse(req.params.itemId);
     const input = itemInput.parse(req.body);
-    if (input.imageKey && (!imageStorage || !imageStorage.validKey(res.locals.ownerId, input.imageKey) ||
-      !await imageStorage.exists(input.imageKey))) return res.status(400).json({ error: 'Image upload was not verified.' });
-    const previous = input.imageKey !== undefined ? await previousR2Image(res.locals.ownerId, listId, itemId) : null;
-    if (!await repository.updateItem(res.locals.ownerId, listId, itemId, input)) {
-      return notFound(res);
+    if (input.imageKey && !(mysqlImages && mysqlImageId(input.imageKey))) {
+      if (mysqlImages) {
+        const list = await repository.find(res.locals.ownerId, listId);
+        if (list?.items.find(item => item.id === itemId)?.imageKey !== input.imageKey) {
+          return res.status(400).json({ error: 'Image upload was not verified.' });
+        }
+        // Preserve the existing legacy reference without reattaching it.
+        delete input.imageKey;
+      } else if (!imageStorage?.validKey(res.locals.ownerId, input.imageKey) || !await imageStorage.exists(input.imageKey)) {
+        return res.status(400).json({ error: 'Image upload was not verified.' });
+      }
     }
-    if (previous && previous !== input.imageKey) await removeUnusedR2Image(previous);
+    try {
+      if (!await repository.updateItem(res.locals.ownerId, listId, itemId, input)) return notFound(res);
+    } catch (error) {
+      if (error instanceof ProductImageWriteError) return res.status(400).json({ error: error.message });
+      throw error;
+    }
     res.sendStatus(204);
   });
   api.delete('/wishlists/:listId/items/:itemId', async (req, res) => {
     const listId = uuid.parse(req.params.listId);
     const itemId = uuid.parse(req.params.itemId);
-    const previous = await previousR2Image(res.locals.ownerId, listId, itemId);
     if (!await repository.removeItem(res.locals.ownerId, listId, itemId)) return notFound(res);
-    if (previous) await removeUnusedR2Image(previous);
     res.sendStatus(204);
   });
 
@@ -397,7 +459,12 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: original, name,
       ...(merchant === 'tokopedia' && meta?.productUrl && { productUrl: meta.productUrl }),
-      ...(merchant === 'tokopedia' && imageStorage && imagePath && meta?.productUrl && { canSaveImage: true }),
+      ...((merchant === 'tokopedia' || merchant === 'shopee') && (mysqlImages || imageStorage) && imagePath && { canSaveImage: true }),
+      ...(mysqlImages && merchant === 'tokopedia' && meta?.productUrl && imagePath && {
+        tokopediaImageProof: signTokopediaImage(secret, {
+          owner: res.locals.ownerId, listing: url.href, product: meta.productUrl, image: imagePath,
+        }),
+      }),
       ...(imagePath && { imagePath }),
       ...(meta?.price && { price: meta.price }),
       ...(meta?.sellerName && { sellerName: meta.sellerName }),
@@ -408,13 +475,14 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   });
   api.post('/products/import/tokopedia-image', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
-    if (!imageStorage || !lookupMetadata || url.origin !== 'https://www.tokopedia.com' || url.search || url.hash) {
+    if ((!mysqlImages && !imageStorage) || !lookupMetadata || url.origin !== 'https://www.tokopedia.com' || url.search || url.hash) {
       return res.status(422).json({ error: 'The store photo could not be saved. You can upload your own.' });
     }
     try {
       const metadata = await lookupMetadata(url);
       const bytes = metadata?.image && await downloadTokopediaImage(metadata.image);
-      const imageKey = bytes && await imageStorage.storeJpeg(res.locals.ownerId, bytes);
+      const photo = bytes && (mysqlImages ? await compressProductImage(bytes) : bytes);
+      const imageKey = photo && await (mysqlImages ?? imageStorage)?.storeJpeg(res.locals.ownerId, photo);
       if (imageKey) return res.status(201).json({ imageKey });
     } catch {
       // Keep temporary retailer and storage URLs out of logs and responses.

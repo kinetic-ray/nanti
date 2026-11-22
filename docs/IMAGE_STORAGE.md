@@ -1,26 +1,23 @@
-# Product image storage (Issue #11)
+# Product image storage
 
-This branch replaces the earlier TiDB Base64 image design with a portable S3-compatible private bucket. **The imageKey schema was merged into main before the production migration was verified. Do not assume the deployed application is healthy until the migration has been applied and /api/health returns ready.**
+Nanti stores new wishlist photos as JPEGs in MySQL. The `ProductImage` table holds a random image ID, MIME type, size, SHA-256 checksum, timestamps, and `MEDIUMBLOB` bytes. Wishlist responses still return `Item.imageKey`. Ordinary item reads select no image bytes.
 
-## Setup
+## Local setup
 
-Create a **private** Cloudflare R2 bucket. Configure `R2_ACCOUNT_ID`, `R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` in the backend environment. Use the account's HTTPS S3 endpoint and bucket-scoped object read/write credentials. The adapter uses the `auto` signing region. Leave `R2_PUBLIC_BASE_URL` blank for private images. A configured legacy `NANTI_S3_*` backend takes precedence so existing object references continue to use their original bucket.
+1. Use a local MySQL database and set `DATABASE_URL` in your shell or local `.env`. Keep the same `SESSION_SECRET` across restarts so the browser can reopen its wishlist.
+2. Run `npm ci`, `npm run db:migrate`, and `npm run dev`. Migration `20261123120000_product_image` adds the image table. `/api/health` checks that the table is available.
+3. Paste a Shopee or Tokopedia product URL, preview it, then select **Save product**. Refresh the wishlist and restart the API to check that the photo still loads. Repeat with a manually selected photo to check that it takes priority.
+4. Set `TEST_DATABASE_URL` to a disposable, migrated MySQL database and run `npm test -- tests/mysql-product-images.test.ts tests/wishlist.test.ts tests/tokopedia-image.test.ts tests/tokopedia-metadata.test.ts tests/image-storage.test.ts`.
 
-## Data flow
+## Save and serve
 
-1. The browser compresses a selected photo into JPEG and sends it to Nanti's authenticated same-origin endpoint. The server checks the JPEG structure, dimensions and 195 KB size limit before uploading.
-2. Nanti stores the photo in a private owner-scoped object. The client receives only the object key.
-3. When the product is saved, Nanti checks the key's owner and verifies the stored object before persisting the reference.
-4. The wishlist photo endpoint checks ownership and serves bounded bytes using a server-side signed GET. R2 needs no browser CORS or public bucket URL for this flow.
-5. Removing or replacing an item photo attempts to delete the old R2 object once no item references it.
+- On save, Nanti resolves the listing again and uses the image URL from server-side metadata. The downloader uses the existing DNS-pinned HTTPS transport, marketplace-specific host allowlists, a four-second deadline, a 195,000-byte input ceiling, and rejects all image redirects. Only JPEG, PNG, and WebP are admitted to raster validation. The server checks the bytes and dimensions, decodes the image, and re-encodes it as a metadata-free JPEG. Output aims for 100–195 KB where the photo needs it, with a hard ceiling of 195,000 bytes. Small photos can be smaller.
+- The item, imported photo, and initial price observation share a transaction. If metadata, download, validation, or the image write fails, the item can still be saved and the UI reports that the store photo was unavailable. Manual uploads are staged as private standalone rows and attached once in the item transaction. A failed attachment keeps the existing photo and leaves the staged upload available for retry.
+- `GET /api/wishlists/:listId/items/:itemId/uploaded-image` checks wishlist access and then matches both the MySQL image ID and the item ID. It serves JPEG with `private, no-store` and `nosniff`. Photo replacements remove the old MySQL row in the same transaction. Item, wishlist, and owner deletions cascade to attached photos.
+- Retention cleanup deletes unattached uploads older than 24 hours. It runs on standalone startup and daily while the API runs, or through the existing retention cron on Vercel when configured.
 
-For Tokopedia, **Save product** copies the previewed listing photo automatically when storage is configured and no image was selected manually. Nanti uses its existing DNS-pinned HTTPS fetch, validates the retailer JPEG, and stores only the object key. If copying fails, the product can still be saved without the photo.
+## Legacy reads and remaining risks
 
-## Release gate
+Existing S3-compatible keys keep using the original private bucket. Keep complete `NANTI_S3_*` or `R2_*` settings if that bucket contains referenced photos. The legacy S3 configuration takes precedence when both are present. The runtime only reads legacy objects. There is no bucket backfill or object deletion in the migration.
 
-- Back up TiDB and verify that migration `20261118130000_item_image_data` has been applied. If not, run `npm run db:migrate` using the authorized production `DATABASE_URL` from a trusted environment; never paste credentials into issues or chat. First rehearse against an isolated copy. The `/api/health` readiness probe now selects `Item.imageKey` to detect a missing column even if no items exist.
-- Test S3 signing with the actual provider and bucket CORS (R2 and self-hosted S3).
-- Run `npm run typecheck`, `npm run build`, and browser smoke tests.
-- Verify guest/account ownership, editing and removing images, Android gallery Back, and that images survive reload.
-- Implement orphan cleanup for uploaded-but-unsaved images and replaced/deleted images before large-scale rollout.
-- Monitor storage usage and costs. Product photos from marketplaces require appropriate reuse permissions.
+Retailers may omit metadata, block automated requests, redirect images, or serve files above the download limit. Users can add their own photo in those cases. Monitor database growth, backup size, and the time it takes to restore image data. Keep retention cleanup enabled on serverless installations and verify the native image dependency on the intended host before rollout. Verify legacy reads against the actual bucket with authorized credentials before retiring it.

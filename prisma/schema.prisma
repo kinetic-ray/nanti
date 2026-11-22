@@ -39,10 +39,26 @@ model Item {
   productIdentity   ProductIdentity? @relation(fields: [productIdentityId], references: [id], onDelete: SetNull)
   priceObservations PriceObservation[]
   priceTarget       PriceTarget?
+  productImage      ProductImage?
 
   @@unique([ownerId, wishlistId, id])
   @@index([ownerId, wishlistId, createdAt])
   @@index([productIdentityId])
+}
+
+model ProductImage {
+  id        String   @id @db.Char(36)
+  ownerId   String   @db.Char(36)
+  itemId    String?  @unique @db.Char(36)
+  mimeType  String   @db.VarChar(32)
+  size      Int      @db.UnsignedInt
+  checksum  String   @db.Char(64)
+  bytes     Bytes    @db.MediumBlob
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  item      Item?    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, createdAt])
 }
 
 enum PriceSource {

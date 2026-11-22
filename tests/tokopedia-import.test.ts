@@ -61,7 +61,7 @@ describe('Tokopedia preview and import integration', () => {
     const { body } = await post(appFor(async () => fixture('blocked', 403)), 'import', affiliate).expect(200);
     expect(body).toMatchObject({
       originalUrl: affiliate, status: 'manual_required', name: null,
-      diagnostic: { code: 'http_failure', host: 'tokopedia.link', httpStatus: 403 },
+      diagnostic: { code: 'access_blocked', host: 'tokopedia.link', httpStatus: 403 },
     });
   });
 
@@ -109,16 +109,18 @@ it('revalidates the resolved listing and issues only an owner-scoped stored phot
 });
 
 describe.each([
-  { short: 'https://s.shopee.co.id/114aBAsydf', product: 'https://www.shopee.co.id/lamp-i.123.456' },
-  { short: 'https://tk.tokopedia.com/ZSp76BWQL/', product: listing },
-])('marketplace short-link fallback for $short', ({ short, product }) => {
-  it.each([403, 410])('retains the pasted link and destination HTTP %i', async (status) => {
+  { short: 'https://s.shopee.co.id/114aBAsydf', product: 'https://www.shopee.co.id/lamp-i.123.456',
+    blocked: 'http_failure', gone: 'http_failure' },
+  { short: 'https://tk.tokopedia.com/ZSp76BWQL/', product: listing,
+    blocked: 'access_blocked', gone: 'listing_unavailable' },
+])('marketplace short-link fallback for $short', ({ short, product, blocked, gone }) => {
+  it.each([[403, blocked], [410, gone]] as const)('retains the pasted link and destination HTTP %i', async (status, code) => {
     const upstream = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(redirect(product))
       .mockResolvedValueOnce(fixture('blocked', status));
     const { body } = await post(appFor(upstream), 'import', short).expect(200);
     expect(body).toMatchObject({ originalUrl: short, status: 'manual_required', name: null,
-      diagnostic: { code: 'http_failure', host: new URL(product).hostname, httpStatus: status } });
+      diagnostic: { code, host: new URL(product).hostname, httpStatus: status } });
     expect(upstream.mock.calls.map(([url]) => String(url))).toEqual([short, product]);
   });
 });
