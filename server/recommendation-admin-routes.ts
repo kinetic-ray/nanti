@@ -70,10 +70,13 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (!checked || !safeHttpsUrl(checked.href) || checked.href !== item.url) {
       return res.status(422).json({ error: 'Periksa harga di link produk yang tersimpan, lalu coba lagi.' });
     }
-    const updated = await db.curatedRecommendation.update({
-      where: { id }, data: { priceMinor: evidence.priceMinor, priceVerified: true, priceVerifiedAt: new Date(), published: false },
+    const changed = await db.curatedRecommendation.updateMany({
+      where: { id, url: checked.href },
+      data: { priceMinor: evidence.priceMinor, priceVerified: true, priceVerifiedAt: new Date(), published: false },
     });
-    res.json({ product: updated, message: 'Harga sudah dikonfirmasi. Periksa detail sebelum publikasi.' });
+    if (!changed.count) return res.status(409).json({ error: 'Link produk berubah. Muat ulang dan periksa lagi.' });
+    res.json({ product: await db.curatedRecommendation.findUnique({ where: { id } }),
+      message: 'Harga sudah dikonfirmasi. Periksa detail sebelum publikasi.' });
   });
   router.patch('/catalog/:id/publication', async (req, res) => {
     const id = uuid.parse(req.params.id);
