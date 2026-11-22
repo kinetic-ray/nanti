@@ -83,7 +83,15 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
         select: { productName: true },
       } },
     });
-    res.json({ notices });
+    const products = await db.curatedRecommendation.findMany({
+      where: { id: { in: notices.map(notice => notice.productId) }, published: true,
+        priceVerified: true, priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
+      select: { id: true, title: true, url: true, priceMinor: true, currency: true },
+    });
+    const valid = new Map(products.map(product => [product.id, product]));
+    res.json({ notices: notices.filter(notice => valid.has(notice.productId)).map(notice => ({
+      ...notice, product: valid.get(notice.productId),
+    })) });
   });
   router.patch('/notifications/:id/read', async (req, res) => {
     const id = uuid.parse(req.params.id);
