@@ -25,6 +25,7 @@ const runtimeConfig = z.object({
   NANTI_IKEA_PRICE_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
   NANTI_ADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
   NANTI_ADMIN_PASSWORD_HASH: z.string().regex(adminHashPattern).or(z.literal('')).default(''),
+  NANTI_RECOMMENDATION_SUPERADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
 }).refine((value) => Boolean(value.NANTI_ADMIN_USERNAME) === Boolean(value.NANTI_ADMIN_PASSWORD_HASH), {
   path: ['NANTI_ADMIN_PASSWORD_HASH'], message: 'Set both administrator variables or leave both empty.',
 });
@@ -90,6 +91,9 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     repository: prismaWishlists(db),
     intelligence,
     prices: prismaPrices(db),
+    recommendationsDb: db,
+    recommendationSuperadminEnabled: Boolean(env.NANTI_RECOMMENDATION_SUPERADMIN_USERNAME &&
+      env.NANTI_RECOMMENDATION_SUPERADMIN_USERNAME === env.NANTI_ADMIN_USERNAME),
     affiliate: prismaAffiliate(db),
     consumer: { accounts, providers },
     admin: env.NANTI_ADMIN_USERNAME && env.NANTI_ADMIN_PASSWORD_HASH ? {

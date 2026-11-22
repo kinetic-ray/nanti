@@ -398,3 +398,61 @@ model CreatorPage {
   updatedAt DateTime       @default(now()) @updatedAt
   profile   CreatorProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 }
+
+
+enum RecommendationRequestStatus {
+  pending
+  fulfilled
+}
+
+model CuratedRecommendation {
+  id             String   @id @default(uuid()) @db.Char(36)
+  title          String   @db.VarChar(160)
+  url            String   @db.VarChar(2048)
+  category       String   @db.VarChar(80)
+  color          String?  @db.VarChar(80)
+  style          String?  @db.VarChar(80)
+  useCase        String?  @db.VarChar(80)
+  description    String?  @db.VarChar(1000)
+  priceMinor     Int?
+  currency       String   @db.Char(3)
+  priceVerified  Boolean  @default(false)
+  priceVerifiedAt DateTime?
+  published      Boolean  @default(false)
+  priority       Int      @default(0)
+  fulfillmentCursor String? @db.Char(36)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([published, category, currency])
+}
+
+model RecommendationRequest {
+  id          String                      @id @default(uuid()) @db.Char(36)
+  ownerId     String                      @db.Char(36)
+  productKey  String                      @db.Char(64)
+  productName String                      @db.VarChar(160)
+  sourceCategory String?                  @db.VarChar(80)
+  sourcePriceMinor Int?
+  sourceCurrency String?                  @db.Char(3)
+  sourceColor String?                     @db.VarChar(80)
+  status      RecommendationRequestStatus @default(pending)
+  createdAt   DateTime                    @default(now())
+  fulfilledAt DateTime?
+  notices     RecommendationNotice[]
+
+  @@unique([ownerId, productKey])
+  @@index([status, productKey])
+}
+
+model RecommendationNotice {
+  id        String                @id @default(uuid()) @db.Char(36)
+  requestId String                @db.Char(36)
+  productId String                @db.Char(36)
+  readAt    DateTime?
+  createdAt DateTime              @default(now())
+  request   RecommendationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, productId])
+  @@index([requestId, readAt, createdAt])
+}

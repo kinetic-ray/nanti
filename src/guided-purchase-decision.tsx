@@ -4,6 +4,9 @@ import { screeningQuestions } from '../shared/screening.js';
 import type { ScreeningAnswers } from '../shared/screening.js';
 import type { Item, Wishlist } from '../shared/wishlist.js';
 import { useLocale } from './locale.js';
+import { api } from './api.js';
+import { AlternativeRecommendations } from './AlternativeRecommendations.js';
+import type { RecommendationMatch } from '../server/recommendation-matching.js';
 
 const prompts = {
   practicalNeed: ['Apakah barang ini benar-benar kamu butuhkan?', 'Do you actually need this item?'],
@@ -71,6 +74,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
   }
   function answer(value: boolean | undefined) {
     const key = screeningQuestions[question];
+    if (!key) return;
     setAnswers(current => ({ ...current, [key]: value }));
     if (question === screeningQuestions.length - 1) setStage(2);
     else setQuestion(current => current + 1);
@@ -84,7 +88,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
     </div>
     {stage === 1 && <section className="decision-section">
       <p className="hint">{lang === 0 ? `Pertanyaan ${question + 1} dari ${screeningQuestions.length}` : `Question ${question + 1} of ${screeningQuestions.length}`}</p>
-      <h3 tabIndex={-1} ref={heading}>{prompts[screeningQuestions[question]][lang]}</h3>
+      <h3 tabIndex={-1} ref={heading}>{prompts[screeningQuestions[question] ?? screeningQuestions[0]!][lang]}</h3>
       <div className="answer-buttons screening-answers">
         <button type="button" onClick={() => answer(true)}>{lang === 0 ? 'Ya' : 'Yes'}</button>
         <button type="button" onClick={() => answer(false)}>{lang === 0 ? 'Tidak' : 'No'}</button>
@@ -121,7 +125,34 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
         <li>{assessment.screening.outcome === 'red' ? (lang === 0 ? 'Jawabanmu menunjukkan alasan membeli belum kuat atau ada pengaruh tren dan dorongan sesaat.' : 'Your answers suggest a weak need or outside pressure.') : assessment.screening.outcome === 'green' ? (lang === 0 ? 'Jawabanmu menunjukkan manfaat atau kebutuhan yang cukup jelas.' : 'Your answers indicate a clear practical benefit.') : (lang === 0 ? 'Beberapa alasan membeli masih perlu dipastikan.' : 'Some buying reasons remain unclear.')}</li>
         <li>{assessment.gap > 0n ? (lang === 0 ? `Uang aman untuk belanja kurang ${currency(assessment.gap)} dari harga barang.` : `Your protected budget is short by ${currency(assessment.gap)}.`) : assessment.share !== null && assessment.share > 50 ? (lang === 0 ? 'Barang ini menghabiskan lebih dari separuh uang aman untuk belanja.' : 'This item uses over half your spendable funds.') : (lang === 0 ? 'Harga barang tercakup oleh uang yang tersisa setelah pengeluaran dan uang sisihan.' : 'The item fits after expenses and protected savings.')}</li>
       </ul>
-      <p className="hint">{lang === 0 ? 'Ini perkiraan berdasarkan jawaban dan angka yang kamu isi, bukan jaminan kondisi keuangan sehat. Uang yang kamu masukkan tidak disimpan oleh fitur ini.' : 'This is an estimate based on your answers, not a guarantee of financial health. The amounts entered here are not saved.'}</p>
+      {(assessment.decision === 'alternative' || assessment.decision === 'save') &&
+        assessment.screening.outcome === 'green' && (
+          <AlternativeRecommendations
+            eligible
+            currency={list.currency}
+            canNotify={false}
+            load={async () => {
+              const result = await api<{ alternatives: RecommendationMatch[] }>(
+                '/recommendations/alternatives', { method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+                  finances: { cashMinor: finance.cashMinor.toString(), billsMinor: finance.billsMinor.toString(),
+                    setAsideMinor: finance.setAsideMinor.toString() },
+                  ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
+                    ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) } });
+              return result.alternatives;
+            }}
+            requestRecommendation={async () => {
+              await api('/recommendations/requests', {
+                method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+                  finances: { cashMinor: finance.cashMinor.toString(), billsMinor: finance.billsMinor.toString(),
+                    setAsideMinor: finance.setAsideMinor.toString() },
+                  ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
+                    ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) },
+              });
+            }}
+            onOpenProduct={(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }}
+          />
+        )}
+      <p className="hint">{lang === 0 ? 'Ini perkiraan berdasarkan jawaban dan angka yang kamu isi, bukan jaminan kondisi keuangan sehat. Angka uang tunai, tagihan, dan dana sisihan tidak disimpan. Jika kamu meminta rekomendasi, harga barang dapat disimpan untuk mencocokkan alternatif.' : 'This is an estimate based on your answers, not a guarantee of financial health. Your cash, bills and set-aside amounts are not stored. If you request recommendations, the item price may be saved to match alternatives.'}</p>
       <div className="actions"><button type="button" onClick={() => setStage(2)}>{lang === 0 ? 'Ubah isian' : 'Edit budget'}</button><button type="button" className="primary" onClick={close}>{lang === 0 ? 'Selesai' : 'Done'}</button></div>
     </section>}
   </div>;

@@ -1,5 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import express from 'express';
+import type { PrismaClient } from './generated/prisma/client.js';
+import { recommendationConsumerRoutes } from './recommendation-consumer-routes.js';
 import type { ErrorRequestHandler, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -53,6 +55,8 @@ type Options = {
   repository: WishlistRepository;
   intelligence?: IntelligenceRepository;
   prices?: Prices;
+  recommendationsDb?: PrismaClient;
+  recommendationSuperadminEnabled?: boolean;
   affiliate?: AffiliateRepository;
   admin?: AdminCredentials;
   consumer?: { accounts: Accounts; providers: OAuthProviders };
@@ -72,7 +76,7 @@ function notFound(response: Response) {
   response.status(404).json({ error: 'This wishlist or item could not be found.' });
 }
 
-export function createApp({ repository, intelligence, prices, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage,
+export function createApp({ repository, intelligence, prices, recommendationsDb, recommendationSuperadminEnabled = false, affiliate, admin, consumer, preview, lookupMetadata, productMedia = async () => null, imageStorage,
   secret, secureCookies, trustedProxy, webRoot, checkDatabase, retention }: Options) {
   const app = express();
   const api = express.Router();
@@ -148,7 +152,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   });
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
-  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies));
+  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies, recommendationsDb, recommendationSuperadminEnabled));
   api.use('/admin', (_req, res) => res.status(404).json({
     error: affiliate && admin ? 'This administrator endpoint could not be found.' : 'Administrator sign-in is not configured.',
   }));
@@ -180,6 +184,7 @@ export function createApp({ repository, intelligence, prices, affiliate, admin, 
   });
   if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence, secret));
   if (prices) api.use(priceRoutes(prices));
+  if (recommendationsDb) api.use('/recommendations', recommendationConsumerRoutes(recommendationsDb));
   api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
   const limitImageUpload = rateLimit({
