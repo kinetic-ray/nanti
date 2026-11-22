@@ -77,5 +77,7 @@ describe('recommendation admin HTTP lifecycle', () => {
     expect(db.curatedRecommendation.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { published: true } }));
     expect(response.body.nextCursor).toBeNull();
+    expect(db.curatedRecommendation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { fulfillmentCursor: null } }));
   });
 });
