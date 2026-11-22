@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 15
     environment: production
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.TIDB_DATABASE_URL }}
     steps:
       - name: Checkout migration files
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::error::DATABASE_URL GitHub secret is missing."
+            echo "::error::TIDB_DATABASE_URL GitHub secret is missing."
             exit 1
           fi
       - name: Install locked dependencies
