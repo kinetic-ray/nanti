@@ -13,7 +13,7 @@ const product = { id, title: 'Brodo Nexus', url, category: 'sneakers',
 const input = { title: product.title, url, category: 'sneakers',
   color: 'white', style: 'retro', useCase: 'casual', description: null,
   priceMinor: 80000000, currency: 'IDR', priority: 0 };
-function setup(current = product) {
+function setup(current: Omit<typeof product, 'priceVerifiedAt'> & { priceVerifiedAt: Date | null } = product) {
   const db = {
     curatedRecommendation: {
       create: vi.fn().mockResolvedValue(current),
