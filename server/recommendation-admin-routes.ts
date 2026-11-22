@@ -128,7 +128,8 @@ export function recommendationAdminRoutes(db: PrismaClient) {
             });
           });
         }
-        cursor = requests[requests.length - 1].id;
+        cursor = requests.at(-1)?.id;
+        if (!cursor) break;
         if (requests.length < 100) break;
       }
     }
