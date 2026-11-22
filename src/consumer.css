@@ -1044,3 +1044,19 @@ body:has(.consumer) { background: #f8f6fc; }
 .masthead-identity > div > span { display: block; color: var(--muted); font-size: .75rem; }
 .masthead-sign-out { margin-top: .25rem; padding-top: .25rem; border-top: 1px solid var(--line); }
 .consumer .masthead-sign-out button { color: var(--danger); }
+
+
+/* Guided buying decision: a single flow, with progressive disclosure. */
+.consumer .guided-progress { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: .75rem 0 1.25rem; }
+.consumer .guided-progress span { border-bottom: 3px solid var(--line); padding: .65rem .25rem; font-size: .8rem; color: var(--muted); }
+.consumer .guided-progress span.active { border-color: var(--accent); color: var(--ink); font-weight: 750; }
+.consumer .guided-decision .screening-answers { margin: 1.25rem 0; }
+.consumer .guided-fields { display: grid; gap: 1rem; margin: 1.25rem 0; }
+.consumer .guided-fields label { display: grid; gap: .35rem; font-weight: 650; }
+.consumer .guided-fields input { width: 100%; min-height: 44px; font-size: 1rem; }
+.consumer .guided-fields small { font-weight: 400; }
+.consumer .guided-result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.consumer .guided-result-grid > div { background: var(--wash); border-radius: var(--radius); padding: .85rem; min-width: 0; display: grid; gap: .35rem; }
+.consumer .guided-result-grid small { color: var(--muted); }
+.consumer .guided-result-grid strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+@media (max-width: 400px) { .consumer .guided-result-grid { grid-template-columns: 1fr; } }
