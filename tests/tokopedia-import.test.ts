@@ -148,3 +148,10 @@ describe('Shopee product identity at the import API', () => {
     expect(body).toMatchObject({ originalUrl: product, status: 'details_available', name: 'Store page' });
   });
 });
+
+it.each(['https://S.SHOPEE.CO.ID:443/fixture?ref=a%2fb#saved', 'https://STORE.EXAMPLE:443/p?ref=a%2fb#saved'])(
+  'preserves the pasted spelling of an unavailable product URL', async original => {
+    const { body } = await post(appFor(async () => new Response(null, { status: 410 })), 'import', original).expect(200);
+    expect(body).toMatchObject({ originalUrl: original, status: 'manual_required', name: null });
+  },
+);
