@@ -107,8 +107,10 @@ try {
     await inbox.getByRole('heading', { name: 'Alternative product' }).waitFor();
     assert.ok(await inboxHeading.evaluate(el => el === document.activeElement));
     const markRead = inbox.getByRole('button', { name: 'Mark as read' });
-    await markRead.click();
+    await markRead.press('Enter');
     await markRead.waitFor({ state: 'hidden' });
+    const productLink = inbox.getByRole('link', { name: /View product/ });
+    assert.ok(await productLink.evaluate(el => el === document.activeElement));
 
     const nav = header.getByRole('button', { name: 'Open menu' });
     const profile = header.getByRole('button', { name: 'Profile menu' });

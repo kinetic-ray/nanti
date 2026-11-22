@@ -28,11 +28,15 @@ export function RecommendationInbox({ close, focusOnOpen }: { close: () => void;
       }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [reload]);
-  async function markRead(id: string) {
+  async function markRead(id: string, trigger?: HTMLButtonElement) {
     try {
       await api(`/recommendations/notifications/${encodeURIComponent(id)}/read`, {
         method: 'PATCH',
       });
+      if (trigger && trigger === trigger.ownerDocument.activeElement) {
+        const productLink = trigger.parentElement?.querySelector<HTMLAnchorElement>('a[href]');
+        (productLink ?? heading.current)?.focus();
+      }
       setNotices(current => current.map(notice =>
         notice.id === id ? { ...notice, readAt: new Date().toISOString() } : notice));
     } catch (failure) { setError(errorMessage(failure)); }
@@ -62,7 +66,8 @@ export function RecommendationInbox({ close, focusOnOpen }: { close: () => void;
               onClick={() => { if (!notice.readAt) void markRead(notice.id); }}>
               {t('View product')}<span className="sr-only"> ({t('opens in a new tab')})</span>
             </a>
-            {!notice.readAt && <button type="button" onClick={() => void markRead(notice.id)}>{t('Mark as read')}</button>}
+            {!notice.readAt && <button type="button" onClick={event =>
+              void markRead(notice.id, event.currentTarget)}>{t('Mark as read')}</button>}
           </div>
         </li>)}
       </ul>
