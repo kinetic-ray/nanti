@@ -136,7 +136,7 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
             }}
             requestRecommendation={async () => {
               await api('/recommendations/requests', {
-                method: 'POST', body: JSON.stringify({ wishlistId: list.id, itemId: item.id }),
+                method: 'POST', data: { wishlistId: list.id, itemId: item.id },
               });
             }}
             onOpenProduct={(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }}
