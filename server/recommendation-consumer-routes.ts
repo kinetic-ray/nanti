@@ -48,10 +48,14 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const item = wishlist?.items.find(entry => entry.id === itemId);
     return item && wishlist ? { item, wishlist } : null;
   }
-  router.get('/alternatives', readLimit, async (req, res) => {
-    const parsed = query.safeParse(req.query);
+  router.post('/alternatives', readLimit, async (req, res) => {
+    const parsed = requestBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Produk yang diminta tidak valid.' });
-    const { itemId, wishlistId } = parsed.data;
+    const { itemId, wishlistId, answers } = parsed.data;
+    const screening = evaluateScreening(answers, null, new Date().toISOString().slice(0, 10));
+    if (screening.outcome !== 'green' || screening.unanswered.length > 0) {
+      return res.status(422).json({ error: 'Alternatif hanya tersedia untuk kebutuhan yang jelas.' });
+    }
     const found = await ownedItem(res.locals.ownerId, wishlistId, itemId);
     if (!found) return res.status(404).json({ error: 'Produk ini belum ditemukan di daftar kamu.' });
     const { item, wishlist } = found;
