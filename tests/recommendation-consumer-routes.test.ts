@@ -56,7 +56,7 @@ describe('recommendation HTTP eligibility', () => {
   it('accepts a manual estimate for an owned product with missing price', async () => {
     const { app, db } = setup();
     const result = await request(app).post('/recommendations/requests')
-      .set(headers).send({ wishlistId, itemId, answers, estimatedPriceMinor: 100000000 });
+      .set(headers).send({ wishlistId, itemId, answers, finances, estimatedPriceMinor: 100000000 });
     expect(result.status).toBe(200);
     expect(db.recommendationRequest.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ sourcePriceMinor: 100000000 }) }));
@@ -65,14 +65,14 @@ describe('recommendation HTTP eligibility', () => {
     const { app, db } = setup();
     db.wishlist.findFirst.mockResolvedValue(null);
     const result = await request(app).post('/recommendations/alternatives')
-      .set(headers).send({ wishlistId, itemId, answers, estimatedPriceMinor: 100000000 });
+      .set(headers).send({ wishlistId, itemId, answers, finances, estimatedPriceMinor: 100000000 });
     expect(result.status).toBe(404);
     expect(db.curatedRecommendation.findMany).not.toHaveBeenCalled();
   });
   it('rejects an out-of-range estimated price', async () => {
     const { app } = setup();
     const result = await request(app).post('/recommendations/requests')
-      .set(headers).send({ wishlistId, itemId, answers, estimatedPriceMinor: 2_000_000_001 });
+      .set(headers).send({ wishlistId, itemId, answers, finances, estimatedPriceMinor: 2_000_000_001 });
     expect(result.status).toBe(400);
   });
 });
