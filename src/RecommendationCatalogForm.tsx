@@ -25,7 +25,7 @@ const blank = (url: string): CuratedCatalogDraft => ({
 });
 export function RecommendationCatalogForm({ importLink, saveDraft, initialDraft }: RecommendationCatalogFormProps) {
   const [step, setStep] = useState<Step>(initialDraft ? 'review' : 'link');
-  const [link, setLink] = useState('');
+  const [link, setLink] = useState(initialDraft?.url ?? '');
   const [draft, setDraft] = useState<CuratedCatalogDraft | null>(initialDraft ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +59,7 @@ export function RecommendationCatalogForm({ importLink, saveDraft, initialDraft 
     } finally { setBusy(false); }
   };
   return (
-    <section aria-label="Tambah rekomendasi" className="recommendation-catalog-form">
+    <section aria-label={initialDraft ? 'Edit rekomendasi' : 'Tambah rekomendasi'} className="recommendation-catalog-form">
       <h2>{initialDraft ? 'Edit rekomendasi' : 'Tambah rekomendasi'}</h2>
       <p>Tempel link produk, lalu lengkapi detailnya. Nama produk dicoba diambil otomatis dari marketplace. Kalau tidak tersedia, isi manual saja.</p>
       {step === 'link' && (
@@ -73,6 +73,9 @@ export function RecommendationCatalogForm({ importLink, saveDraft, initialDraft 
       {step === 'review' && draft && (
         <form onSubmit={event => { event.preventDefault(); void submit(); }}>
           <p>Periksa dulu, lalu simpan sebagai draf. Produk belum tampil untuk pengguna.</p>
+          <label htmlFor="recommendation-product-url">Link produk</label>
+          <input id="recommendation-product-url" type="url" required maxLength={2048}
+            value={draft.url} onChange={event => setDraft({ ...draft, url: event.target.value })} />
           <label htmlFor="recommendation-title">Nama produk</label>
           <input id="recommendation-title" required maxLength={160} value={draft.title}
             onChange={event => setDraft({ ...draft, title: event.target.value })} />
