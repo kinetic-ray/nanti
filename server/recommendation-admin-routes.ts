@@ -55,8 +55,9 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     res.status(201).json(product);
   });
   router.patch('/catalog/:id', async (req, res) => {
-    const id = uuid.safeParse(req.params.id);
-    if (!id.success) return res.status(400).json({ error: 'ID produk tidak valid.' });
+    const parsedId = uuid.safeParse(req.params.id);
+    if (!parsedId.success) return res.status(400).json({ error: 'ID produk tidak valid.' });
+    const id = parsedId.data;
     const parsed = productInput.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Periksa kembali data produk yang diisi.' });
     const data = parsed.data;
@@ -88,7 +89,9 @@ export function recommendationAdminRoutes(db: PrismaClient) {
       message: 'Harga sudah dikonfirmasi. Periksa detail sebelum publikasi.' });
   });
   router.patch('/catalog/:id/publication', async (req, res) => {
-    const id = uuid.parse(req.params.id);
+    const parsedId = uuid.safeParse(req.params.id);
+    if (!parsedId.success) return res.status(400).json({ error: 'ID produk tidak valid.' });
+    const id = parsedId.data;
     const parsed = publication.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Status publikasi tidak valid.' });
     const { published } = parsed.data;
