@@ -88,8 +88,12 @@ export function recommendationAdminRoutes(db: PrismaClient) {
         });
       }
     }
-    const result = await db.curatedRecommendation.updateMany({ where: { id }, data: { published } });
-    if (!result.count) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+    const result = await db.curatedRecommendation.updateMany({
+      where: published ? { id, priceVerified: true, priceMinor: { gt: 0 },
+        priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } } : { id },
+      data: { published },
+    });
+    if (!result.count) return res.status(409).json({ error: 'Produk tidak ditemukan atau harga perlu diverifikasi ulang.' });
     const product = await db.curatedRecommendation.findUnique({ where: { id } });
     if (published && product) {
       // Replay-safe: unique(requestId, productId) prevents duplicate notices.
