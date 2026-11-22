@@ -78,6 +78,18 @@ export function RecommendationCatalogForm({ importLink, saveDraft }: Recommendat
           <label htmlFor="recommendation-category">Kategori</label>
           <input id="recommendation-category" required maxLength={80} value={draft.category}
             placeholder="Misalnya sneakers" onChange={event => setDraft({ ...draft, category: event.target.value })} />
+          <label htmlFor="recommendation-color">Warna (opsional)</label>
+          <input id="recommendation-color" maxLength={80} value={draft.color ?? ''}
+            placeholder="Misalnya putih" onChange={event => setDraft({ ...draft, color: event.target.value || null })} />
+          <label htmlFor="recommendation-style">Gaya (opsional)</label>
+          <input id="recommendation-style" maxLength={80} value={draft.style ?? ''}
+            placeholder="Misalnya retro" onChange={event => setDraft({ ...draft, style: event.target.value || null })} />
+          <label htmlFor="recommendation-use-case">Kegunaan (opsional)</label>
+          <input id="recommendation-use-case" maxLength={80} value={draft.useCase ?? ''}
+            placeholder="Misalnya sehari-hari" onChange={event => setDraft({ ...draft, useCase: event.target.value || null })} />
+          <label htmlFor="recommendation-description">Catatan produk (opsional)</label>
+          <textarea id="recommendation-description" maxLength={1000} value={draft.description ?? ''}
+            onChange={event => setDraft({ ...draft, description: event.target.value || null })} />
           <label htmlFor="recommendation-price">Harga (opsional, rupiah)</label>
           <input id="recommendation-price" inputMode="numeric" value={draft.priceMinor === null ? '' : new Intl.NumberFormat('id-ID').format(draft.priceMinor / 100)}
             onChange={event => {
