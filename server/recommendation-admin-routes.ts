@@ -127,7 +127,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
           orderBy: { id: 'asc' }, take: 100,
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         });
-        if (!requests.length) break;
+        if (!requests.length) { continuation = null; break; }
         for (const request of requests) {
           const source: RecommendationProduct = {
             id: request.id, title: request.productName, category: request.sourceCategory,
@@ -148,7 +148,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
         }
         cursor = requests.at(-1)?.id;
         if (!cursor) break;
-        if (requests.length < 100) { cursor = undefined; break; }
+        if (requests.length < 100) { continuation = null; cursor = undefined; break; }
         continuation = cursor ?? null;
       }
     }
