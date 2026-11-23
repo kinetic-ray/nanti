@@ -162,6 +162,19 @@ try {
   await visible(list);
   console.log('PASS 360px guest sign-in, keyboard recovery, confirmation, import and accessibility');
 
+  for (const mode of ['verify', 'reset']) {
+    await guest.goto(`/account?recovery=${mode}#mode=${mode}&token=fixture`);
+    const recovery = modal(guest, 'Akunmu');
+    await visible(recovery.getByRole('button', { name: mode === 'reset' ? 'Simpan kata sandi baru' : 'Verifikasi email', exact: true }));
+    await guest.waitForFunction(() => location.hash === '');
+    await audit(guest, `360px signed-in ${mode}`);
+    await recovery.getByRole('link', { name: 'Kembali ke akun', exact: true }).click();
+    await visible(account.getByRole('link', { name: 'Creator Studio' }));
+  }
+  await button(account, 'Tutup').click();
+  await account.waitFor({ state: 'hidden' });
+  console.log('PASS signed-in recovery links, fragment cleanup and accessibility');
+
   const second = await device(390);
   const english = await open(second);
   await button(english, 'Switch to English').click();

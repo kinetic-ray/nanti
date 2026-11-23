@@ -1,6 +1,6 @@
 import { CreatorAccess } from './creator-access.js';
 import { createRoot } from 'react-dom/client';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { safeProductUrl } from '../shared/wishlist.js';
 import { sharedProductLink } from './share-target.js';
 import type { Currency, Item, ItemSaveInput, Wishlist, WishlistSummary } from '../shared/wishlist.js';
@@ -51,7 +51,8 @@ function App() {
   const [showAccount, setShowAccount] = useState(/^\/account\/?$/u.test(location.pathname));
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [recommendationsOpen, setRecommendationsOpen] = useState(false);
+  const [recommendations, setRecommendations] = useState<'initial' | 'dismissed' | 'reopened'>('initial');
+  const reopenRecommendations = useRef<HTMLButtonElement>(null);
   const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [sharedLink, setSharedLink] = useState(() => sharedProductLink(new URL(location.href)));
   const [sharedDraft, setSharedDraft] = useState(() => sharedProductLink(new URL(location.href)));
@@ -101,6 +102,10 @@ function App() {
 
   const selected = lists?.find((list) => list.id === selectedId) ?? lists?.[0];
   const activeId = selected?.id;
+
+  useEffect(() => {
+    if (recommendations === 'dismissed') reopenRecommendations.current?.focus();
+  }, [recommendations]);
 
   useEffect(() => {
     if (!lists || !sharedLink || !selected) return;
@@ -201,7 +206,6 @@ function App() {
           <span className="brand-symbol" aria-hidden="true" />
           <div className="brand">nanti<span>.</span></div>
         </div>
-        <button type="button" className="text-button" onClick={() => setRecommendationsOpen(true)}>Kabar alternatif</button>
         <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
           openAlerts={() => setAlertsOpen(true)} signIn={() => {
             setShowAccount(true);
@@ -321,6 +325,14 @@ function App() {
                     </ul></section>}
               </>}
           </>}
+          {lists && <div className="recommendation-slot">
+            {recommendations === 'dismissed'
+              ? <button ref={reopenRecommendations} className="recommendation-reopen" type="button"
+                onClick={() => setRecommendations('reopened')}>{t('Show alternative updates')}</button>
+              : <Suspense fallback={<p className="recommendation-status" role="status">{t('Loading alternative updates…')}</p>}>
+                <RecommendationInbox close={() => setRecommendations('dismissed')} focusOnOpen={recommendations === 'reopened'} />
+              </Suspense>}
+          </div>}
         </main>
       </div>
       {lists && <footer className="consumer-footer">
@@ -342,9 +354,6 @@ function App() {
       {tools && list && <Suspense fallback={<p role="status" className="sr-only">{t('Opening purchase tools…')}</p>}>
         <PurchaseTools list={list} lists={lists ?? []} selection={tools} close={() => setTools(null)} drafts={drafts}
           onPriceUpdate={() => setRevision(value => value + 1)} />
-      </Suspense>}
-      {recommendationsOpen && <Suspense fallback={<p role="status">Memuat kabar alternatif…</p>}>
-        <RecommendationInbox close={() => setRecommendationsOpen(false)} />
       </Suspense>}
       {alertsOpen && <Suspense fallback={<p role="status" className="sr-only">{t('Loading price alerts…')}</p>}>
         <PriceAlerts close={() => setAlertsOpen(false)} onRead={() => setRevision(value => value + 1)} />

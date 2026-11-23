@@ -17,6 +17,7 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
   const email = `fixture-${randomUUID()}@example.test`;
   const password = '12345678';
   const replacement = 'abcdefgh';
+  const newEmail = `changed-${randomUUID()}@example.test`;
   const app = createApp({ repository: prismaWishlists(db), consumer: { accounts, providers: {} },
     preview: async () => null, secureCookies: false, trustedProxy: 'loopback', secret: randomBytes(32).toString('hex') });
   const http = request.agent(app);
@@ -31,16 +32,32 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await post('/password/register', { email, password: '1234567' }).expect(400);
     await post('/password/register', { email, password }).expect(202);
     await post('/password/register', { email: email.toUpperCase(), password: replacement }).expect(202);
+    expect(await db.passwordCredential.count({ where: { email } })).toBe(1);
     await post('/password/login', { email, password }).expect(401);
+    await db.accountToken.updateMany({ where: { kind: 'verify', user: { password: { email } } }, data: { expiresAt: new Date(0) } });
+    await post('/password/verify', { code: outbox.get('verify'), password }).expect(400);
+    const expired = outbox.get('verify');
+    await post('/password/resend', { email }).expect(202);
     const verify = outbox.get('verify')!;
-    expect(Boolean(verify)).toBe(true);
+    expect(verify).toBeTruthy();
+    expect(verify).not.toBe(expired);
     await post('/password/verify', { code: 'A'.repeat(43), password }).expect(400);
     await post('/password/verify', { code: verify, password: replacement }).expect(400);
     await post('/password/verify', { code: verify, password }).expect(204);
     await post('/password/verify', { code: verify, password }).expect(400);
+    await http.post('/api/session').set('X-Nanti-Request', '1').send({}).expect(200);
+    const { body: guestList } = await http.post('/api/wishlists').set('X-Nanti-Request', '1')
+      .send({ name: 'Password guest fixture', currency: 'IDR' }).expect(201);
     await post('/password/login', { email, password }).expect(204);
     await http.get('/api/account').expect(200).expect(response => {
       expect(response.body.account).toMatchObject({ email, emailVerified: true, hasPassword: true });
+      expect(response.body.account.import).toMatchObject({ guestLists: 1, accountLists: 0 });
+    });
+    const wishlist = '/api/wishlists/' + guestList.id;
+    await http.get(wishlist).expect(404);
+    await post('/import', { confirm: true }).expect(204);
+    await http.get(wishlist).expect(200).expect(({ body }) => {
+      expect(body).toMatchObject({ id: guestList.id, name: 'Password guest fixture' });
     });
     await http.get('/api/account/admin').expect(403);
     await other.get('/api/account/creator').expect(401);
@@ -70,7 +87,11 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
       .send({ email, password }).expect(204);
     const otherCookie = concurrent.get('set-cookie')![0]!.split(';')[0]!;
     await post('/password/reset', { code: reset, password: '1234567' }).expect(400);
-    await post('/password/reset', { code: reset, password: replacement }).expect(204);
+    await other.post('/api/account/password/reset').set('X-Nanti-Request', '1').set('Cookie', oauthHeader)
+      .send({ code: reset, password: replacement }).expect(204).expect(({ headers }) => {
+        expect(headers['set-cookie']).toBeUndefined();
+      });
+    await other.get('/api/account/creator').set('Cookie', oauthHeader).expect(200);
     await post('/password/reset', { code: reset, password: replacement }).expect(400);
     await other.get('/api/account/creator').set('Cookie', otherCookie).expect(401);
     await post('/password/login', { email, password }).expect(401);
@@ -101,20 +122,28 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await post('/sessions/revoke-all', { confirm: true }).expect(204);
     await http.get('/api/account/creator').expect(401);
     await other.get('/api/account/creator').set('Cookie', thirdCookie).expect(401);
-    const newEmail = `changed-${randomUUID()}@example.test`;
     await post('/password/login', { email, password }).expect(204);
     await post('/password/email', { email: newEmail, currentPassword: replacement }).expect(403);
     await post('/password/email', { email: newEmail, currentPassword: password }).expect(202);
+    await db.accountToken.updateMany({ where: { userId: user.userId, kind: 'changeEmail' }, data: { expiresAt: new Date(0) } });
+    await post('/password/email/verify', { code: outbox.get('changeEmail') }).expect(400);
+    await post('/password/email', { email: newEmail, currentPassword: password }).expect(202);
     const emailCode = outbox.get('changeEmail');
     expect(emailCode).toBeTruthy();
-    await post('/password/email/verify', { code: emailCode }).expect(204);
+    await other.post('/api/account/password/email/verify').set('X-Nanti-Request', '1').set('Cookie', oauthHeader)
+      .send({ code: emailCode }).expect(204).expect(({ headers }) => {
+        expect(headers['set-cookie']).toBeUndefined();
+      });
+    await other.get('/api/account/creator').set('Cookie', oauthHeader).expect(200);
     await post('/password/email/verify', { code: emailCode }).expect(400);
     await http.get('/api/account/creator').expect(401);
     await post('/password/login', { email, password }).expect(401);
     await post('/password/login', { email: newEmail, password }).expect(204);
+    await http.get(wishlist).expect(200);
     await db.user.delete({ where: { id: user.userId } });
   } finally {
-    await db.user.deleteMany({ where: { OR: [{ password: { email } }, { identities: { some: { subjectHash: tokenHash(subject) } } }] } });
+    await db.user.deleteMany({ where: { OR: [{ password: { email: { in: [email, newEmail] } } },
+      { identities: { some: { subjectHash: tokenHash(subject) } } }] } });
     await db.$disconnect();
   }
 }, 25_000);

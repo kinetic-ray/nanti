@@ -79,6 +79,50 @@ body:has(.consumer) { background: #f8f6fc; }
 
 .consumer .workspace { display: block; padding: 1rem 0 0; }
 .consumer-main { min-width: 0; }
+.recommendation-slot { margin-block-start: clamp(.75rem, 2vw, 1.5rem); }
+.recommendation-inbox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: .75rem;
+  padding: .5rem;
+  padding-inline-start: clamp(.75rem, 2vw, 1rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.recommendation-heading { align-self: center; }
+.recommendation-heading h2 { margin: 0; font-size: .9375rem; text-wrap: balance; }
+.recommendation-status { margin: 0; color: var(--muted); font-size: .875rem; }
+.recommendation-status:not(:empty) { margin-block-start: .125rem; }
+.consumer .recommendation-close, .consumer .recommendation-reopen {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.consumer .recommendation-close:hover, .consumer .recommendation-reopen:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+.recommendation-details {
+  grid-column: 1 / -1;
+  padding: .5rem .5rem .5rem 0;
+  font-size: .875rem;
+}
+.recommendation-details p { margin: 0 0 .5rem; color: var(--muted); }
+.recommendation-list { display: grid; gap: .5rem; list-style: none; margin: 0; padding: 0; }
+.recommendation-list li {
+  min-width: 0;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  overflow-wrap: anywhere;
+}
+.recommendation-list h3 { font-size: .9375rem; }
+.recommendation-list strong { font-variant-numeric: tabular-nums; }
+.recommendation-actions { align-items: center; margin-block-start: .25rem; }
+.recommendation-actions a { display: inline-flex; min-height: 44px; align-items: center; }
+.recommendation-reopen { text-decoration: underline; text-underline-offset: .18em; }
 .rail-heading, .list-heading { display: flex; justify-content: space-between; align-items: center; gap: .7rem; }
 .rail-heading h2, .list-heading h1 { margin: 0; }
 .consumer .workspace > .collection-rail {

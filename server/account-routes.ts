@@ -52,8 +52,11 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
   });
 
 
-  const productionMail = transactionalAccountMail();
-  const sendMail = productionMail ?? developmentAccountMail(secure);
+  const useLocalMail = !secure && process.env.NODE_ENV === 'development' &&
+    process.env.NANTI_DEV_ACCOUNT_MAIL === 'file';
+  const developmentMail = developmentAccountMail(secure);
+  const productionMail = useLocalMail || developmentMail ? null : transactionalAccountMail();
+  const sendMail = developmentMail ?? productionMail;
   const passwordLimit = rateLimit({
     windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Too many account requests. Try again in a minute.' },
@@ -248,8 +251,10 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const changed = await accounts.passwords.consume(code, 'reset', password);
     if (!changed) return invalidCode(res);
     await notify(changed.email, 'passwordChanged');
-    clearSession(res);
-    clearAttempts(res);
+    if (!await session(req)) {
+      clearSession(res);
+      clearAttempts(res);
+    }
     res.sendStatus(204);
   });
   api.post('/password/login', passwordLimit, async (req, res) => {
@@ -303,8 +308,10 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
     const previousEmail = await accounts.passwords.confirmEmailChange(code);
     if (!previousEmail) return invalidCode(res);
     await notify(previousEmail, 'emailChanged');
-    clearSession(res);
-    clearAttempts(res);
+    if (!await session(req)) {
+      clearSession(res);
+      clearAttempts(res);
+    }
     res.sendStatus(204);
   });
 

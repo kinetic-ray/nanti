@@ -4,7 +4,11 @@ export type Currency = typeof currencies[number];
 export type WishlistSummary = { id: string; name: string; currency: Currency };
 export type ItemInput = { name: string; url: string | null; priceMinor: number | null; quantity: number; imageKey?: string | null; sellerName?: string | null };
 export type ItemWriteInput = ItemInput & { priceSource?: 'imported_unverified' };
-export type ItemSaveInput = ItemWriteInput & { saveMarketplaceImage?: true; tokopediaProductUrl?: string };
+export type ItemSaveInput = ItemWriteInput & {
+  saveMarketplaceImage?: true;
+  tokopediaProductUrl?: string;
+  tokopediaImage?: { url: string; proof: string };
+};
 export type Item = ItemInput & { id: string };
 export type Wishlist = WishlistSummary & {
   items: Item[];
