@@ -9,6 +9,7 @@
 .storefront-product-grid{grid-template-columns:repeat(var(--sf-columns,3),minmax(0,1fr))}
 .storefront-product-art{aspect-ratio:var(--sf-ratio,1/1)}
 .storefront-product-copy{color:var(--sf-ink)}
+.storefront:not(.storefront-walkthrough) .storefront-product-category{color:var(--sf-ink)}
 .storefront-card-bordered .storefront-product{border:1px solid color-mix(in srgb,var(--sf-ink) 22%,transparent);border-radius:var(--sf-radius);overflow:hidden}
 .storefront-card-bordered .storefront-product-copy,.storefront-card-solid .storefront-product-copy{padding:1rem}
 .storefront-card-solid .storefront-product{background:color-mix(in srgb,var(--sf-accent) 12%,var(--sf-page));border-radius:var(--sf-radius);overflow:hidden}
