@@ -28,6 +28,7 @@ describe('Saved product media', () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(page('https://example.test/image.jpg'));
     const media = createProductMedia(fetcher);
     await expect(media('https://example.test/item')).resolves.toBeNull();
+    await expect(media('https://www.tokopedia.com/shop/item')).resolves.toBeNull();
     await expect(media(listing + '?variant=blue')).resolves.toBeNull();
     expect(fetcher).not.toHaveBeenCalled();
     await expect(media(listing)).resolves.toBeNull();
