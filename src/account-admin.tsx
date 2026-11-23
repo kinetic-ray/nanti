@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import { ClipboardList, LayoutDashboard, LogOut, ShieldCheck, Users } from 'lucide-react';
 import { api, errorMessage } from './api.js';
 import { announceAuthChange } from './account.js';
 import type { AccountStatus } from '../shared/account.js';
-import './account-admin.css';
+import { AdminWorkspace, WorkspaceEmpty, WorkspaceHeading, useWorkspaceSection } from './admin-workspace.js';
 
 type Role = 'member' | 'admin';
 type Provider = 'google' | 'apple';
@@ -15,18 +15,14 @@ type Dashboard = {
 type View = { kind: 'loading' | 'forbidden' } | { kind: 'signin'; google: boolean }
   | { kind: 'error'; message: string } | { kind: 'ready'; data: Dashboard };
 
-const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+const date = new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 const providerLabel = { google: 'Google', apple: 'Apple' };
-const roleLabel = { admin: 'Administrator', member: 'Member' };
+const roleLabel = { admin: 'Administrator', member: 'Anggota' };
 
-function AdminSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return <section id={id} className="account-admin-panel" aria-labelledby={`${id}-heading`}>
-    <h2 id={`${id}-heading`}>{title}</h2>
-    {children}
-  </section>;
-}
+const sections = ['overview', 'users', 'activity'] as const;
 
 export function AccountAdmin() {
+  const section = useWorkspaceSection(sections, 'overview');
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [version, setVersion] = useState(0);
   const [pending, setPending] = useState<'starting' | 'redirecting' | 'logout' | null>(null);
@@ -105,75 +101,77 @@ export function AccountAdmin() {
     }
   }
 
-  const ready = view.kind === 'ready';
-  return <div className="site account-admin">
-    <header className="masthead">
-      <a href="/" className="brand-group account-admin-brand" aria-label="Nanti home">
-        <span className="brand-symbol" aria-hidden="true" />
-        <span className="brand">nanti<span>.</span></span>
-      </a>
-      <div className="actions">
-        <a href="/admin">Affiliate Center</a>
-        {(ready || view.kind === 'forbidden') &&
-          <button type="button" disabled={pending !== null} onClick={() => void signOut()}>Sign out</button>}
-      </div>
-    </header>
-    <main>
-      {error && <p className="error" role="alert">{error}</p>}
-      {ready ? <>
-        <div className="account-admin-heading">
-          <h1>Admin dashboard</h1>
-          <p>Manage access and review recent account activity.</p>
-        </div>
-        <nav className="account-admin-nav" aria-label="Dashboard">
-          <a href="#overview">Overview</a><a href="#users">Users</a><a href="#activity">Activity</a>
-          <button type="button" onClick={reload}>Refresh</button>
-        </nav>
-        <AdminSection id="overview" title="Your administrator profile">
-          <dl className="admin-facts">
-            <div><dt>Name</dt><dd>{view.data.profile.displayName || 'Unnamed account'}</dd></div>
-            <div><dt>Role</dt><dd>{roleLabel[view.data.profile.role]}</dd></div>
-            <div><dt>Sign-in methods</dt><dd>{view.data.profile.identities.map(({ provider }) => providerLabel[provider]).join(', ') || 'None'}</dd></div>
-            <div><dt>Account ID</dt><dd><code>{view.data.profile.id}</code></dd></div>
-          </dl>
-          <p>Administrators can view accounts and authentication activity. Members can manage their own Nanti account and wishlists.</p>
-        </AdminSection>
-        <AdminSection id="users" title="Recent users">
-          {view.data.users.length ? <ul className="account-admin-records">
-            {view.data.users.map(user => <li key={user.id}>
-              <div><strong>{user.displayName || 'Unnamed account'}</strong><code>{user.id}</code></div>
-              <span className="account-admin-role">{roleLabel[user.role]}</span>
-              <time dateTime={user.createdAt}>{date.format(new Date(user.createdAt))}</time>
-            </li>)}
-          </ul> : <p>No users yet.</p>}
-        </AdminSection>
-        <AdminSection id="activity" title="Recent authentication activity">
-          {view.data.activity.length ? <ul className="account-admin-records">
-            {view.data.activity.map(event => <li key={event.id}>
-              <div><strong>{event.kind === 'signed_in' ? 'Signed in' : 'Signed out'}</strong>
-                {event.userId ? <code>{event.userId}</code> : <span>Deleted account</span>}
-              </div>
-              {event.provider && <span>{providerLabel[event.provider]}</span>}
-              <time dateTime={event.createdAt}>{date.format(new Date(event.createdAt))}</time>
-            </li>)}
-          </ul> : <p>No authentication activity has been recorded yet.</p>}
-        </AdminSection>
-      </> : <section className="account-admin-panel account-admin-gate" aria-labelledby="admin-heading">
-        <h1 id="admin-heading">Nanti administration</h1>
-        {view.kind === 'loading' && <p role="status">Checking your session…</p>}
-        {view.kind === 'error' && <><p role="alert">{view.message}</p><button type="button" onClick={reload}>Try again</button></>}
-        {view.kind === 'forbidden' && <p role="alert">This account requires an administrator role. Sign out to switch accounts.</p>}
-        {view.kind === 'signin' && <>
-          <p>Sign in with your administrator account.</p>
-          {notice === 'failed' && <p role="alert">Could not finish signing in. Try again.</p>}
-          {notice === 'cancelled' && <p role="status">Sign-in was cancelled.</p>}
-          {notice === 'signed-out' && <p role="status">You signed out.</p>}
-          {!notice && <p>If your session expired, sign in again to continue.</p>}
-          {view.google ? <button type="button" className="account-admin-primary" disabled={pending !== null}
-            onClick={() => void signIn()}>Continue with Google</button> : <p role="status">Google sign-in is unavailable.</p>}
-          {pending && <p role="status">{pending === 'starting' ? 'Starting Google sign-in…' : 'Redirecting to Google…'}</p>}
-        </>}
-      </section>}
+  if (view.kind !== 'ready') return <div className="aw-gate">
+    <main className="aw-card">
+      <a className="aw-brand" href="/" aria-label="Beranda Nanti"><span className="brand-symbol" aria-hidden="true" />
+        <span className="aw-brand-copy"><strong>nanti<span>.</span></strong></span></a>
+      <h1>Administrasi akun</h1>
+      {error && <p className="aw-error" role="alert">Sesi akun belum dapat diproses. Coba lagi.</p>}
+      {view.kind === 'loading' && <p role="status">Memeriksa sesi…</p>}
+      {view.kind === 'error' && <><p role="alert">Data akun belum dapat dimuat.</p><button type="button" onClick={reload}>Coba lagi</button></>}
+      {view.kind === 'forbidden' && <>
+        <p role="alert">Akun ini memerlukan peran administrator.</p>
+        <button type="button" disabled={pending !== null} onClick={() => void signOut()}>Keluar</button>
+      </>}
+      {view.kind === 'signin' && <>
+        <p>Masuk dengan akun Google administrator.</p>
+        {notice === 'failed' && <p role="alert">Proses masuk belum selesai. Coba lagi.</p>}
+        {notice === 'cancelled' && <p role="status">Proses masuk dibatalkan.</p>}
+        {notice === 'signed-out' && <p role="status">Kamu sudah keluar.</p>}
+        {view.google ? <button type="button" className="aw-primary" disabled={pending !== null}
+          onClick={() => void signIn()}>Lanjutkan dengan Google</button> : <p role="status">Masuk dengan Google belum tersedia.</p>}
+        {pending && <p role="status">{pending === 'starting' ? 'Memulai masuk dengan Google…' : 'Membuka Google…'}</p>}
+      </>}
+      <p><a href="/admin">Masuk sebagai Superadmin</a></p>
     </main>
   </div>;
+
+  return <AdminWorkspace name="Administrasi akun" section={section} items={[
+    { id: 'overview', label: 'Ringkasan', icon: LayoutDashboard },
+    { id: 'users', label: 'Pengguna', icon: Users },
+    { id: 'activity', label: 'Aktivitas masuk', icon: ClipboardList },
+  ]} account={view.data.profile.displayName || 'Administrator'} accountActions={<>
+    <a href="/admin"><ShieldCheck size={16} aria-hidden="true" />Superadmin</a>
+    <button type="button" disabled={pending !== null} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />Keluar</button>
+  </>}>
+    {error && <p className="aw-error" role="alert">Sesi akun belum dapat diproses. Coba lagi.</p>}
+    {section.active === 'overview' && <>
+      <WorkspaceHeading title="Ringkasan" description="Lihat profil administrator dan tinjau aktivitas masuk akun Nanti."
+        action={<button type="button" onClick={reload}>Muat ulang</button>} />
+      <section className="aw-card">
+        <header className="aw-card-header"><h2>Profil administrator</h2></header>
+        <div className="aw-card-body"><dl className="admin-facts">
+          <div><dt>Nama</dt><dd>{view.data.profile.displayName || 'Akun tanpa nama'}</dd></div>
+          <div><dt>Peran</dt><dd>{roleLabel[view.data.profile.role]}</dd></div>
+          <div><dt>Metode masuk</dt><dd>{view.data.profile.identities.map(({ provider }) => providerLabel[provider]).join(', ') || '—'}</dd></div>
+          <div><dt>ID akun</dt><dd><code>{view.data.profile.id}</code></dd></div>
+        </dl></div>
+      </section>
+    </>}
+    {section.active === 'users' && <>
+      <WorkspaceHeading title="Pengguna" description="Akun yang terakhir terdaftar." action={<button type="button" onClick={reload}>Muat ulang</button>} />
+      <section className="aw-card">
+        {view.data.users.length ? <ul className="aw-activity">
+          {view.data.users.map(user => <li key={user.id}>
+            <div><strong>{user.displayName || 'Akun tanpa nama'}</strong><p><code>{user.id}</code></p></div>
+            <span className="aw-badge">{roleLabel[user.role]}</span>
+            <time dateTime={user.createdAt}>{date.format(new Date(user.createdAt))}</time>
+          </li>)}
+        </ul> : <WorkspaceEmpty title="Belum ada pengguna" />}
+      </section>
+    </>}
+    {section.active === 'activity' && <>
+      <WorkspaceHeading title="Aktivitas masuk" description="Peristiwa autentikasi akun terbaru." action={<button type="button" onClick={reload}>Muat ulang</button>} />
+      <section className="aw-card">
+        {view.data.activity.length ? <ul className="aw-activity">
+          {view.data.activity.map(event => <li key={event.id}>
+            <div><strong>{event.kind === 'signed_in' ? 'Masuk' : 'Keluar'}</strong>
+              <p>{event.userId ? <code>{event.userId}</code> : 'Akun dihapus'}</p></div>
+            {event.provider && <span>{providerLabel[event.provider]}</span>}
+            <time dateTime={event.createdAt}>{date.format(new Date(event.createdAt))}</time>
+          </li>)}
+        </ul> : <WorkspaceEmpty title="Belum ada aktivitas masuk" />}
+      </section>
+    </>}
+  </AdminWorkspace>;
 }

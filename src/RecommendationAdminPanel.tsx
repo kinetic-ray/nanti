@@ -7,7 +7,8 @@ type CatalogItem = CuratedCatalogDraft & {
 };
 type PendingRequest = { id: string; productName: string; status: string; createdAt: string };
 const base = '/admin/recommendations';
-export function RecommendationAdminPanel() {
+export function RecommendationAdminPanel({ onExpired }: { onExpired: () => void }) {
+  const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<CatalogItem[]>([]);
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [error, setError] = useState('');
@@ -23,22 +24,30 @@ export function RecommendationAdminPanel() {
       api<{ products: CatalogItem[] }>(`${base}/catalog`, { signal: controller.signal }),
       api<{ requests: PendingRequest[] }>(`${base}/requests`, { signal: controller.signal }),
     ]).then(([catalog, pending]) => {
+      if (controller.signal.aborted) return;
+      setLoading(false);
       setProducts(catalog.products); setRequests(pending.requests); setUnavailable(false); setError('');
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       const message = errorMessage(failure);
-      if (/not found|not configured|administrator endpoint/i.test(message)) setUnavailable(true);
-      else setError(message);
+      if (message === 'Administrator sign-in is required.') onExpired();
+      else if (/not found|not configured|administrator endpoint/i.test(message)) setUnavailable(true);
+      else setError('Rekomendasi belum dapat dimuat.');
     });
     return () => controller.abort();
-  }, [refresh]);
+  }, [refresh, onExpired]);
   async function mutate(id: string, operation: () => Promise<unknown>) {
     setBusy(id); setError('');
     try { await operation(); setRefresh(value => value + 1); }
-    catch (failure) { setError(errorMessage(failure)); }
+    catch (failure) {
+      if (errorMessage(failure) === 'Administrator sign-in is required.') onExpired();
+      else setError('Perubahan rekomendasi belum tersimpan. Coba lagi.');
+    }
     finally { setBusy(''); }
   }
-  if (unavailable) return null;
+  if (unavailable) return <p className="aw-card aw-card-body">Kurasi rekomendasi belum tersedia di lingkungan ini.</p>;
+  if (error && loading) return <div role="alert" className="aw-error">Rekomendasi belum dapat dimuat. <button type="button" onClick={() => { setError(''); setRefresh(value => value + 1); }}>Coba lagi</button></div>;
+  if (loading) return <p role="status">Memuat rekomendasi…</p>;
   return <section className="admin-panel" aria-label="Rekomendasi produk">
     <h2>Rekomendasi produk</h2>
     <p>Kurasi alternatif yang relevan. Produk baru selalu disimpan sebagai draf.</p>

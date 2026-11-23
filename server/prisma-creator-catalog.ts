@@ -17,7 +17,7 @@ export function prismaCreatorCatalog(db: PrismaClient) {
     catalog(userId: string) {
       return db.creatorProfile.findUnique({ where: { userId }, select: {
         name: true, handle: true, publishedDesign: true,
-        products: { orderBy: [...orderBy], select: { ...productFields, published: true } },
+        products: { orderBy: [...orderBy], select: { ...productFields, published: true, createdAt: true } },
       } });
     },
     storefront(handle: string) {
@@ -48,6 +48,17 @@ export function prismaCreatorCatalog(db: PrismaClient) {
     },
     async productPublication(profileId: string, id: string, published: boolean) {
       return (await db.creatorProduct.updateMany({ where: { id, profileId }, data: { published } })).count === 1;
+    },
+    async bulkProductPublication(profileId: string, ids: string[], published: boolean) {
+      return db.$transaction(async tx => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM CreatorProduct WHERE profileId = ${profileId} AND id IN (${Prisma.join(ids)})
+          ORDER BY id FOR UPDATE
+        `;
+        if (rows.length !== ids.length) return false;
+        await tx.creatorProduct.updateMany({ where: { id: { in: ids }, profileId }, data: { published } });
+        return true;
+      });
     },
     async remove(profileId: string, id: string) {
       return (await db.creatorProduct.deleteMany({ where: { id, profileId } })).count === 1;

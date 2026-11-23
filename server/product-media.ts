@@ -1,5 +1,5 @@
 import { identifyProduct } from './product-identity.js';
-import { previewProductMetadata } from './product-preview.js';
+import { previewIkeaImage } from './ikea-product-image.js';
 
 const imageTypes = new Set(['image/jpeg', 'image/webp', 'image/avif', 'image/png']);
 const maxBytes = 384 * 1024;
@@ -12,9 +12,9 @@ export function createProductMedia(request = fetch) {
   async function getThumbnail(canonical: string, market: string): Promise<Thumbnail | null> {
     try {
       const listing = new URL(canonical);
-      const product = await previewProductMetadata(listing, request);
-      if (!product?.image) return null;
-      const photo = new URL(product.image);
+      const image = await previewIkeaImage(listing, request);
+      if (!image) return null;
+      const photo = new URL(image);
       if (photo.origin !== listing.origin || photo.username || photo.password ||
           !photo.pathname.startsWith(`/${market}/images/products/`) ||
           !/^[a-z0-9_-]+\.(?:jpg|jpeg|png|webp|avif)$/iu.test(photo.pathname.split('/').at(-1) ?? '')) return null;

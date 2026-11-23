@@ -368,13 +368,13 @@ function App() {
 const root = document.getElementById('root');
 if (root) {
   if (/^\/admin\/?$/u.test(location.pathname)) {
-    document.documentElement.lang = 'en';
+    document.documentElement.lang = 'id';
     const accounts = new URLSearchParams(location.search).get('view') === 'accounts';
-    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Opening administration…</p>}>
+    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Membuka administrasi…</p>}>
       {accounts ? <AccountAdmin /> : <AdminCenter />}
     </Suspense>);
   } else if (/^\/creator\/studio\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening Creator Studio…</p>}><CreatorAccess studio={(ownerId, draft) => <CreatorWorkspace key={ownerId} ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Membuka Studio Kreator…</p>}><CreatorAccess studio={(ownerId, draft) => <CreatorWorkspace key={ownerId} ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
   } else if (/^\/store\/[^/]+\/?$/u.test(location.pathname)) {
     createRoot(root).render(<LocaleProvider><Suspense fallback={<p role="status">Opening storefront…</p>}><LiveCreatorStorefront /></Suspense></LocaleProvider>);
   } else if (/^\/creator\/demo\/?$/u.test(location.pathname)) {

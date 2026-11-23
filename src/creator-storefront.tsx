@@ -128,7 +128,7 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false, wa
   const listingTitle = productsId + '-title';
   const headingFamily = design.headingFont === "serif" ? "Georgia, serif" : design.headingFont === "mono" ? "ui-monospace, monospace" : "inherit";
   const style = { "--sf-accent": design.accent, "--sf-ink": design.foreground, "--sf-page": design.background, "--sf-radius": `${design.radius}px`, "--sf-heading-font": headingFamily, "--sf-columns": design.columns, "--sf-ratio": design.imageRatio === "portrait" ? "4/5" : design.imageRatio === "landscape" ? "4/3" : "1/1" } as CSSProperties;
-  return <div className={`storefront storefront-theme-${design.theme} storefront-personality-${design.layoutPersonality} storefront-hero-${design.heroLayout} storefront-card-${design.cardStyle} ${inline ? "storefront-embedded" : ""} ${walkthrough ? "storefront-walkthrough" : ""}`} style={style}>
+  return <div className={`storefront storefront-theme-${design.colorPreset} storefront-layout-${design.layoutPreset} storefront-hero-${design.heroLayout} storefront-card-${design.cardStyle} ${inline ? "storefront-embedded" : ""} ${walkthrough ? "storefront-walkthrough" : ""}`} style={style}>
     {!inline && <header className="storefront-header">
       <a href="/creator" className="storefront-brand" aria-label="Nanti Kreator">nanti<span>.</span><small>kreator</small></a>
       <span className="storefront-header-label">{catalog ? catalog.name : id ? 'Contoh halaman kreator' : 'Creator page preview'}</span>

@@ -86,25 +86,26 @@ try {
 
   await step('Separate administrator sign-in and explicit verification', async () => {
     await admin.goto('/admin');
-    await admin.getByLabel('Username').fill(username);
-    await admin.getByLabel('Password').fill(password);
-    await button(admin, 'Sign in').click();
-    await show(admin.getByRole('heading', { name: 'Affiliate opportunities' }));
-    assert.equal(await admin.locator('html').getAttribute('lang'), 'en');
-    await admin.getByRole('button', { name: new RegExp('IKEA article ' + article, 'u') }).click();
-    await admin.getByLabel('Candidate affiliate URL').fill(candidate);
-    await button(admin, 'Add candidate').click();
-    await show(admin.getByText('Candidate saved for review.'));
-    await button(admin, 'Verify and approve').click();
-    const review = modal(admin, 'Verify and approve');
-    await review.getByLabel('Verified product title').fill(title);
-    await review.getByLabel('Color').fill('White');
+    await admin.getByLabel('Nama pengguna').fill(username);
+    await admin.getByLabel('Kata sandi').fill(password);
+    await button(admin, 'Masuk').click();
+    await admin.getByRole('link', { name: 'Tautan afiliasi', exact: true }).click();
+    await show(admin.getByRole('heading', { name: 'Peluang afiliasi' }));
+    assert.equal(await admin.locator('html').getAttribute('lang'), 'id');
+    await admin.getByRole('button', { name: new RegExp('IKEA artikel ' + article, 'u') }).click();
+    await admin.getByLabel('URL kandidat afiliasi').fill(candidate);
+    await button(admin, 'Tambahkan kandidat').click();
+    await show(admin.getByText('Kandidat disimpan untuk ditinjau.'));
+    await button(admin, 'Verifikasi dan setujui').click();
+    const review = modal(admin, 'Verifikasi dan setujui');
+    await review.getByLabel('Nama produk terverifikasi').fill(title);
+    await review.getByLabel('Warna').fill('White');
     await review.getByLabel('Model').fill('Browser fixture');
-    await review.getByLabel('Verification notes').fill('Isolated automated fixture confirming the same article and variant.');
-    await review.getByRole('checkbox', { name: /I checked both listings/u }).check();
-    await button(review, 'Verify and approve').click();
-    await show(admin.getByText('Active verified mapping'));
-    await show(admin.getByText('Verification and change history'));
+    await review.getByLabel('Catatan verifikasi').fill('Isolated automated fixture confirming the same article and variant.');
+    await review.getByRole('checkbox', { name: /Saya sudah memeriksa kedua listing/u }).check();
+    await button(review, 'Verifikasi dan setujui').click();
+    await show(admin.getByText('Pemetaan terverifikasi aktif'));
+    await show(admin.getByText('Riwayat verifikasi dan perubahan'));
     await axe(admin, 'desktop admin');
     if (screenshots) await admin.screenshot({ path: join(screenshots, 'affiliate-admin-desktop.png') });
   });
@@ -137,11 +138,11 @@ try {
   });
 
   await step('Revocation, immediate fallback, mobile inbox, and sign-out', async () => {
-    await button(admin, 'Revoke').click();
-    const review = modal(admin, 'Revoke');
-    await review.getByLabel('Reason').fill('Isolated browser test finished.');
-    await button(review, 'Revoke').click();
-    await show(admin.getByText('Original listing only'));
+    await button(admin, 'Cabut').click();
+    const review = modal(admin, 'Cabut');
+    await review.getByLabel('Alasan').fill('Isolated browser test finished.');
+    await button(review, 'Cabut').click();
+    await show(admin.getByText('Tautan asli saja'));
     const fallback = await shopper.request.get(activeHref, { maxRedirects: 0 });
     assert.equal(fallback.status(), 302);
     assert.equal(fallback.headers().location, original);
@@ -153,10 +154,10 @@ try {
     assert.equal(await details.getByText(/commission/u).count(), 0);
 
     await admin.setViewportSize({ width: 390, height: 844 });
-    await admin.getByRole('button', { name: /^Inbox/u }).click();
-    const event = admin.getByRole('listitem').filter({ hasText: 'Mapping revoked' });
+    await admin.getByRole('button', { name: /^Kotak masuk/u }).click();
+    const event = admin.getByRole('listitem').filter({ hasText: 'Pemetaan dicabut' });
     await show(event);
-    const recordLink = event.getByRole('link', { name: 'Open product' });
+    const recordLink = event.getByRole('link', { name: 'Buka produk' });
     const recordHash = await recordLink.getAttribute('href');
     assert.match(recordHash, /^#opportunity-/u);
     await recordLink.click();
@@ -164,15 +165,16 @@ try {
     assert.equal(new URL(admin.url()).hash, recordHash);
     await admin.reload();
     await show(admin.getByRole('heading', { name: title, exact: true }));
-    await admin.getByRole('button', { name: /^Inbox/u }).click();
-    await button(event, 'Mark read').click();
-    await show(button(event, 'Mark unread'));
-    await button(event, 'Dismiss').click();
+    await admin.getByRole('button', { name: /^Kotak masuk/u }).click();
+    await button(event, 'Tandai sudah dibaca').click();
+    await show(button(event, 'Tandai belum dibaca'));
+    await button(event, 'Singkirkan').click();
     await event.waitFor({ state: 'hidden' });
     assert.equal(await admin.evaluate(() => document.documentElement.scrollWidth), 390);
     await axe(admin, 'mobile admin inbox');
-    await button(admin, 'Sign out').click();
-    await show(admin.getByRole('heading', { name: 'Administrator sign-in' }));
+    await button(admin, 'Menu akun').click();
+    await button(admin, 'Keluar').click();
+    await show(admin.getByRole('heading', { name: 'Masuk sebagai Superadmin' }));
     assert.equal((await admin.request.get('/api/admin/notifications')).status(), 401);
   });
   assert.deepEqual(errors, []);
