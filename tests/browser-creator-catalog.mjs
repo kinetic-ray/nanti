@@ -336,7 +336,7 @@ try {
 
   const owner = await db.creatorProfile.findUniqueOrThrow({ where: { userId }, select: { id: true } });
   await db.creatorProduct.createMany({ data: Array.from({ length: 9 }, (_, index) => ({
-    profileId: owner.id, title: 'Pagination fixture ' + index,
+    id: randomUUID(), profileId: owner.id, title: 'Pagination fixture ' + index,
     url: 'https://example.com/fixture-' + index, description: '', category: '',
   })) });
   await page.reload();
