@@ -334,3 +334,66 @@
     display: block; color: var(--aw-muted); font-size: .75rem; font-weight: 700;
   }
 }
+
+
+/* Workspace motion polish: scoped to admin, no layout or data-flow changes. */
+@media (prefers-reduced-motion: no-preference) {
+  .aw .aw-nav a,
+  .aw .aw-nav a svg,
+  .aw :is(button, .aw-card, .admin-panel, .aw-account summary),
+  .aw .aw-table tbody tr {
+    transition: background-color 180ms ease, border-color 180ms ease,
+      color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+  .aw .aw-nav a:hover svg { transform: translateX(2px); }
+  .aw :is(.aw-card, .admin-panel):hover {
+    box-shadow: 0 5px 16px #30214e12;
+  }
+  .aw button:active:not(:disabled) { transform: scale(.985); }
+  .aw .aw-main > :is(section, div, form) {
+    animation: aw-enter 220ms ease-out both;
+  }
+  .aw-drawer::backdrop { animation: aw-backdrop-in 200ms ease-out both; }
+  .aw-drawer[open] .aw-drawer-content { animation: aw-drawer-in 220ms cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes aw-enter {
+    from { opacity: .55; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes aw-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes aw-drawer-in {
+    from { opacity: .7; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+}
+@media (max-width: 47.99rem) {
+  .aw-drawer[open] {
+    inset: 12px auto 12px 0;
+    height: calc(100svh - 24px);
+    max-height: calc(100svh - 24px);
+    border-radius: 0 12px 12px 0;
+    overflow: hidden;
+  }
+  .aw-drawer-content {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+@supports (height: 100dvh) {
+  @media (max-width: 47.99rem) {
+    .aw-drawer[open] {
+      height: calc(100dvh - 24px);
+      max-height: calc(100dvh - 24px);
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aw .aw-main > :is(section, div, form),
+  .aw-drawer::backdrop,
+  .aw-drawer[open] .aw-drawer-content { animation: none; }
+  .aw :is(button, a, .aw-card, .admin-panel, .aw-table tbody tr) { transition: none; }
+}
