@@ -84,7 +84,7 @@ The administrator signs in again after provisioning. Access belongs to the Nanti
 
 ## Password accounts and Creator onboarding
 
-Password registration requires verification before login. Recovery links are single use and expire. The verification form also asks for the password chosen at registration. Password reset and change revoke all sessions for the affected Nanti account. Google can provide a verified email for profile display. Google matching still uses the provider subject independently of password email addresses.
+Password registration requires a password of at least 8 characters and email verification before login. Recovery links are single use and expire. The verification form also asks for the password chosen at registration. Password reset and change revoke all sessions for the affected Nanti account. Google can provide a verified email for profile display. Google matching still uses the provider subject independently of password email addresses.
 
 Set `NANTI_DEV_ACCOUNT_MAIL=file` in the ignored local environment file with `NODE_ENV=development` and a loopback HTTP origin. The application appends local verification and reset links to the ignored `.env.account-outbox` file. Keep this file private and remove it manually after use.
 

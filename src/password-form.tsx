@@ -26,7 +26,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
   const entryMode = mode === 'login' || mode === 'register';
   const passwordHintId = useId();
   const passwordHint = mode === 'verify' ? 'Enter the password you chose when you created your account.'
-    : mode === 'login' || mode === 'email' || mode === 'changeEmail' ? null : 'Use at least 15 characters.';
+    : mode === 'login' || mode === 'email' || mode === 'changeEmail' ? null : 'Use at least 8 characters.';
   const canResend = delivery && (mode === 'forgot' || (failed && notice && (mode === 'login' || mode === 'verify')));
   const formRef = useRef<HTMLFormElement>(null);
   const focusAfterChange = useRef(false);
@@ -116,7 +116,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
               <label>{t(mode === 'reset' || mode === 'change' ? 'New password' : 'Password')}
                 <input name="password" type={show ? 'text' : 'password'} autoComplete={(mode === 'login' || mode === 'verify') ? 'current-password' : 'new-password'}
                   aria-describedby={passwordHint ? passwordHintId : undefined}
-                  required minLength={mode === 'login' || mode === 'verify' ? undefined : 15} maxLength={256} disabled={busy} />
+                  required minLength={mode === 'login' || mode === 'verify' ? undefined : 8} maxLength={256} disabled={busy} />
               </label>
               <button type="button" aria-label={t(show ? 'Hide password' : 'Show password')} disabled={busy}
                 onClick={() => setShow(value => !value)}>{t(show ? 'Hide' : 'Show')}</button>
@@ -125,7 +125,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
           </>}
           {mode === 'reset' && <label>{t('Confirm new password')}
             <input name="confirmation" type={show ? 'text' : 'password'} autoComplete="new-password"
-              required minLength={15} maxLength={256} disabled={busy} />
+              required minLength={8} maxLength={256} disabled={busy} />
           </label>}
           <button type="submit" className="primary" disabled={busy}>{t(labels[mode])}</button>
         </form>

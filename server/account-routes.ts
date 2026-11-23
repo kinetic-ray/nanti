@@ -25,7 +25,7 @@ const startInput = z.strictObject({
 const callbackInput = z.object({ state: token, code: z.string().min(1).max(4096).optional(), error: z.string().optional() });
 const emailInput = z.email().max(254).transform(value => value.toLowerCase());
 const passwordInput = z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 256);
-const newPassword = passwordInput.refine(value => Array.from(value).length >= 15);
+const newPassword = passwordInput.refine(value => Array.from(value).length >= 8);
 const attemptDuration = 600_000;
 const authDestinations = { account: '/account', admin: '/admin?view=accounts', creator: '/creator?onboard=1' } as const;
 const tokenErrorCodes = new Set(['invalid_client', 'invalid_grant', 'invalid_request', 'unauthorized_client']);

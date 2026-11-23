@@ -263,7 +263,7 @@ export const idMessages = {
   'Show': 'Lihat',
   'Hide': 'Sembunyikan',
   'Enter the password you chose when you created your account.': 'Masukkan kata sandi yang kamu pilih saat membuat akun.',
-  'Use at least 15 characters.': 'Gunakan sedikitnya 15 karakter.',
+  'Use at least 8 characters.': 'Gunakan sedikitnya 8 karakter.',
   'Change email address': 'Ubah alamat email',
   'New email address': 'Alamat email baru',
   'Verify new email address': 'Verifikasi alamat email baru',
