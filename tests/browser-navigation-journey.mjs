@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const require = createRequire(import.meta.url);
 const baseURL = process.env.NANTI_BROWSER_BASE_URL ?? 'http://127.0.0.1:3000';
 const screenshotDir = process.env.NANTI_WALKTHROUGH_SCREENSHOTS;
+const photoFixture = fileURLToPath(new URL('../public/images/red-sneaker.svg', import.meta.url));
 const browser = await chromium.launch({
   executablePath: process.env.NANTI_BROWSER_PATH ??
     (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined),
@@ -19,6 +21,9 @@ try {
   ]) {
     const page = await browser.newPage({ baseURL, viewport: { width, height: 900 }, reducedMotion: 'reduce' });
     await page.addInitScript({ path: require.resolve('axe-core/axe.min.js') });
+    if (!screenshotDir) {
+      await page.route('https://images.unsplash.com/**', route => route.fulfill({ path: photoFixture }));
+    }
     await page.route('**/api/session', route => route.fulfill({ json: [] }));
     await page.route('**/api/account', route => route.fulfill({ json: { account: null } }));
     await page.route('**/api/prices/alerts', route => route.fulfill({ json: { alerts: [], unread: 0 } }));

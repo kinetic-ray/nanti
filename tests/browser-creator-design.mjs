@@ -5,7 +5,10 @@ import { createServer } from 'vite';
 
 const require = createRequire(import.meta.url);
 const axe = require.resolve('axe-core/axe.min.js');
-const vite = await createServer({ optimizeDeps: { noDiscovery: true, include: [] }, server: { host: '127.0.0.1', port: 0, strictPort: false } });
+const vite = await createServer({
+  optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-dev-runtime'] },
+  server: { host: '127.0.0.1', port: 0, strictPort: false },
+});
 await vite.listen();
 const address = vite.httpServer.address();
 if (!address || typeof address === 'string') throw new Error('Vite did not open a local test server.');
