@@ -160,9 +160,9 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false, wa
               : (id ? 'Kode PRD-003, Etalase 3, atau nama koleksi' : 'Code PRD-003, Showcase 3, or collection name')}
             autoComplete="off" />
           {search && <button type="button" aria-label={id ? 'Hapus pencarian' : 'Clear search'} onClick={() => {
+            if (walkthrough) searchInput.current?.focus();
             setSearch('');
             setActive('all');
-            if (walkthrough) requestAnimationFrame(() => searchInput.current?.focus());
           }}>×</button>}
         </div>
         <p aria-live="polite">{query || walkthrough ? (id ? `${visible.length} produk ditemukan` : `${productCount(visible.length)} found`) : catalog ? null : (id ? 'Coba: PRD-003 · Etalase 3 · Desk setup' : 'Try: PRD-003 · Showcase 3 · Desk setup')}</p>
