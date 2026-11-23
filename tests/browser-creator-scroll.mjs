@@ -57,8 +57,7 @@ try {
         category: ['Everyday', 'Desk', 'Style'][i % 3], image: null, published: true,
       })),
     } }));
-    await page.goto(new URL('/creator/studio', baseURL).href);
-    await page.getByRole('button', { name: 'Tampilan', exact: true }).click();
+    await page.goto(new URL('/creator/studio?section=appearance', baseURL).href);
     const frame = page.locator('.studio-preview-frame');
     if (mobile) {
       await page.locator('.studio-mobile-switch button').last().click();
@@ -113,7 +112,7 @@ try {
     const keyboardStart = await observe();
     await page.keyboard.press('PageDown');
     await page.waitForFunction(top => window.previewFrame.scrollTop > top, keyboardStart.top);
-    await page.getByRole('button', { name: 'Mobile', exact: true }).click();
+    await page.getByRole('button', { name: 'Ponsel', exact: true }).click();
     assert.notEqual((await observe()).active, searchId);
     await wheel([80, -80]);
 
@@ -138,7 +137,7 @@ try {
       }
       await page.waitForFunction(top => window.previewFrame.scrollTop > top, before.top);
     } else {
-      await page.getByRole('button', { name: 'Desktop', exact: true }).click();
+      await page.getByRole('button', { name: 'Komputer', exact: true }).click();
       const before = await observe();
       await page.mouse.move(915, 450);
       await page.mouse.wheel(0, 120);

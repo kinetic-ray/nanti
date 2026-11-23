@@ -16,11 +16,13 @@ A first-time creator can make a good-looking storefront without knowing design t
 - Mobile-first, touch targets >=44px, accessible contrast, visible focus, reduced-motion support, no horizontal overflow, responsive previews.
 
 ## Implementation checklist
-- [ ] Extend src/creator-design.ts with layoutPreset, typed recipes, migration and validation.
-- [ ] Update src/creator-studio.tsx and CSS for easy/advanced paths, localized card copy, thumbnails, preview and confirmation flow.
-- [ ] Update src/creator-storefront.tsx and CSS for per-layout composition and responsive behavior.
-- [ ] Test each layout x color combination on 360px and desktop, including persisted legacy drafts, reset, undo, and EN/ID switching.
-- [ ] Run typecheck, lint, build and verify no existing creator behavior regresses.
+- [x] Extend the shared design model with `layoutPreset`, typed recipes, version-2 migration and validation.
+- [x] Add easy and advanced Studio paths, localized copy, CSS thumbnails, responsive preview, preset confirmation and undo.
+- [x] Apply six structurally distinct compositions to the storefront while keeping advanced controls authoritative.
+- [x] Add automated coverage for all 18 layout and color combinations at 360px and 1440px, legacy drafts, reset, undo, save, locale switching and accessibility.
+- [x] Run typecheck, unit tests and production build.
+
+The standalone browser matrix is `npm run test:browser:creator-design`; it uses a mocked save endpoint and does not require a database. In the implementation environment, Chromium could not start because the container denied its process socket, so the browser matrix could not be executed here. The full database-backed Creator flow remains `npm run test:browser:creator` and requires a migrated local test database.
 
 ## Acceptance criteria
 A novice can choose, preview and save a visual style without entering advanced editor. Each of six layout styles visibly changes composition, typography and card positioning while maintaining legibility. Existing drafts still load. Advanced customization remains available. No false claims of server publication.

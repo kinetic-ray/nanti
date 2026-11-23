@@ -86,6 +86,14 @@ export function creatorCatalogRoutes(
   }
   router.put(productPath, productJson, save);
   router.patch(productPath, productJson, save);
+  router.post(catalogPath + '/bulk-publication', async (req, res) => {
+    const { ids, published } = z.strictObject({
+      ids: z.array(uuid).min(1).max(50).refine(values => new Set(values).size === values.length),
+      published: z.boolean(),
+    }).parse(req.body);
+    if (!await repository.bulkProductPublication(res.locals.creator.profileId, ids, published)) return missing(res);
+    res.sendStatus(204);
+  });
   router.put(productPath + '/publication', async (req, res) => {
     if (!await repository.productPublication(res.locals.creator.profileId, uuid.parse(req.params.id),
       publication.parse(req.body).published)) return missing(res);

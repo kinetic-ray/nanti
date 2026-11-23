@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { variantFields } from '../shared/affiliate.js';
 import type {
@@ -9,30 +9,32 @@ import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
 import { RecommendationAdminPanel } from './RecommendationAdminPanel.js';
 
+import { BarChart3, ClipboardList, ContactRound, Home, LayoutDashboard, Link2, ListChecks, LogOut, Package, Settings, Store, Users } from 'lucide-react';
+import { AdminWorkspace, WorkspaceAnalytics, WorkspaceHeading, useWorkspaceSection } from './admin-workspace.js';
+import { PlatformActivity, PlatformDirectory, PlatformOverview, PlatformSettings, affiliateActions } from './platform-workspace.js';
+
 const admin = '/admin';
 type Session = { username: string };
 type Inbox = AdminPage<AdminNotice> & { unread: number };
 type Review = { mapping: Mapping; action: 'approve' | 'revalidate' | 'reject' | 'disable' | 'revoke' | 'invalid' };
 
 const matches: Record<MatchClassification, string> = {
-  verified_exact: 'Verified exact match', potential: 'Potential match · review required',
-  mismatch: 'Mismatch', insufficient: 'Insufficient information',
+  verified_exact: 'Produk dan varian terverifikasi', potential: 'Kemungkinan cocok, perlu ditinjau',
+  mismatch: 'Tidak cocok', insufficient: 'Informasi belum cukup',
 };
 const notices: Record<NoticeKind, string> = {
-  new_opportunity: 'New affiliate opportunity', candidate_review: 'Candidate awaiting review',
-  mapping_revoked: 'Mapping revoked', mapping_invalid: 'Mapping invalidated',
+  new_opportunity: 'Peluang afiliasi baru', candidate_review: 'Kandidat menunggu ditinjau',
+  mapping_revoked: 'Pemetaan dicabut', mapping_invalid: 'Pemetaan ditandai tidak valid',
 };
 const actions: Record<Review['action'], string> = {
-  approve: 'Verify and approve', revalidate: 'Revalidate', reject: 'Reject', disable: 'Disable',
-  revoke: 'Revoke', invalid: 'Mark invalid',
+  approve: 'Verifikasi dan setujui', revalidate: 'Verifikasi ulang', reject: 'Tolak', disable: 'Nonaktifkan',
+  revoke: 'Cabut', invalid: 'Tandai tidak valid',
 };
-const auditActions: Record<string, string> = {
-  candidate_added: 'Candidate added', approve: 'Approved', revalidate: 'Revalidated',
-  reject: 'Rejected', disable: 'Disabled', revoke: 'Revoked', invalid: 'Invalidated',
-};
+const variants: Record<string, string> = { color: 'Warna', size: 'Ukuran', capacity: 'Kapasitas', configuration: 'Konfigurasi', other: 'Lainnya' };
+const mappingStatuses: Record<string, string> = { pending: 'Menunggu', approved: 'Disetujui', rejected: 'Ditolak', disabled: 'Dinonaktifkan', revoked: 'Dicabut', invalid: 'Tidak valid' };
 
 function recordedAt(value: string | null) {
-  return value ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
+  return value ? new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
 
 function nextPath(path: string, after: string) { return `${path}?after=${encodeURIComponent(after)}`; }
@@ -47,19 +49,29 @@ function ExternalLink({ url, children }: { url: string; children: string }) {
   const parsed = safeProductUrl(url);
   if (!parsed || parsed.protocol !== 'https:' || parsed.port) return <span>{children}</span>;
   return <a href={parsed.href} target="_blank" rel="noopener noreferrer">
-    {children}<span className="sr-only"> (opens in a new tab)</span>
+    {children}<span className="sr-only"> (dibuka di tab baru)</span>
   </a>;
 }
 
+const superadminSections = ['overview', 'products', 'creators', 'users', 'storefronts', 'links', 'recommendations', 'audit', 'analytics', 'settings'] as const;
+
 export function AdminCenter() {
+  const section = useWorkspaceSection(superadminSections, 'overview', url => url.hash.startsWith('#opportunity-') ? 'links' : undefined);
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
 
+  const onExpired = useCallback(() => {
+    setSession(null);
+    setError('Sesi Superadmin berakhir. Masuk lagi untuk melanjutkan.');
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    api<Session>(`${admin}/session`, { signal: controller.signal }).then(setSession, (failure: unknown) => {
+    api<Session>(admin + '/session', { signal: controller.signal }).then(data => {
+      if (!controller.signal.aborted) setSession(data);
+    }, (failure: unknown) => {
       if (controller.signal.aborted) return;
       const message = errorMessage(failure);
       setError(message === 'Administrator sign-in is required.' ? '' : message);
@@ -71,42 +83,73 @@ export function AdminCenter() {
   async function signOut() {
     setBusy(true);
     try {
-      await api(`${admin}/logout`, { method: 'POST' });
+      await api(admin + '/logout', { method: 'POST' });
       setSession(null);
       setError('');
     } catch (failure) {
       const message = errorMessage(failure);
-      if (message === 'Administrator sign-in is required.') setSession(null);
+      if (message === 'Administrator sign-in is required.') onExpired();
       else setError(message);
     } finally { setBusy(false); }
   }
 
-  return <div className="site admin-site">
-    <header className="masthead">
-      <div className="brand-group"><span className="brand-symbol" aria-hidden="true" />
-        <div className="brand">nanti<span>.</span></div></div>
-      <div className="actions">
-        <a className="buy-original" href="/admin?view=accounts">Admin dashboard</a>
-        <a className="buy-original" href="/">Back to Nanti</a>
-        {session && <button type="button" disabled={busy} onClick={() => void signOut()}>Sign out</button>}
-      </div>
-    </header>
-    <main>
-      <h1>Affiliate Center</h1>
-      {session === undefined ? <p role="status">Checking administrator session…</p>
-        : session ? <>
-          {error && <p role="alert" className="error">{error}</p>}
-          <RecommendationAdminPanel />
-          <Workspace username={session.username} onExpired={() => {
-            setSession(null); setError('Your administrator session expired. Sign in again.');
-          }} />
-        </> : <SignIn error={error} onRetry={() => { setSession(undefined); setError(''); setAttempt((value) => value + 1); }}
+  if (!session) return <div className="aw-gate">
+    <main className="aw-card">
+      <a className="aw-brand" href="/" aria-label="Beranda Nanti"><span className="brand-symbol" aria-hidden="true" />
+        <span className="aw-brand-copy"><strong>nanti<span>.</span></strong></span></a>
+      {session === undefined ? <p role="status">Memeriksa sesi Superadmin…</p> :
+        <SignIn error={error} onRetry={() => { setSession(undefined); setError(''); setAttempt(value => value + 1); }}
           onSignIn={async (username, password) => {
-            setSession(await api<Session>(`${admin}/login`, { method: 'POST', data: { username, password } }));
+            setSession(await api<Session>(admin + '/login', { method: 'POST', data: { username, password } }));
             setError('');
           }} />}
+      <a href="/admin?view=accounts">Administrasi akun Google</a>
     </main>
   </div>;
+
+  const active = section.active;
+  return <AdminWorkspace name="Superadmin" section={section} account={session.username} items={[
+    { id: 'overview', label: 'Ringkasan', icon: LayoutDashboard },
+    { id: 'products', label: 'Produk', icon: Package },
+    { id: 'creators', label: 'Kreator', icon: ContactRound },
+    { id: 'users', label: 'Pengguna', icon: Users },
+    { id: 'storefronts', label: 'Etalase', icon: Store },
+    { id: 'links', label: 'Tautan afiliasi', icon: Link2 },
+    { id: 'recommendations', label: 'Rekomendasi', icon: ListChecks },
+    { id: 'audit', label: 'Aktivitas audit', icon: ClipboardList },
+    { id: 'analytics', label: 'Analitik', icon: BarChart3 },
+    { id: 'settings', label: 'Pengaturan', icon: Settings },
+  ]} accountActions={<>
+    <a href="/"><Home size={16} aria-hidden="true" />Beranda Nanti</a>
+    <button type="button" disabled={busy} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />Keluar</button>
+  </>}>
+    {error && <p role="alert" className="aw-error">{adminError(error)}</p>}
+    {active === 'overview' && <PlatformOverview open={section.open} onExpired={onExpired} />}
+    {(active === 'products' || active === 'creators' || active === 'users' || active === 'storefronts') &&
+      <PlatformDirectory key={active} directory={active} onExpired={onExpired} />}
+    {active === 'links' && <div className="aw-affiliate">
+      <WorkspaceHeading title="Tautan afiliasi" description="Tinjau kandidat tautan dan kelola pemetaan afiliasi yang terverifikasi." />
+      <Workspace onExpired={onExpired} />
+    </div>}
+    {active === 'recommendations' && <>
+      <WorkspaceHeading title="Rekomendasi" />
+      <RecommendationAdminPanel onExpired={onExpired} />
+    </>}
+    {active === 'audit' && <PlatformActivity onExpired={onExpired} />}
+    {active === 'analytics' && <WorkspaceAnalytics />}
+    {active === 'settings' && <PlatformSettings onExpired={onExpired} />}
+  </AdminWorkspace>;
+}
+
+function adminError(message: string) {
+  const translations: Record<string, string> = {
+    'Administrator sign-in is not configured.': 'Akses Superadmin belum dikonfigurasi.',
+    'The username or password is incorrect.': 'Nama pengguna atau kata sandi salah.',
+    'Too many sign-in attempts. Try again in 15 minutes.': 'Terlalu banyak percobaan masuk. Coba lagi dalam 15 menit.',
+    'Database temporarily unavailable. Try again shortly.': 'Database sementara tidak tersedia. Coba lagi.',
+    'This product identity could not be found.': 'Produk tidak ditemukan.',
+  };
+  return translations[message] ?? (message.startsWith('Sesi Superadmin') ? message : 'Permintaan belum berhasil. Coba lagi.');
 }
 
 function SignIn({ error, onRetry, onSignIn }: {
@@ -125,24 +168,25 @@ function SignIn({ error, onRetry, onSignIn }: {
     finally { setBusy(false); setPassword(''); }
   }
 
-  return <section className="admin-panel admin-signin">
-    <h2>Administrator sign-in</h2>
-    {(failed || error) && <p className="error" role="alert">{failed || error}</p>}
-    {isDisabled ? <p>Configure the administrator credentials on the server, then reload this page.</p> :
+  return <section className="aw-section-stack">
+    <h1>Masuk sebagai Superadmin</h1>
+    {(failed || error) && <p className="aw-error" role="alert">{adminError(failed || error)}</p>}
+    {isDisabled ? <button type="button" onClick={onRetry}>Periksa lagi</button> :
       <form onSubmit={submit}>
-        <label>Username<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)}
+        <label>Nama pengguna<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)}
           required maxLength={64} disabled={busy} /></label>
-        <label>Password<input type="password" autoComplete="current-password" value={password}
+        <label>Kata sandi<input type="password" autoComplete="current-password" value={password}
           onChange={(event) => setPassword(event.target.value)} required maxLength={256} disabled={busy} /></label>
-        <div className="actions">
-          <button className="primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-          {error && <button type="button" disabled={busy} onClick={onRetry}>Retry session check</button>}
+        <div className="aw-actions">
+          <button className="aw-primary" disabled={busy}>{busy ? 'Sedang masuk…' : 'Masuk'}</button>
+          {error && <button type="button" disabled={busy} onClick={onRetry}>Periksa sesi lagi</button>}
         </div>
       </form>}
   </section>;
 }
 
-function Workspace({ username, onExpired }: { username: string; onExpired: () => void }) {
+
+function Workspace({ onExpired }: { onExpired: () => void }) {
   const [opportunities, setOpportunities] = useState<AdminPage<Opportunity> | null>(null);
   const [inbox, setInbox] = useState<Inbox | null>(null);
   const [selected, setSelected] = useState(opportunityFromLocation);
@@ -228,108 +272,107 @@ function Workspace({ username, onExpired }: { username: string; onExpired: () =>
   }
 
   return <>
-    <div className="actions admin-tabs" role="group" aria-label="Affiliate Center sections">
-      <button type="button" aria-pressed={panel === 'opportunities'} onClick={() => setPanel('opportunities')}>Opportunities</button>
-      <button type="button" aria-pressed={panel === 'inbox'} onClick={() => setPanel('inbox')}>Inbox{inbox?.unread ? ` (${inbox.unread})` : ''}</button>
-      <button type="button" disabled={busy} onClick={() => { setError(''); setDetailError(''); refresh(); }}>Refresh</button>
-      <span className="hint">Signed in as {username}</span>
+    <div className="actions admin-tabs" role="group" aria-label="Bagian tautan afiliasi">
+      <button type="button" aria-pressed={panel === 'opportunities'} onClick={() => setPanel('opportunities')}>Peluang</button>
+      <button type="button" aria-pressed={panel === 'inbox'} onClick={() => setPanel('inbox')}>Kotak masuk{inbox?.unread ? ` (${inbox.unread})` : ''}</button>
+      <button type="button" disabled={busy} onClick={() => { setError(''); setDetailError(''); refresh(); }}>Muat ulang</button>
     </div>
-    {error && <p className="error" role="alert">{error}</p>}
+    {error && <p className="error" role="alert">{adminError(error)}</p>}
     <p className="decision-status" role="status">{feedback}</p>
     {panel === 'inbox' ? <section className="admin-panel">
-      <h2>Notification inbox</h2>
-      {!inbox ? <p role="status">Loading notifications…</p> : inbox.records.length === 0 ? <p>There are no notifications in your inbox.</p> :
+      <h2>Notifikasi afiliasi</h2>
+      {!inbox ? <p role="status">Memuat notifikasi…</p> : inbox.records.length === 0 ? <p>Belum ada notifikasi.</p> :
         <ul className="admin-records">{inbox.records.map((notice) => <li key={notice.id}>
           <div><strong>{notices[notice.kind]}</strong>
             <p>{notice.title ?? notice.listingId}</p>
-            <small>{notice.readAt ? 'Read' : 'Unread'} · {recordedAt(notice.createdAt)}</small></div>
+            <small>{notice.readAt ? 'Sudah dibaca' : 'Belum dibaca'} · {recordedAt(notice.createdAt)}</small></div>
           <div className="actions">
             <a className="buy-original" href={opportunityHash(notice.identityId)} onClick={(event) => {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
               select(notice.identityId);
-            }}>Open product</a>
+            }}>Buka produk</a>
             <button type="button" disabled={busy} onClick={() => void updateNotice(notice, notice.readAt ? 'unread' : 'read')}>
-              {notice.readAt ? 'Mark unread' : 'Mark read'}
+              {notice.readAt ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}
             </button>
-            <button type="button" disabled={busy} onClick={() => void updateNotice(notice, 'dismiss')}>Dismiss</button>
+            <button type="button" disabled={busy} onClick={() => void updateNotice(notice, 'dismiss')}>Singkirkan</button>
           </div>
         </li>)}</ul>}
       {inbox?.next && <button type="button" disabled={busy} onClick={() => void run(async () => {
         const loaded = await api<Inbox>(nextPath(`${admin}/notifications`, inbox.next!));
         setInbox({ ...loaded, records: [...inbox.records, ...loaded.records] });
-      })}>Load older notifications</button>}
+      })}>Muat notifikasi sebelumnya</button>}
     </section> : <div className="admin-grid">
       <section className="admin-panel">
-        <h2>Affiliate opportunities</h2>
-        {!opportunities ? <p role="status">Loading opportunities…</p> : opportunities.records.length === 0
-          ? <p>Supported public product links appear here as shoppers save them.</p>
+        <h2>Peluang afiliasi</h2>
+        {!opportunities ? <p role="status">Memuat peluang…</p> : opportunities.records.length === 0
+          ? <p>Tautan produk yang didukung akan muncul saat disimpan oleh pengguna.</p>
           : <ul className="admin-queue">{opportunities.records.map((row) => <li key={row.id}>
             <button type="button" aria-pressed={row.id === selected} onClick={() => select(row.id)}>
-              <strong>{row.title ?? `${row.merchant} article ${row.listingId}`}</strong>
-              <span>{row.market.toUpperCase()} · {row.savedCount} saved · {row.coverage ? 'Covered' : 'Uncovered'}</span>
-              <small>{matches[row.classification]} · Reviewed {recordedAt(row.reviewedAt)}</small>
+              <strong>{row.title ?? `${row.merchant} artikel ${row.listingId}`}</strong>
+              <span>{row.market.toUpperCase()} · {row.savedCount} kali disimpan · {row.coverage ? 'Ada tautan aktif' : 'Tautan asli'}</span>
+              <small>{matches[row.classification]} · Ditinjau {recordedAt(row.reviewedAt)}</small>
             </button>
           </li>)}</ul>}
         {opportunities?.next && <button type="button" disabled={busy} onClick={() => void run(async () => {
           const loaded = await api<AdminPage<Opportunity>>(nextPath(`${admin}/opportunities`, opportunities.next!));
           setOpportunities({ ...loaded, records: [...opportunities.records, ...loaded.records] });
-        })}>Load more opportunities</button>}
+        })}>Muat lebih banyak peluang</button>}
       </section>
       <section className="admin-panel">
-        {detailError ? <p role="alert" className="error">{detailError}</p> :
-          !selected ? <p>Choose a product to review its listing, evidence, and mappings.</p> :
-          !identity ? <p role="status">Loading product…</p> :
+        {detailError ? <p role="alert" className="error">{adminError(detailError)}</p> :
+          !selected ? <p>Pilih produk untuk meninjau listing, bukti, dan pemetaan tautannya.</p> :
+          !identity ? <p role="status">Memuat produk…</p> :
           <>
-            <h2 ref={heading} tabIndex={-1}>{identity.title ?? `${identity.merchant} article ${identity.listingId}`}</h2>
+            <h2 ref={heading} tabIndex={-1}>{identity.title ?? `${identity.merchant} artikel ${identity.listingId}`}</h2>
             <dl className="admin-facts">
-              <div><dt>Merchant</dt><dd>{identity.merchant}</dd></div>
-              <div><dt>Market</dt><dd>{identity.market.toUpperCase()}</dd></div>
-              <div><dt>Listing ID</dt><dd>{identity.listingId}</dd></div>
-              <div><dt>Saved occurrences</dt><dd>{identity.savedCount}</dd></div>
-              <div><dt>Coverage</dt><dd>{identity.coverage ? 'Active verified mapping' : 'Original listing only'}</dd></div>
-              <div><dt>Verification</dt><dd>{matches[identity.classification]}</dd></div>
-              <div><dt>Last reviewed</dt><dd>{recordedAt(identity.reviewedAt)}</dd></div>
-              {identity.normalizedTitle && <div><dt>Normalized title</dt><dd>{identity.normalizedTitle}</dd></div>}
-              {identity.brand && <div><dt>Brand</dt><dd>{identity.brand}</dd></div>}
+              <div><dt>Toko</dt><dd>{identity.merchant}</dd></div>
+              <div><dt>Pasar</dt><dd>{identity.market.toUpperCase()}</dd></div>
+              <div><dt>ID listing</dt><dd>{identity.listingId}</dd></div>
+              <div><dt>Jumlah simpan</dt><dd>{identity.savedCount}</dd></div>
+              <div><dt>Pemetaan aktif</dt><dd>{identity.coverage ? 'Pemetaan terverifikasi aktif' : 'Tautan asli saja'}</dd></div>
+              <div><dt>Verifikasi</dt><dd>{matches[identity.classification]}</dd></div>
+              <div><dt>Terakhir ditinjau</dt><dd>{recordedAt(identity.reviewedAt)}</dd></div>
+              {identity.normalizedTitle && <div><dt>Judul baku</dt><dd>{identity.normalizedTitle}</dd></div>}
+              {identity.brand && <div><dt>Merek</dt><dd>{identity.brand}</dd></div>}
               {identity.model && <div><dt>Model</dt><dd>{identity.model}</dd></div>}
-              {identity.sellerId && <div><dt>Seller identifier</dt><dd>{identity.sellerId}</dd></div>}
-              {Object.entries(identity.variants ?? {}).map(([key, value]) => <div key={key}><dt className="variant-label">{key}</dt><dd>{value}</dd></div>)}
+              {identity.sellerId && <div><dt>ID penjual</dt><dd>{identity.sellerId}</dd></div>}
+              {Object.entries(identity.variants ?? {}).map(([key, value]) => <div key={key}><dt className="variant-label">{variants[key] ?? key}</dt><dd>{value}</dd></div>)}
             </dl>
-            <p><ExternalLink url={identity.canonicalUrl}>Open original merchant listing</ExternalLink></p>
+            <p><ExternalLink url={identity.canonicalUrl}>Buka listing asli</ExternalLink></p>
             <CandidateForm key={identity.id} busy={busy} onCandidate={(url) => run(
-              () => api(`${path}/mappings`, { method: 'POST', data: { url } }), 'Candidate saved for review.',
+              () => api(`${path}/mappings`, { method: 'POST', data: { url } }), 'Kandidat disimpan untuk ditinjau.',
             )} />
-            <h3>Affiliate mappings</h3>
-            {!identity.mappings.length && <p>No candidates have been added.</p>}
+            <h3>Pemetaan tautan afiliasi</h3>
+            {!identity.mappings.length && <p>Belum ada kandidat.</p>}
             {identity.mappings.map((mapping) => <MappingCard key={mapping.id} mapping={mapping} busy={busy}
               onReview={(action) => setReview({ action, mapping })} />)}
             {identity.nextMappings && <button type="button" disabled={busy} onClick={() => void run(async () => {
               const loaded = await api<AdminPage<Mapping>>(nextPath(`${path}/mappings`, identity.nextMappings!));
               setDetail({ ...identity, mappings: [...identity.mappings, ...loaded.records], nextMappings: loaded.next });
-            })}>Load more mappings</button>}
-            <h3>Verification and change history</h3>
-            {!identity.audit.length && <p>No administrative changes have been recorded.</p>}
+            })}>Muat lebih banyak pemetaan</button>}
+            <h3>Riwayat verifikasi dan perubahan</h3>
+            {!identity.audit.length && <p>Belum ada perubahan administratif.</p>}
             <ul className="admin-records">{identity.audit.map((event) => <li key={event.id}>
-              <div><strong>{auditActions[event.action] ?? event.action}</strong>
+              <div><strong>{affiliateActions[event.action] ?? 'Perubahan pemetaan'}</strong>
                 <p>{event.actor} · {recordedAt(event.createdAt)}</p>
-                <small>Mapping {event.mappingId}</small>
+                <small>Pemetaan {event.mappingId}</small>
                 {typeof event.details.reason === 'string' && <p>{event.details.reason}</p>}
-                {!!event.details.evidence && <details><summary>Verification snapshot</summary>
+                {!!event.details.evidence && <details><summary>Rincian verifikasi</summary>
                   <EvidenceView evidence={event.details.evidence as VerificationEvidence} /></details>}
               </div>
             </li>)}</ul>
             {identity.nextAudit && <button type="button" disabled={busy} onClick={() => void run(async () => {
               const loaded = await api<AdminPage<AuditEvent>>(nextPath(`${path}/audit`, identity.nextAudit!));
               setDetail({ ...identity, audit: [...identity.audit, ...loaded.records], nextAudit: loaded.next });
-            })}>Load older changes</button>}
+            })}>Muat perubahan sebelumnya</button>}
           </>}
       </section>
     </div>}
     {review && path && <ReviewDialog review={review} identity={identity} close={() => setReview(null)} onSubmit={async (data) => {
       try {
         await api(`${path}/mappings/${review.mapping.id}`, { method: 'PATCH', data });
-        setReview(null); setFeedback('Mapping review recorded.'); refresh();
+        setReview(null); setFeedback('Hasil tinjauan disimpan.'); refresh();
       } catch (problem) {
         if (errorMessage(problem) === 'Administrator sign-in is required.') onExpired();
         throw problem;
@@ -344,10 +387,10 @@ function CandidateForm({ busy, onCandidate }: { busy: boolean; onCandidate: (url
     event.preventDefault();
     void onCandidate(url).then((ok) => { if (ok) setUrl(''); });
   }}>
-    <label>Candidate affiliate URL<input type="url" value={url} required maxLength={2048} disabled={busy}
+    <label>URL kandidat afiliasi<input type="url" value={url} required maxLength={2048} disabled={busy}
       placeholder="https://" onChange={(event) => setUrl(event.target.value)} /></label>
-    <p className="hint">Use a real, direct merchant link supplied by your affiliate program. A matching title is insufficient.</p>
-    <div><button className="primary" disabled={busy}>Add candidate</button></div>
+    <p className="hint">Gunakan tautan langsung dari program afiliasimu. Periksa produk dan variannya di kedua listing.</p>
+    <div><button className="aw-primary" disabled={busy}>Tambahkan kandidat</button></div>
   </form>;
 }
 
@@ -358,13 +401,13 @@ function MappingCard({ mapping, busy, onReview }: { mapping: Mapping; busy: bool
   if (mapping.status === 'approved' && mapping.eligible) steps.push('revalidate', 'disable');
   if (mapping.status === 'approved' || mapping.status === 'disabled') steps.push('revoke', 'invalid');
   return <article className="admin-mapping">
-    <h4 className="variant-label">{mapping.status} · {mapping.active ? 'active' : 'inactive'}</h4>
+    <h4 className="variant-label">{mappingStatuses[mapping.status] ?? 'Status tidak diketahui'} · {mapping.active ? 'aktif' : 'nonaktif'}</h4>
     <p>{matches[mapping.classification]}</p>
     <p className="admin-url">{mapping.affiliateUrl}</p>
-    {mapping.eligible && <p><ExternalLink url={mapping.affiliateUrl}>Inspect candidate listing</ExternalLink></p>}
-    {mapping.approvedBy && <p className="hint">Approved by {mapping.approvedBy} · {recordedAt(mapping.approvedAt)}</p>}
-    <p className="hint">Last validated {recordedAt(mapping.validatedAt)}</p>
-    {mapping.evidence && <details><summary>Verification evidence</summary><EvidenceView evidence={mapping.evidence} /></details>}
+    {mapping.eligible && <p><ExternalLink url={mapping.affiliateUrl}>Buka listing kandidat</ExternalLink></p>}
+    {mapping.approvedBy && <p className="hint">Disetujui oleh {mapping.approvedBy} · {recordedAt(mapping.approvedAt)}</p>}
+    <p className="hint">Terakhir diverifikasi {recordedAt(mapping.validatedAt)}</p>
+    {mapping.evidence && <details><summary>Bukti verifikasi</summary><EvidenceView evidence={mapping.evidence} /></details>}
     <div className="actions">{steps.map((action) => <button key={action} type="button" disabled={busy}
       onClick={() => onReview(action)}>{actions[action]}</button>)}</div>
   </article>;
@@ -373,12 +416,12 @@ function MappingCard({ mapping, busy, onReview }: { mapping: Mapping; busy: bool
 function EvidenceView({ evidence }: { evidence: VerificationEvidence }) {
   return <>
     <p>{evidence.title}{evidence.brand ? ` · ${evidence.brand}` : ''}{evidence.model ? ` · ${evidence.model}` : ''}</p>
-    {evidence.sellerId && <p>Seller identifier {evidence.sellerId}</p>}
+    {evidence.sellerId && <p>ID penjual {evidence.sellerId}</p>}
     {!!Object.keys(evidence.variants).length && <ul>
-      {Object.entries(evidence.variants).map(([field, value]) => <li key={field}><span className="variant-label">{field}</span> · {value}</li>)}
+      {Object.entries(evidence.variants).map(([field, value]) => <li key={field}><span className="variant-label">{variants[field] ?? field}</span> · {value}</li>)}
     </ul>}
     <p>{evidence.notes}</p>
-    {evidence.evidenceUrl && <p><ExternalLink url={evidence.evidenceUrl}>Open supporting evidence</ExternalLink></p>}
+    {evidence.evidenceUrl && <p><ExternalLink url={evidence.evidenceUrl}>Buka bukti pendukung</ExternalLink></p>}
   </>;
 }
 
@@ -410,32 +453,32 @@ function ReviewDialog({ review, identity, onSubmit, close }: {
     <form onSubmit={submit}>
       <fieldset className="decision-inputs" disabled={busy}>
         {isVerification ? <>
-          <p>Check the article number, market, and all relevant options on both listings. Record only details you can verify.</p>
+          <p>Check the artikel number, market, and all relevant options on both listings. Record only details you can verify.</p>
           <div className="actions">
-            <ExternalLink url={review.mapping.originalUrl}>Original listing</ExternalLink>
-            <ExternalLink url={review.mapping.affiliateUrl}>Candidate listing</ExternalLink>
+            <ExternalLink url={review.mapping.originalUrl}>Listing asli</ExternalLink>
+            <ExternalLink url={review.mapping.affiliateUrl}>Listing kandidat</ExternalLink>
           </div>
-          <label>Verified product title<input name="title" defaultValue={existing?.title ?? identity?.title ?? ''} maxLength={160} required /></label>
+          <label>Nama produk terverifikasi<input name="title" defaultValue={existing?.title ?? identity?.title ?? ''} maxLength={160} required /></label>
           <div className="admin-fields">
-            <label>Brand<input name="brand" defaultValue={existing?.brand ?? identity?.brand ?? ''} maxLength={120} /></label>
+            <label>Merek<input name="brand" defaultValue={existing?.brand ?? identity?.brand ?? ''} maxLength={120} /></label>
             <label>Model<input name="model" defaultValue={existing?.model ?? identity?.model ?? ''} maxLength={120} /></label>
-            <label>Seller identifier<input name="sellerId" defaultValue={existing?.sellerId ?? identity?.sellerId ?? ''} maxLength={120} /></label>
-            {variantFields.map((key) => <label key={key} className="variant-label">{key}
+            <label>ID penjual<input name="sellerId" defaultValue={existing?.sellerId ?? identity?.sellerId ?? ''} maxLength={120} /></label>
+            {variantFields.map((key) => <label key={key} className="variant-label">{variants[key] ?? key}
               <input name={key} defaultValue={existing?.variants[key] ?? identity?.variants?.[key] ?? ''}
                 maxLength={key === 'other' ? 240 : 120} /></label>)}
           </div>
-          <label>Verification notes<textarea name="notes" rows={3} required minLength={12} maxLength={2000} /></label>
-          <label>Supporting evidence URL <span className="optional">(optional)</span>
+          <label>Catatan verifikasi<textarea name="notes" rows={3} required minLength={12} maxLength={2000} /></label>
+          <label>URL bukti pendukung <span className="optional">(opsional)</span>
             <input type="url" name="evidenceUrl" maxLength={2048} defaultValue={existing?.evidenceUrl ?? ''} /></label>
           <label className="check-label"><input type="checkbox" name="confirmedExact" required />
-            I checked both listings and confirmed the same product and variant. This is an authorized affiliate link.
+            Saya sudah memeriksa kedua listing dan memastikan produk dan variannya sama. Tautan ini berasal dari program afiliasi resmi.
           </label>
-        </> : <label>Reason<textarea name="reason" rows={3} required minLength={3} maxLength={600} /></label>}
+        </> : <label>Alasan<textarea name="reason" rows={3} required minLength={3} maxLength={600} /></label>}
       </fieldset>
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && <p role="alert" className="error">{adminError(error)}</p>}
       <div className="form-actions">
-        <button type="button" disabled={busy} onClick={close}>Cancel</button>
-        <button className={isVerification ? 'primary' : 'danger'} disabled={busy}>{busy ? 'Saving…' : actions[review.action]}</button>
+        <button type="button" disabled={busy} onClick={close}>Batal</button>
+        <button className={isVerification ? 'aw-primary' : 'aw-danger'} disabled={busy}>{busy ? 'Menyimpan…' : actions[review.action]}</button>
       </div>
     </form>
   </Dialog>;

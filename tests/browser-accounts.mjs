@@ -201,26 +201,29 @@ try {
   const dashboard = await second.newPage();
   dashboard.on('pageerror', error => errors.push(error.message));
   await dashboard.goto(adminPath);
-  await visible(button(dashboard, 'Continue with Google'));
+  await visible(button(dashboard, 'Lanjutkan dengan Google'));
   await audit(dashboard, '390px administrator sign-in');
-  await button(dashboard, 'Continue with Google').press('Enter');
-  await visible(dashboard.getByText('This account requires an administrator role.', { exact: false }));
-  assert.equal(await dashboard.getByRole('heading', { name: 'Recent users' }).count(), 0);
+  await button(dashboard, 'Lanjutkan dengan Google').press('Enter');
+  await visible(dashboard.getByText('Akun ini memerlukan peran administrator.', { exact: false }));
+  assert.equal(await dashboard.getByRole('heading', { name: 'Pengguna' }).count(), 0);
   const identity = await db.authIdentity.findUniqueOrThrow({
     where: { provider_subjectHash: { provider: 'google', subjectHash: tokenHash(subject) } },
   });
   await db.user.update({ where: { id: identity.userId }, data: { role: 'admin' } });
   await dashboard.reload();
-  await visible(dashboard.getByRole('heading', { name: 'Admin dashboard' }));
-  await visible(dashboard.getByRole('heading', { name: 'Recent authentication activity' }));
+  await visible(dashboard.getByRole('heading', { name: 'Ringkasan' }));
+  await button(dashboard, 'Buka navigasi').click();
+  await dashboard.getByRole('dialog', { name: 'Navigasi ruang kerja' })
+    .getByRole('link', { name: 'Aktivitas masuk', exact: true }).click();
+  await visible(dashboard.getByRole('heading', { name: 'Aktivitas masuk' }));
   await audit(dashboard, '390px administrator dashboard');
   await dashboard.setViewportSize({ width: 1280, height: 800 });
   await audit(dashboard, '1280px administrator dashboard');
   await db.user.update({ where: { id: identity.userId }, data: { role: 'member' } });
-  await button(dashboard, 'Refresh').click();
-  await visible(dashboard.getByText('This account requires an administrator role.', { exact: false }));
-  await button(dashboard, 'Sign out').click();
-  await visible(button(dashboard, 'Continue with Google'));
+  await button(dashboard, 'Muat ulang').click();
+  await visible(dashboard.getByText('Akun ini memerlukan peran administrator.', { exact: false }));
+  await button(dashboard, 'Keluar').click();
+  await visible(button(dashboard, 'Lanjutkan dengan Google'));
   assert.equal(new URL(dashboard.url()).pathname, '/admin');
   console.log('PASS Google admin return, member denial, role revocation, logout and dashboard accessibility');
 
@@ -236,9 +239,9 @@ try {
   await creator.goto('/creator?onboard=1');
   await creator.getByLabel('Nama kreator').fill('Kreator fixture');
   await button(creator, 'Buat profil kreator').click();
-  await visible(creator.getByRole('heading', { name: 'Bentuk etalasemu.' }));
+  await visible(creator.getByRole('heading', { name: 'Ringkasan' }));
   await creator.goto('/creator?onboard=1');
-  await visible(creator.getByRole('heading', { name: 'Bentuk etalasemu.' }));
+  await visible(creator.getByRole('heading', { name: 'Ringkasan' }));
   assert.equal(new URL(creator.url()).pathname, '/creator/studio');
   await creator.close();
   console.log('PASS Creator guest gate, one-step setup and returning Studio access');
