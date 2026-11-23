@@ -43,12 +43,12 @@ try {
     await layoutButton(layout).click();
     const decision = page.getByRole('dialog');
     if (await decision.isVisible().catch(() => false)) await button('Use style settings').click();
-    await page.locator('.studio-preview-frame .storefront-layout-' + preset).waitFor();
+    await page.locator('.studio-preview-frame .storefront-layout-' + preset).waitFor({ state: 'attached' });
 
     for (const [color, theme] of [['Rose', 'editorial'], ['Contrast', 'utility'], ['Warm', 'gallery']]) {
       await button(color).click();
       if (await decision.isVisible().catch(() => false)) await button('Use style settings').click();
-      await page.locator('.studio-preview-frame .storefront-theme-' + theme).waitFor();
+      await page.locator('.studio-preview-frame .storefront-theme-' + theme).waitFor({ state: 'attached' });
       for (const width of [360, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         if (width === 360) await button('Preview').click();
@@ -58,7 +58,7 @@ try {
           preview: document.querySelector('.studio-preview-frame')?.getBoundingClientRect().width ?? 0,
         }));
         assert.ok(measurements.document <= width, `${layout} / ${color} overflows at ${width}px: ${JSON.stringify(measurements)}`);
-        assert.ok(measurements.preview <= width, `${layout} / ${color} preview overflows at ${width}px`);
+        assert.ok(measurements.preview > 0 && measurements.preview <= width, `${layout} / ${color} preview overflows at ${width}px`);
         if (width === 360) await button('Edit design').click();
       }
     }
@@ -78,7 +78,7 @@ try {
   await button('← Pengaturan mudah').click();
   const violations = await page.evaluate(async () => (await window.axe.run('.studio', {
     runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] },
-  })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(({ target }) => target) })));
+  })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(({ target, failureSummary, html }) => ({ target, failureSummary, html })) })));
   assert.deepEqual(violations, []);
 
   await layoutButton('Simpel & Rapi').click();

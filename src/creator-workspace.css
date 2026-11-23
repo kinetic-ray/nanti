@@ -7,7 +7,7 @@
 }
 .catalog-shell { width: min(72rem, calc(100% - 2rem)); margin-inline: auto; }
 .catalog-main { padding-block: clamp(1rem, 3vw, 2.5rem) 3rem; }
-.creator-workspace a { color: #5335aa; }
+.creator-workspace a:where(:not(.storefront *)) { color: #5335aa; }
 
 .aw-check-target { display: inline-grid; place-items: center; min-width: 1.75rem; min-height: 1.75rem; cursor: pointer; }
 .aw-link-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }

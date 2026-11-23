@@ -24,6 +24,7 @@ try {
     if (!screenshotDir) {
       await page.route('https://images.unsplash.com/**', route => route.fulfill({ path: photoFixture }));
     }
+    await page.route('**/api/recommendations/notifications', route => route.fulfill({ json: { notices: [] } }));
     await page.route('**/api/session', route => route.fulfill({ json: [] }));
     await page.route('**/api/account', route => route.fulfill({ json: { account: null } }));
     await page.route('**/api/prices/alerts', route => route.fulfill({ json: { alerts: [], unread: 0 } }));
