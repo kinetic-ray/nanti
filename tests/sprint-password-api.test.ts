@@ -15,8 +15,8 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
   const db = connectDatabase(process.env.TEST_DATABASE_URL!);
   const accounts = prismaAccounts(db);
   const email = `fixture-${randomUUID()}@example.test`;
-  const password = 'fixture-only password 123';
-  const replacement = 'fixture-only replacement 456';
+  const password = '12345678';
+  const replacement = 'abcdefgh';
   const app = createApp({ repository: prismaWishlists(db), consumer: { accounts, providers: {} },
     preview: async () => null, secureCookies: false, trustedProxy: 'loopback', secret: randomBytes(32).toString('hex') });
   const http = request.agent(app);
@@ -28,6 +28,7 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
   try {
     await http.post('/api/account/password/register').send({ email, password }).expect(403);
     await post('/password/register', { email, password, role: 'admin' }).expect(400);
+    await post('/password/register', { email, password: '1234567' }).expect(400);
     await post('/password/register', { email, password }).expect(202);
     await post('/password/register', { email: email.toUpperCase(), password: replacement }).expect(202);
     await post('/password/login', { email, password }).expect(401);
@@ -68,12 +69,14 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     const concurrent = await other.post('/api/account/password/login').set('X-Nanti-Request', '1')
       .send({ email, password }).expect(204);
     const otherCookie = concurrent.get('set-cookie')![0]!.split(';')[0]!;
+    await post('/password/reset', { code: reset, password: '1234567' }).expect(400);
     await post('/password/reset', { code: reset, password: replacement }).expect(204);
     await post('/password/reset', { code: reset, password: replacement }).expect(400);
     await other.get('/api/account/creator').set('Cookie', otherCookie).expect(401);
     await post('/password/login', { email, password }).expect(401);
     await post('/password/login', { email, password: replacement }).expect(204);
     await http.get('/api/account/creator').expect(200, { profile, continued: true });
+    await post('/password/change', { currentPassword: replacement, password: '1234567' }).expect(400);
     await post('/password/change', { currentPassword: password, password }).expect(403);
     await post('/password/change', { currentPassword: replacement, password }).expect(204);
     await http.get('/api/account/creator').expect(401);
