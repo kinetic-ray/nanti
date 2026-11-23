@@ -187,7 +187,7 @@ try {
     const dialog = journey.getByRole('dialog', { name: 'Classic canvas sneakers' });
     await dialog.waitFor();
     await page.keyboard.press('Escape');
-    await dialog.waitFor({ state: 'hidden' });
+    await dialog.waitFor({ state: 'detached' });
     assert.ok(await details.evaluate(node => node === document.activeElement));
     await clear.press('Enter');
     await journey.locator('#creator-walkthrough-search:focus').waitFor();

@@ -114,7 +114,10 @@ export function CreatorStorefront({ design = defaultDesign, embedded = false, wa
   const selected = products.find(item => item.id === selectedProduct);
   function closeProduct() {
     setSelectedProduct(null);
-    productTrigger.current?.focus();
+    const trigger = productTrigger.current;
+    if (trigger && (!walkthrough || trigger.ownerDocument.activeElement === trigger.ownerDocument.body)) {
+      trigger.focus();
+    }
   }
   useEffect(() => {
     const dialog = sampleDialog.current;
