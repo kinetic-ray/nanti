@@ -302,7 +302,10 @@ try {
   await select('Analitik');
   await visitor.getByText('Segera Hadir').waitFor();
   await select('Pengaturan');
-  await visitor.getByText('Pengaturan platform belum tersedia').waitFor();
+  await heading(visitor, 'Pengaturan platform').waitFor();
+  await heading(visitor, 'Kesiapan layanan').waitFor();
+  const databaseCheck = visitor.getByRole('listitem').filter({ hasText: 'Koneksi database dikonfigurasi pada server.' });
+  await databaseCheck.getByText('Dikonfigurasi', { exact: true }).waitFor();
   await button(visitor, 'Menu akun').click();
   await button(visitor, 'Keluar').click();
   await heading(visitor, 'Masuk sebagai Superadmin').waitFor();
