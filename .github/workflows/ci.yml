@@ -22,3 +22,48 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test-root-only
+          MYSQL_DATABASE: nanti_integration_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-root-only"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:test-root-only@127.0.0.1:3306/nanti_integration_test
+      TEST_DATABASE_URL: mysql://root:test-root-only@127.0.0.1:3306/nanti_integration_test
+      NANTI_BROWSER_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+      - run: npm run db:migrate
+      - run: npx prisma migrate status
+      - run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+      - run: npm test
+      - run: node --import tsx scripts/test-recommendation-mysql.ts
+      - run: npm run build
+      - name: Test public navigation and recommendation inbox
+        run: |
+          npm exec -- vite preview --host 127.0.0.1 --port 4173 --strictPort &
+          preview=$!
+          trap 'kill "$preview" 2>/dev/null || true' EXIT
+          curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:4173/ >/dev/null
+          export NANTI_BROWSER_BASE_URL=http://127.0.0.1:4173
+          node tests/browser-header.mjs
+          node tests/browser-navigation-journey.mjs
+      - run: npm run test:browser:accounts
+      - run: npm run test:browser:creator
+      - run: npm run test:browser:creator-design
