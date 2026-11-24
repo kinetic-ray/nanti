@@ -328,7 +328,12 @@ function Workspace({ onExpired, inboxOnly = false }: { onExpired: () => void; in
             <p>{notice.title ?? notice.listingId ?? 'Ada aktivitas baru yang perlu diperiksa.'}</p>
             <small>{notice.readAt ? 'Sudah dibaca' : 'Belum dibaca'} · {recordedAt(notice.createdAt)}</small></div>
           <div className="actions">
-            <a className="buy-original" href={notice.targetPath}>Buka</a>
+            <a className="buy-original" href={notice.targetPath} onClick={event => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              event.stopPropagation();
+              window.location.assign(notice.targetPath);
+            }}>Buka</a>
             <button type="button" disabled={busy} onClick={() => void updateNotice(notice, notice.readAt ? 'unread' : 'read')}>
               {notice.readAt ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}
             </button>
