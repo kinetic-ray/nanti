@@ -236,14 +236,17 @@ model WorkspaceAudit {
 model AdminNotification {
   id          String @id @default(uuid()) @db.Char(36)
   eventKey    String @unique @db.VarChar(120)
-  identityId  String @db.Char(36)
+  identityId  String? @db.Char(36)
   kind        String @db.VarChar(32)
+  subject     String? @db.VarChar(160)
+  targetPath  String? @db.VarChar(255)
   readAt      DateTime?
   dismissedAt DateTime?
   createdAt   DateTime @default(now())
-  identity    ProductIdentity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  identity    ProductIdentity? @relation(fields: [identityId], references: [id], onDelete: Restrict)
 
   @@index([dismissedAt, createdAt, id])
+  @@index([dismissedAt, readAt, createdAt])
 }
 
 model AdminSession {
