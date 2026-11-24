@@ -332,7 +332,10 @@ function Workspace({ onExpired, inboxOnly = false }: { onExpired: () => void; in
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
               event.stopPropagation();
-              window.location.assign(notice.targetPath);
+              const target = new URL(notice.targetPath, window.location.origin);
+              history.pushState(null, '', target.pathname + target.search + target.hash);
+              window.dispatchEvent(new PopStateEvent('popstate'));
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
             }}>Buka</a>
             <button type="button" disabled={busy} onClick={() => void updateNotice(notice, notice.readAt ? 'unread' : 'read')}>
               {notice.readAt ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}

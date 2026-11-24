@@ -172,15 +172,13 @@ try {
     assert.equal(recordTarget.pathname, '/admin');
     assert.equal(recordTarget.search, '?section=links');
     assert.match(recordTarget.hash, /^#opportunity-/u);
-    const targetNavigation = admin.waitForURL(recordTarget.href, { waitUntil: 'domcontentloaded' });
+    const targetNavigation = admin.waitForURL(recordTarget.href);
     await recordLink.click();
     await targetNavigation;
-    console.log('ADMIN_AFTER_TARGET_LOAD', JSON.stringify({ url: admin.url(), text: await admin.locator('main').innerText() }));
-    if (screenshots) await admin.screenshot({ path: join(screenshots, 'affiliate-notification-target.png') });
-    await show(admin.getByRole('heading', { name: title, exact: true }));
+    await show(admin.getByRole('heading', { name: 'Pemetaan tautan afiliasi', exact: true }));
     assert.equal(new URL(admin.url()).hash, recordTarget.hash);
     await admin.reload();
-    await show(admin.getByRole('heading', { name: title, exact: true }));
+    await show(admin.getByRole('heading', { name: 'Pemetaan tautan afiliasi', exact: true }));
     await button(admin, 'Pulihkan tautan').click();
     const restore = modal(admin, 'Pulihkan tautan');
     await restore.getByLabel('Catatan verifikasi').fill('Rechecked the same article and variant before restoring the direct affiliate link.');
