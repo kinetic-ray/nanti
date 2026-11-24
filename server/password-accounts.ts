@@ -39,11 +39,9 @@ export function passwordAccounts(db: PrismaClient, session: (tx: Transaction, id
       const passwordHash = await hashPassword(password);
       try {
         const id = randomUUID();
-        await db.$transaction(async tx => {
-          await tx.user.create({ data: { id, dataOwners: { create: { id } },
-            password: { create: { email, passwordHash } } } });
-          await notifyNewRegisteredUser(tx, id);
-        });
+        await db.user.create({ data: { id, dataOwners: { create: { id } },
+          password: { create: { email, passwordHash } } } });
+        await notifyNewRegisteredUser(db, id);
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
       }

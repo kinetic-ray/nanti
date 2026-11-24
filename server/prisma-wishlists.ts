@@ -2,7 +2,7 @@ import { Prisma } from './generated/prisma/client.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { currencies } from '../shared/wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
-import { getOrCreateProductIdentity } from './catalog-ingestion.js';
+import { getOrCreateProductIdentity, notifyNewProduct } from './catalog-ingestion.js';
 import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
 import { lockPriceItem, recordObservation } from './prisma-prices.js';
 import { attachProductImage, mysqlImageId, writeProductImage } from './mysql-image-storage.js';
@@ -47,15 +47,15 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
     },
     async addItem(ownerId, wishlistId, { priceSource, ...data }, requestId, photo) {
       try {
-        return await db.$transaction(async (tx) => {
+        const result = await db.$transaction(async (tx) => {
           const list = await tx.wishlist.findFirst({
             where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) }, select: { ownerId: true, currency: true },
           });
           if (!list || !await lockOwner(tx, list.ownerId, ownerId)) return false;
           if (requestId && await tx.item.findUnique({ where: { id: requestId }, select: { id: true } })) return false;
-          const productIdentityId = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+          const identity = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
           const created = await tx.item.create({
-            data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId }, select: { id: true },
+            data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId: identity?.id ?? null }, select: { id: true },
           });
           if (data.imageKey && mysqlImageId(data.imageKey)) {
             if (photo) await writeProductImage(tx, data.imageKey, list.ownerId, photo, created.id);
@@ -65,32 +65,38 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
             await recordObservation(tx, { ownerId: list.ownerId, wishlistId, itemId: created.id }, data.priceMinor, list.currency,
               priceSource ?? 'manual');
           }
-          return true;
+          return { identity };
         }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+        if (!result) return false;
+        await notifyNewProduct(db, result.identity);
+        return true;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') return false;
         throw error;
       }
     },
     async updateItem(ownerId, wishlistId, id, { priceSource, ...data }) {
-      return db.$transaction(async (tx) => {
+      const result = await db.$transaction(async (tx) => {
         const current = await lockPriceItem(tx, ownerId, wishlistId, id);
         if (!current) return false;
-        const identity = data.url !== current.url
-          ? { productIdentityId: data.url ? await getOrCreateProductIdentity(tx, data.url) : null } : {};
+        const urlChanged = data.url !== current.url;
+        const identity = urlChanged && data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
         if (data.imageKey !== undefined) {
           const existing = await tx.productImage.findUnique({ where: { itemId: id }, select: { id: true } });
           const next = data.imageKey && mysqlImageId(data.imageKey);
           if (existing && existing.id !== next) await tx.productImage.delete({ where: { id: existing.id }, select: { id: true } });
           if (next && existing?.id !== next) await attachProductImage(tx, data.imageKey!, ownerId, id);
         }
-        await tx.item.update({ where: { id }, data: { ...data, ...identity } });
+        await tx.item.update({ where: { id }, data: { ...data, ...(urlChanged && { productIdentityId: identity?.id ?? null }) } });
         if (data.priceMinor !== null && data.priceMinor !== current.priceMinor) {
           await recordObservation(tx, { ownerId: current.ownerId, wishlistId, itemId: id },
             data.priceMinor, current.wishlist.currency, priceSource ?? 'manual');
         }
-        return true;
+        return { identity };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+      if (!result) return false;
+      await notifyNewProduct(db, result.identity);
+      return true;
     },
     async removeItem(ownerId, wishlistId, id) {
       return (await db.item.deleteMany({ where: { wishlistId, id, wishlist: { dataOwner: authorizedOwner(ownerId) } } })).count > 0;

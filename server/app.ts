@@ -554,6 +554,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   api.use(async (error: unknown, req: express.Request, _res: express.Response, next: express.NextFunction) => {
     if (req.method === 'POST' && /^\/wishlists\/[0-9a-f-]{36}\/items\/?$/iu.test(req.path) &&
         !(error instanceof z.ZodError) && (error as { status?: unknown } | null)?.status !== 400) {
+      _res.locals.productSaveFailed = true;
       const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : 'unexpected';
       await affiliate?.recordSystemFailure(code).catch(() => undefined);
     }
@@ -582,17 +583,19 @@ const handleError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
     res.status(status).json({ error: 'The request body is invalid or too large.' });
     return;
   }
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+  if (res.locals.productSaveFailed && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     console.error('Request failed', { type: error.name, code: error.code });
     res.status(409).json({ error: 'This save may already be in your wishlist. Refresh the list and check before submitting again.' });
     return;
   }
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+  if (res.locals.productSaveFailed && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
     console.error('Request failed', { type: error.name, code: error.code });
     res.status(409).json({ error: 'This save conflicted with another update. Refresh your wishlist and check whether the product was added before trying again.' });
     return;
   }
   const safeCode = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined;
   console.error('Request failed', { type: error instanceof Error ? error.name : 'unknown', ...(safeCode && { code: safeCode }) });
-  res.status(500).json({ error: 'Could not save the product. Your details are still here. Refresh your wishlist and check whether it was added before trying again.' });
+  res.status(500).json({ error: res.locals.productSaveFailed
+    ? 'Could not save the product. Your details are still here. Refresh your wishlist and check whether it was added before trying again.'
+    : 'Something went wrong. Try again.' });
 };

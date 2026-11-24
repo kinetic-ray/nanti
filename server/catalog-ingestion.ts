@@ -7,14 +7,18 @@ export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, u
   const { hasAttribution: _hasAttribution, ...listing } = product;
   const created = await db.productIdentity.createMany({ data: [{ ...listing, title: null }], skipDuplicates: true });
   const { id } = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: listing.lookupKey }, select: { id: true } });
-  if (created.count) {
+  return { id, created: created.count > 0 };
+}
+
+export async function notifyNewProduct(db: PrismaClient, identity: { id: string; created: boolean } | null) {
+  if (identity?.created) {
+    const { id } = identity;
     await db.adminNotification.createMany({
       data: [{ eventKey: `opportunity:${id}`, identityId: id, kind: 'new_opportunity',
         subject: 'Produk baru menunggu ditinjau', targetPath: `/admin?section=links#opportunity-${id}` }],
       skipDuplicates: true,
-    });
+    }).catch(() => console.error('Product review notification write failed'));
   }
-  return id;
 }
 
 export async function indexExistingProducts(db: PrismaClient) {
@@ -28,14 +32,19 @@ export async function indexExistingProducts(db: PrismaClient) {
     if (!rows.length) return linked;
     for (const { id, url } of rows) {
       if (!url || !identifyProduct(url)) continue;
-      linked += await db.$transaction(async (tx) => {
+      const result = await db.$transaction(async (tx) => {
         const locked = await tx.$queryRaw<{ id: string }[]>`
           SELECT id FROM Item WHERE id = ${id} AND BINARY url = ${url} AND productIdentityId IS NULL FOR UPDATE
         `;
-        if (!locked.length) return 0;
-        const productIdentityId = await getOrCreateProductIdentity(tx, url);
-        return (await tx.item.updateMany({ where: { id }, data: { productIdentityId } })).count;
+        if (!locked.length) return null;
+        const identity = await getOrCreateProductIdentity(tx, url);
+        await tx.item.update({ where: { id }, data: { productIdentityId: identity?.id ?? null } });
+        return { identity };
       });
+      if (result) {
+        linked += 1;
+        await notifyNewProduct(db, result.identity);
+      }
     }
     after = rows.at(-1)!.id;
   }

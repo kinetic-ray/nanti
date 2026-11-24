@@ -99,21 +99,22 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
       verifiedEmail?: string | null, avatarUrl?: string | null) {
       const key = identityKey(provider, subject);
       try {
-        return await db.$transaction(async (tx) => {
+        const result = await db.$transaction(async (tx) => {
           const identity = await tx.authIdentity.findUnique({ where: { provider_subjectHash: key } });
           if (identity) {
             if ((verifiedEmail !== undefined && identity.verifiedEmail !== verifiedEmail) ||
                 (avatarUrl !== undefined && identity.avatarUrl !== avatarUrl)) {
               await tx.authIdentity.update({ where: { provider_subjectHash: key }, data: { verifiedEmail, avatarUrl } });
             }
-            return newSession(tx, identity.userId, guestOwnerId, provider);
+            return { token: await newSession(tx, identity.userId, guestOwnerId, provider), newUserId: null };
           }
           const id = randomUUID();
           await tx.user.create({ data: { id, displayName, dataOwners: { create: { id } },
             identities: { create: { ...key, verifiedEmail, avatarUrl } } } });
-          await notifyNewRegisteredUser(tx, id);
-          return newSession(tx, id, guestOwnerId, provider);
+          return { token: await newSession(tx, id, guestOwnerId, provider), newUserId: id };
         });
+        if (result.newUserId) await notifyNewRegisteredUser(db, result.newUserId);
+        return result.token;
       } catch (error) {
         if (!uniqueConflict(error)) throw error;
         const identity = await db.authIdentity.findUnique({ where: { provider_subjectHash: key } });

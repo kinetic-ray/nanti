@@ -1,6 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { adminCredentialScope, digest, hashAdminPassword } from '../server/admin-credentials.js';
 import type { AdminCredentials } from '../server/admin-credentials.js';
 import { createApp } from '../server/app.js';
@@ -165,6 +165,22 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     const purchase = await first.agent.get(`${first.path}/items/${item.id}/purchase`).expect(200, { originalUrl: raw, affiliatePath: null });
     expect(purchase.headers['cache-control']).toBe('no-store');
     await second.agent.get(`${first.path}/items/${item.id}/purchase`).expect(404);
+  });
+
+  it('commits a product save when the review notification write fails', async () => {
+    const { canonical, key } = listing();
+    const fixture = await wishlist();
+    const noticeWrite = vi.spyOn(db.adminNotification, 'createMany').mockRejectedValueOnce(new Error('Notification unavailable'));
+    try {
+      const item = await add(fixture, canonical);
+      expect(item).toBeDefined();
+      expect(noticeWrite).toHaveBeenCalledOnce();
+      const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: key }, select: { id: true } });
+      expect(await db.item.findUnique({ where: { id: item.id }, select: { productIdentityId: true } }))
+        .toEqual({ productIdentityId: identity.id });
+    } finally {
+      noticeWrite.mockRestore();
+    }
   });
 
   it('makes saved products idempotent and visible in the Superadmin product review queue', async () => {
