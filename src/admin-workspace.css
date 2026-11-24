@@ -294,6 +294,7 @@
 .aw-divided { border-top: 1px solid var(--aw-divider); }
 .aw-directory-search { justify-content: start; align-items: end; }
 .aw-directory-search .aw-field { flex: 0 1 22rem; }
+.aw-recommendation-filters .aw-field:has(select) { flex-basis: 12rem; min-width: 0; }
 .aw-directory-notice { margin-bottom: 1rem; }
 .aw-affiliate > .admin-tabs { margin: 0 0 .75rem; }
 .aw-affiliate .admin-grid { grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); align-items: start; }

@@ -1,144 +1,114 @@
 import { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
+import type { RecommendationWorkspaceProduct } from '../shared/recommendation-workspace.js';
+import { formatPrice } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
-import { RecommendationCatalogForm, type CuratedCatalogDraft } from './RecommendationCatalogForm.js';
+import { WorkspaceEmpty, WorkspaceHeading, WorkspaceLoading, WorkspacePagination, WorkspaceThumbnail } from './admin-workspace.js';
+import { RecommendationCatalogForm } from './RecommendationCatalogForm.js';
 
-type CatalogItem = CuratedCatalogDraft & {
-  id: string; published: boolean; priceVerified: boolean; priceVerifiedAt: string | null; fulfillmentCursor?: string | null;
-};
-type PendingRequest = { id: string; productName: string; status: string; createdAt: string };
-const base = '/admin/recommendations';
+export const recommendationWorkspacePath = '/admin/recommendations/workspace';
+type Catalog = { products: RecommendationWorkspaceProduct[]; total: number; categories: string[] };
+const statusLabels = { draft: 'Draf', active: 'Terbit', archived: 'Diarsipkan' };
+const size = 20;
+
 export function RecommendationAdminPanel({ onExpired }: { onExpired: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<CatalogItem[]>([]);
-  const [requests, setRequests] = useState<PendingRequest[]>([]);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState('');
+  const [notice, setNotice] = useState('');
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
-  const [unavailable, setUnavailable] = useState(false);
-  const [verificationPrice, setVerificationPrice] = useState<Record<string, string>>({});
-  const [continuations, setContinuations] = useState<Record<string, string>>({});
-  const [editing, setEditing] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editor, setEditor] = useState<RecommendationWorkspaceProduct | 'new' | null>(null);
+
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      api<{ products: CatalogItem[] }>(`${base}/catalog`, { signal: controller.signal }),
-      api<{ requests: PendingRequest[] }>(`${base}/requests`, { signal: controller.signal }),
-    ]).then(([catalog, pending]) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (query) params.set('q', query);
+    if (status) params.set('status', status);
+    if (category) params.set('category', category);
+    setLoading(true);
+    setError('');
+    api<Catalog>(recommendationWorkspacePath + '?' + params, { signal: controller.signal }).then(result => {
       if (controller.signal.aborted) return;
+      const lastPage = Math.max(1, Math.ceil(result.total / size));
+      if (page > lastPage) return setPage(lastPage);
+      setCatalog(result);
       setLoading(false);
-      setProducts(catalog.products); setRequests(pending.requests); setUnavailable(false); setError('');
-    }).catch((failure: unknown) => {
+    }).catch(failure => {
       if (controller.signal.aborted) return;
-      const message = errorMessage(failure);
-      if (message === 'Administrator sign-in is required.') onExpired();
-      else if (/not found|not configured|administrator endpoint/i.test(message)) setUnavailable(true);
+      if (errorMessage(failure) === 'Administrator sign-in is required.') onExpired();
       else setError('Rekomendasi belum dapat dimuat.');
+      setLoading(false);
     });
     return () => controller.abort();
-  }, [refresh, onExpired]);
-  async function mutate(id: string, operation: () => Promise<unknown>) {
-    setBusy(id); setError('');
-    try { await operation(); setRefresh(value => value + 1); }
-    catch (failure) {
-      if (errorMessage(failure) === 'Administrator sign-in is required.') onExpired();
-      else setError('Perubahan rekomendasi belum tersimpan. Coba lagi.');
-    }
-    finally { setBusy(''); }
-  }
-  if (unavailable) return <p className="aw-card aw-card-body">Kurasi rekomendasi belum tersedia di lingkungan ini.</p>;
-  if (error && loading) return <div role="alert" className="aw-error">Rekomendasi belum dapat dimuat. <button type="button" onClick={() => { setError(''); setRefresh(value => value + 1); }}>Coba lagi</button></div>;
-  if (loading) return <p role="status">Memuat rekomendasi…</p>;
-  return <section className="admin-panel" aria-label="Rekomendasi produk">
-    <h2>Rekomendasi produk</h2>
-    <p>Kurasi alternatif yang relevan. Produk baru selalu disimpan sebagai draf.</p>
-    {error && <p role="alert" className="error">{error}</p>}
-    <RecommendationCatalogForm key={editing ?? 'new'}
-      importLink={async (url) => {
-        // Reuse the existing hardened marketplace metadata endpoint; never scrape from the browser.
-        try {
-          const result = await api<{ name?: string | null; productUrl?: string; status: string; price?: { priceMinor: number; currency: string } }>(
-            '/products/import', { method: 'POST', data: { url } });
-          return {
-            ...(result.name ? { title: result.name } : {}),
-            ...(result.productUrl && /^https:\/\/(?:[a-z0-9-]+\.)*(?:tokopedia\.com|shopee\.co\.id|ikea\.com)(?:\/|$)/iu.test(result.productUrl)
-              ? { url: result.productUrl } : {}),
-            ...(result.price?.currency === 'IDR' && Number.isSafeInteger(result.price.priceMinor)
-              ? { priceMinor: result.price.priceMinor } : {}),
-          };
-        } catch {
-          // Metadata is best-effort. Admin can always fill the product details manually.
-          return {};
-        }
-      }}
-      initialDraft={products.find(product => product.id === editing) ?? undefined}
-      saveDraft={async (draft) => {
-        await api(editing ? `${base}/catalog/${editing}` : `${base}/catalog`, {
-          method: editing ? 'PATCH' : 'POST', data: draft,
-        });
-        setEditing(null);
+  }, [category, onExpired, page, query, refresh, status]);
+
+  return <div className="aw-section-stack">
+    <WorkspaceHeading title="Rekomendasi" description="Kurasi produk marketplace untuk pilihan alternatif di Nanti."
+      action={<button type="button" className="aw-primary" onClick={() => setEditor('new')}>Tambahkan saran produk</button>} />
+    {notice && <p className="aw-notice" role="status">{notice}</p>}
+    <section className="aw-card" aria-label="Daftar rekomendasi" aria-busy={loading}>
+      <form className="aw-card-header aw-directory-search aw-recommendation-filters" onSubmit={event => {
+        event.preventDefault();
+        setPage(1);
+        setQuery(search.trim());
+      }}>
+        <label className="aw-field">Cari produk
+          <span className="aw-search"><Search size={16} aria-hidden="true" />
+            <input type="search" value={search} maxLength={160} onChange={event => setSearch(event.target.value)} />
+          </span>
+        </label>
+        <button type="submit" className="aw-button">Cari</button>
+        <label className="aw-field">Status publikasi
+          <select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
+            <option value="">Semua status</option>
+            {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className="aw-field">Kategori
+          <select value={category} onChange={event => { setCategory(event.target.value); setPage(1); }}>
+            <option value="">Semua kategori</option>
+            {catalog?.categories.map(value => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+      </form>
+      {loading && !catalog ? <WorkspaceLoading label="Memuat rekomendasi…" /> : error ? <div className="aw-error aw-actions" role="alert">
+        <span>{error}</span><button type="button" className="aw-button" onClick={() => setRefresh(value => value + 1)}>Coba lagi</button>
+      </div> : catalog?.products.length ? <>
+        <div role="region" className="aw-table-scroll" aria-label="Produk rekomendasi" tabIndex={0}>
+          <table className="aw-table aw-directory-table" role="table">
+            <thead><tr>{['Produk', 'Harga marketplace', 'Marketplace', 'Kategori', 'Status', 'Tindakan'].map(label =>
+              <th scope="col" key={label}>{label}</th>)}</tr></thead>
+            <tbody>{catalog.products.map(product => {
+              const title = product.importedTitle ?? product.title;
+              return <tr key={product.id}>
+                <td className="aw-product-cell"><div className="aw-product-name"><WorkspaceThumbnail name={title} image={product.image} /><strong>{title}</strong></div></td>
+                <td className="aw-nowrap"><span className="aw-mobile-cell-label" aria-hidden="true">Harga marketplace</span>
+                  {product.price ? formatPrice(product.price.priceMinor, product.price.currency, 'id-ID') : 'Belum tersedia'}</td>
+                <td><span className="aw-mobile-cell-label" aria-hidden="true">Marketplace</span>{product.marketplace ?? 'Belum tersedia'}</td>
+                <td><span className="aw-mobile-cell-label" aria-hidden="true">Kategori</span>{product.category || 'Belum diisi'}</td>
+                <td><span className="aw-mobile-cell-label" aria-hidden="true">Status</span>
+                  <span className="aw-badge" data-live={product.status === 'active'}>{statusLabels[product.status]}</span></td>
+                <td className="aw-actions-cell"><button type="button" className="aw-button" aria-label={'Edit ' + title}
+                  onClick={() => setEditor(product)}>Edit</button></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+        <div className="aw-table-footer"><span>{catalog.total.toLocaleString('id-ID')} hasil</span>
+          <WorkspacePagination page={page} pages={Math.ceil(catalog.total / size)} onPage={setPage} /></div>
+      </> : <WorkspaceEmpty title={query || status || category ? 'Produk tidak ditemukan' : 'Belum ada produk rekomendasi'}
+        description={query || status || category ? 'Coba kata kunci atau filter lain.' : 'Tambahkan produk dari marketplace untuk memulai.'} />}
+    </section>
+    {editor && <RecommendationCatalogForm product={editor === 'new' ? null : editor} base={recommendationWorkspacePath}
+      close={() => setEditor(null)} onExpired={onExpired} onSaved={message => {
+        setEditor(null);
+        setNotice(message);
         setRefresh(value => value + 1);
-      }}
-    />
-    <h3>Katalog ({products.length})</h3>
-    {products.length === 0 ? <p>Belum ada produk rekomendasi.</p> : <ul>
-      {products.map(product => <li key={product.id}>
-        <strong>{product.title}</strong>
-        <p>{product.category} · {product.published ? 'Terbit' : 'Draf'} · {product.priceVerified ? 'Harga dikonfirmasi' : 'Harga belum diverifikasi'}</p>
-        {product.priceMinor !== null && <p>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: product.currency }).format(product.priceMinor / 100)}</p>}
-        <button type="button" disabled={busy !== ''} onClick={() => setEditing(product.id)}>Edit produk</button>
-        {!product.published && <form onSubmit={event => {
-          event.preventDefault();
-          const digits = (verificationPrice[product.id] ?? '').replace(/\D/gu, '');
-          const amount = Number(digits);
-          if (!Number.isSafeInteger(amount * 100) || amount <= 0) {
-            setError('Isi harga produk yang valid.');
-            return;
-          }
-          void mutate(product.id, () => api(`${base}/catalog/${product.id}/verify-price`, {
-            method: 'POST', data: { priceMinor: amount * 100, checkedUrl: product.url, confirmedOnListing: true },
-          }));
-        }}>
-          <label>Harga terbaru setelah dicek di listing
-            <input inputMode="numeric" required placeholder="Contoh: 750.000"
-              value={verificationPrice[product.id] ?? ''}
-              onChange={event => {
-                const digits = event.target.value.replace(/\D/gu, '');
-                setVerificationPrice(current => ({
-                  ...current, [product.id]: digits ? new Intl.NumberFormat('id-ID').format(Number(digits)) : '',
-                }));
-              }} />
-          </label>
-          <a href={product.url} target="_blank" rel="noopener noreferrer">Periksa listing</a>
-          <button type="submit" disabled={busy !== ''}>Konfirmasi harga</button>
-        </form>}
-        {!product.published && <button type="button" disabled={busy !== '' || !product.priceVerified}
-          onClick={() => void mutate(product.id, async () => {
-            const result = await api<{ nextCursor: string | null }>(`${base}/catalog/${product.id}/publication`, {
-              method: 'PATCH', data: { published: true },
-            });
-            if (result.nextCursor) setContinuations(current => ({ ...current, [product.id]: result.nextCursor! }));
-          })}>Terbitkan</button>}
-        {(continuations[product.id] || product.fulfillmentCursor) && <button type="button" disabled={busy !== ''}
-          onClick={() => void mutate(product.id, async () => {
-            const result = await api<{ nextCursor: string | null }>(`${base}/catalog/${product.id}/publication`, {
-              method: 'PATCH', data: { published: true, after: continuations[product.id] || product.fulfillmentCursor },
-            });
-            setContinuations(current => {
-              const updated = { ...current };
-              if (result.nextCursor) updated[product.id] = result.nextCursor;
-              else delete updated[product.id];
-              return updated;
-            });
-          })}>Lanjutkan pencocokan</button>}
-        {product.published && <button type="button" disabled={busy !== ''}
-          onClick={() => void mutate(product.id, () => api(`${base}/catalog/${product.id}/publication`, {
-            method: 'PATCH', data: { published: false },
-          }))}>Tarik publikasi</button>}
-      </li>)}
-    </ul>}
-    <h3>Permintaan pengguna ({requests.filter(request => request.status === 'pending').length} menunggu)</h3>
-    {requests.length === 0 ? <p>Belum ada permintaan.</p> : <ul>
-      {requests.map(request => <li key={request.id}>{request.productName} · {request.status === 'pending' ? 'Menunggu' : 'Terpenuhi'}</li>)}
-    </ul>}
-  </section>;
+      }} />}
+  </div>;
 }

@@ -3,8 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { connectDatabase } from '../server/database.js';
 
 const url = process.env.DATABASE_URL;
-if (!url || !/\/nanti_migration_test(?:\?|$)/u.test(url)) {
-  throw new Error('Refusing recommendation DB smoke test outside the disposable nanti_migration_test schema.');
+const target = url && new URL(url);
+const local = target && ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname);
+if (!url || !target || !local || (target.pathname !== '/nanti_migration_test' &&
+    (url !== process.env.TEST_DATABASE_URL || !/_test$/u.test(target.pathname)))) {
+  throw new Error('Recommendation DB smoke tests require a disposable local test schema.');
 }
 const db = connectDatabase(url);
 const ownerId = randomUUID();

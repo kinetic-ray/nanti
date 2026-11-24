@@ -138,10 +138,7 @@ export function AdminCenter() {
       <WorkspaceHeading title="Pusat notifikasi" description="Periksa kiriman produk, akun baru, dan gangguan yang perlu ditangani." />
       <NotificationInbox onExpired={onExpired} />
     </div>}
-    {active === 'recommendations' && <>
-      <WorkspaceHeading title="Rekomendasi" />
-      <RecommendationAdminPanel onExpired={onExpired} />
-    </>}
+    {active === 'recommendations' && <RecommendationAdminPanel onExpired={onExpired} />}
     {active === 'audit' && <PlatformActivity onExpired={onExpired} />}
     {active === 'analytics' && <WorkspaceAnalytics />}
     {active === 'settings' && <PlatformSettings onExpired={onExpired} />}

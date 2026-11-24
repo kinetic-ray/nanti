@@ -91,6 +91,11 @@ jobs:
           NANTI_BROWSER_BASE_URL=http://127.0.0.1:3000 \
             NANTI_BROWSER_ARTIFACTS=test-results/browser \
             npm run test:browser:affiliate 2>&1 | tee test-results/browser-affiliate.log
+      - name: Run recommendation workspace acceptance journey
+        run: |
+          set -o pipefail
+          NANTI_BROWSER_ARTIFACTS=test-results/browser/recommendations \
+            node --import tsx tests/browser-recommendation-workspace.mjs 2>&1 | tee test-results/browser-recommendations.log
       - name: Test public navigation and recommendation inbox
         run: |
           set -o pipefail
@@ -160,4 +165,5 @@ jobs:
           }
           NODE
       - run: npm run db:migrate
-      - run: npm test -- tests/affiliate-api.test.ts tests/mysql-product-images.test.ts
+      - run: npx prisma migrate status
+      - run: npm test -- tests/affiliate-api.test.ts tests/mysql-product-images.test.ts tests/recommendation-workspace.test.ts

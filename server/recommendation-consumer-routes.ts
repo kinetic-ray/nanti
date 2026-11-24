@@ -6,6 +6,7 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { rankAlternatives, safeHttpsUrl, type RecommendationProduct } from './recommendation-matching.js';
+import { identifyProduct } from './product-identity.js';
 import { activeAffiliate } from './purchase-destinations.js';
 import type { AffiliateRepository } from './prisma-affiliate.js';
 
@@ -54,12 +55,13 @@ export function recommendationConsumerRoutes(db: PrismaClient, affiliate?: Affil
     const id = uuid.safeParse(req.params.id);
     if (!id.success) return res.sendStatus(404);
     const product = await db.curatedRecommendation.findFirst({ where: {
-      id: id.data, published: true, priceVerified: true,
+      id: id.data, published: true, archivedAt: null, priceVerified: true, priceMinor: { gt: 0 },
       priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() },
-    }, select: { url: true } });
-    if (!product || !safeHttpsUrl(product.url)) return res.sendStatus(404);
-    const mapping = await activeAffiliate(affiliate, product.url);
-    res.set('Referrer-Policy', 'no-referrer').redirect(302, mapping?.affiliateUrl ?? product.url);
+    }, select: { url: true, listingUrl: true } });
+    const url = product?.listingUrl ?? product?.url;
+    if (!url || !safeHttpsUrl(url)) return res.sendStatus(404);
+    const mapping = await activeAffiliate(affiliate, url);
+    res.set('Referrer-Policy', 'no-referrer').redirect(302, mapping?.affiliateUrl ?? url);
   });
   async function ownedItem(ownerId: string, wishlistId: string, itemId: string) {
     const wishlist = await db.wishlist.findFirst({
@@ -87,7 +89,7 @@ export function recommendationConsumerRoutes(db: PrismaClient, affiliate?: Affil
     const sourceCategory = inferCategory(item.name);
     if (!sourceCategory) return res.json({ alternatives: [], hasMore: false });
     const candidates = await db.curatedRecommendation.findMany({
-      where: { published: true, currency: wishlist.currency, priceVerified: true,
+      where: { published: true, archivedAt: null, currency: wishlist.currency, priceVerified: true,
         priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
       take: 500, orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
     });
@@ -97,9 +99,21 @@ export function recommendationConsumerRoutes(db: PrismaClient, affiliate?: Affil
       priceMinor: item.priceMinor ?? estimatedPriceMinor ?? null, currency: wishlist.currency, priceVerified: false,
       published: true, url: item.url ?? '',
     };
-    const alternatives = rankAlternatives(source, candidates.map(product => ({
-      ...product, description: product.description ?? null,
-    })));
+    const sourceKey = identifyProduct(item.url)?.lookupKey;
+    const seen = new Set<string>();
+    const eligible = candidates.flatMap(product => {
+      const url = product.listingUrl ?? product.url;
+      const key = identifyProduct(url)?.lookupKey;
+      if (!safeHttpsUrl(url) || product.archivedAt ||
+          (product.productIdentityId && product.productIdentityId === item.productIdentityId) ||
+          (key && (key === sourceKey || seen.has(key)))) return [];
+      if (key) seen.add(key);
+      const { id, title, category, color, style, useCase, description, priceMinor, currency,
+        priceVerified, priceVerifiedAt, published, priority } = product;
+      return [{ id, title, category, color, style, useCase, description, priceMinor, currency,
+        priceVerified, priceVerifiedAt, published, priority, url }];
+    });
+    const alternatives = rankAlternatives(source, eligible);
     res.json({ alternatives: await Promise.all(alternatives.map(async match => ({
       ...match, product: await withPurchaseDestination(match.product),
     }))), hasMore: false });
@@ -158,11 +172,12 @@ export function recommendationConsumerRoutes(db: PrismaClient, affiliate?: Affil
       } },
     });
     const products = await db.curatedRecommendation.findMany({
-      where: { id: { in: notices.map(notice => notice.productId) }, published: true,
+      where: { id: { in: notices.map(notice => notice.productId) }, published: true, archivedAt: null,
         priceVerified: true, priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
-      select: { id: true, title: true, url: true, priceMinor: true, currency: true },
+      select: { id: true, title: true, url: true, listingUrl: true, priceMinor: true, currency: true },
     });
-    const validProducts = await Promise.all(products.filter(product => safeHttpsUrl(product.url)).map(withPurchaseDestination));
+    const validProducts = await Promise.all(products.map(({ listingUrl, ...product }) => ({ ...product, url: listingUrl ?? product.url }))
+      .filter(product => safeHttpsUrl(product.url)).map(withPurchaseDestination));
     const valid = new Map(validProducts.map(product => [product.id, product]));
     res.json({ notices: notices.filter(notice => valid.has(notice.productId)).map(notice => ({
       ...notice, product: valid.get(notice.productId),

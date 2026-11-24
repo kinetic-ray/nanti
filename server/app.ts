@@ -1,8 +1,9 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import type { PrismaClient } from './generated/prisma/client.js';
+import { recommendationListing, signRecommendationPreview } from './recommendation-workspace-routes.js';
 import { recommendationConsumerRoutes } from './recommendation-consumer-routes.js';
-import type { ErrorRequestHandler, Response } from 'express';
+import type { ErrorRequestHandler, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -164,7 +165,12 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   });
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
-  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies, recommendationsDb, recommendationSuperadminEnabled));
+  const limitProductLookup = rateLimit({
+    windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Too many lookups. Enter the product details below.' },
+  });
+  if (affiliate && admin) api.use('/admin', adminRoutes(affiliate, admin, secret, secureCookies, recommendationsDb, recommendationSuperadminEnabled,
+    [limitProductLookup, (req, res) => importProduct(req, res, true)]));
   api.use('/admin', (_req, res) => res.status(404).json({
     error: affiliate && admin ? 'This administrator endpoint could not be found.' : 'Administrator sign-in is not configured.',
   }));
@@ -507,18 +513,17 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     res.sendStatus(204);
   });
 
-  const limitProductLookup = rateLimit({
-    windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
-    message: { error: 'Too many lookups. Enter the product details below.' },
-  });
   api.post('/products/preview', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     const name = await preview(url);
     res.json(name ? { name } : { name: null });
   });
-  api.post('/products/import', limitProductLookup, async (req, res) => {
+  async function importProduct(req: Request, res: Response, adminPreview = false) {
     const { url: { parsed: url, original } } = z.strictObject({ url: productLink }).parse(req.body);
     const merchant = productMerchant(url.hostname);
+    if (adminPreview && (url.protocol !== 'https:' || url.port || merchant === 'other')) {
+      return res.status(400).json({ error: 'Gunakan tautan HTTPS produk Tokopedia, Shopee, atau IKEA.' });
+    }
     const canLookUp = isIkeaMetadataLink(url) || merchant === 'shopee' || merchant === 'tokopedia';
     let diagnostic: { code: string; host: string; httpStatus?: number } | null = null;
     const meta = canLookUp && lookupMetadata ? await lookupMetadata(url, undefined, (code, host, httpStatus) => {
@@ -528,6 +533,18 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const listing = merchant === 'ikea' && meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
     const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
       (merchant === 'shopee' || merchant === 'tokopedia') ? meta?.image ?? null : null;
+    if (adminPreview) {
+      const resolved = meta?.productUrl ?? url.href;
+      if (!recommendationListing(resolved)) {
+        return res.status(422).json({ error: 'Tautan belum mengarah ke produk. Gunakan tautan lengkap dari marketplace.' });
+      }
+      const price = meta?.price;
+      return res.json(signRecommendationPreview(secret, res.locals.adminTokenHash, {
+        originalUrl: original, listingUrl: resolved, title: meta?.title?.trim().slice(0, 160) || null,
+        image: imagePath && imagePath.length <= 2048 ? imagePath : null,
+        price: price && Number.isSafeInteger(price.priceMinor) && price.priceMinor > 0 && price.priceMinor <= 2_000_000_000 ? price : null,
+      }));
+    }
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: original, name,
       ...(meta?.title && meta.title.length <= 160 && { publicTitleProof: signPublicTitle(secret, {
@@ -557,7 +574,8 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       status: imagePath || meta?.price || meta?.sellerName ? 'details_available' : name ? 'name_available' : 'manual_required',
     };
     res.json(result);
-  });
+  }
+  api.post('/products/import', limitProductLookup, (req, res) => importProduct(req, res));
   api.post('/products/import/tokopedia-image', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.body);
     if ((!mysqlImages && !imageStorage) || !lookupMetadata || url.origin !== 'https://www.tokopedia.com' || url.search || url.hash) {
