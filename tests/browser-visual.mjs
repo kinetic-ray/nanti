@@ -134,16 +134,21 @@ try {
   await detail.getByRole('link', { name: /^Beli produk/u }).waitFor();
   if (!reference) await inspect('390px product detail');
   await capture('product-390');
-  await button('Cek alasan beli', detail).click();
-  const impulse = dialog('Cek alasan beli');
-  await visible(impulse);
-  if (!reference) {
-    await visible(impulse.getByRole('progressbar'));
-    await inspect('390px first impulse question');
+  async function buyingReflection() {
+    await button('Bantu putuskan beli', detail).click();
+    const decision = dialog('Bantu putuskan beli');
+    await visible(decision);
+    await button('Lanjutkan dengan analisis terbatas', decision).click();
+    await decision.locator('.guided-reasons summary').click();
+    await visible(decision.locator('.guided-reasons fieldset').first());
+    assert.equal(await decision.locator('.guided-reasons fieldset').count(), 6);
+    return decision;
   }
+  const decision = await buyingReflection();
+  if (!reference) await inspect('390px buying reflection');
   await capture('impulse-390');
-  await page.keyboard.press('Escape');
-  assert.equal(await button('Cek alasan beli', detail).evaluate(active => active === document.activeElement), true);
+  await button('Selesai', decision).click();
+  await visible(detail);
   await page.keyboard.press('Escape');
   assert.equal(await product.evaluate(active => active === document.activeElement), true);
 
@@ -190,7 +195,8 @@ try {
       await button('Isi sendiri', add).click();
       await visible(add.getByLabel('Nama produk'));
       await inspect(`${width}px manual entry`, false);
-      await page.keyboard.press('Escape');
+      await button('Batal', add).click();
+      await add.waitFor({ state: 'hidden' });
 
       await button('Bandingkan prioritas').click();
       await comparison.getByRole('checkbox', { name: 'TERTIAL' }).check();
@@ -204,10 +210,9 @@ try {
 
       await product.click();
       await inspect(`${width}px product detail`, false);
-      await button('Cek alasan beli', detail).click();
-      await visible(impulse.getByRole('progressbar'));
+      const reflection = await buyingReflection();
       await inspect(`${width}px buying reasons`, false);
-      await page.keyboard.press('Escape');
+      await button('Selesai', reflection).click();
       await button('Riwayat dan notifikasi harga', detail).click();
       await visible(dialog('Riwayat dan notifikasi harga'));
       await inspect(`${width}px price history`, false);
@@ -264,6 +269,9 @@ try {
     }
     await capture('import-short-viewport');
     await page.keyboard.press('Escape');
+    await visible(smallImport);
+    await button('Batal', smallImport).click();
+    await smallImport.waitFor({ state: 'hidden' });
     assert.equal(await button('Tambah produk').evaluate(trigger => trigger === document.activeElement), true);
     await page.setViewportSize({ width: 390, height: 850 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
@@ -271,7 +279,8 @@ try {
     await button('Tambah produk').click();
     await visible(dialog('Tambah produk'));
     await inspect('200% text resizing in a form', false);
-    await page.keyboard.press('Escape');
+    await button('Batal', dialog('Tambah produk')).click();
+    await dialog('Tambah produk').waitFor({ state: 'hidden' });
     await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
 
     const picker = page.locator('.collection-picker select');
@@ -285,7 +294,7 @@ try {
     await visible(page.getByRole('alert'));
     await button('Coba lagi').click();
     await visible(page.getByRole('heading', { name: 'TERTIAL', exact: true }));
-    await button('English').click();
+    await button('Switch to English').click();
     assert.equal(await page.locator('html').getAttribute('lang'), 'en');
     await inspect('390px English wishlist');
     const mediaPath = `**/api/wishlists/${first.id}/items/${itemId}/image`;

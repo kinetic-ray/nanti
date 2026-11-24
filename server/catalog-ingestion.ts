@@ -1,23 +1,28 @@
 import type { Prisma, PrismaClient } from './generated/prisma/client.js';
 import { identifyProduct } from './product-identity.js';
 
-export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, url: string) {
+export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, url: string, publicTitle?: string) {
   const product = identifyProduct(url);
   if (!product) return null;
   const { hasAttribution: _hasAttribution, ...listing } = product;
-  const created = await db.productIdentity.createMany({ data: [{ ...listing, title: null }], skipDuplicates: true });
+  const created = await db.productIdentity.createMany({ data: [{ ...listing, title: publicTitle ?? null }], skipDuplicates: true });
   const { id } = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: listing.lookupKey }, select: { id: true } });
+  if (!created.count && publicTitle) {
+    await db.productIdentity.updateMany({ where: { id, title: null }, data: { title: publicTitle } });
+  }
   return { id, created: created.count > 0 };
 }
 
-export async function notifyNewProduct(db: PrismaClient, identity: { id: string; created: boolean } | null) {
-  if (identity?.created) {
+export async function notifyNewProduct(db: Prisma.TransactionClient, identity: { id: string; created: boolean } | null,
+  registeredSubmissionId?: string) {
+  if (identity && (identity.created || registeredSubmissionId)) {
     const { id } = identity;
     await db.adminNotification.createMany({
-      data: [{ eventKey: `opportunity:${id}`, identityId: id, kind: 'new_opportunity',
-        subject: 'Produk baru menunggu ditinjau', targetPath: `/admin?section=links#opportunity-${id}` }],
+      data: [{ eventKey: identity.created ? `opportunity:${id}` : `product-submission:${registeredSubmissionId}`,
+        identityId: id, kind: 'new_opportunity',
+        subject: 'Produk baru disimpan', targetPath: `/admin?section=products#product-${id}` }],
       skipDuplicates: true,
-    }).catch(() => console.error('Product review notification write failed'));
+    });
   }
 }
 
@@ -43,7 +48,7 @@ export async function indexExistingProducts(db: PrismaClient) {
       });
       if (result) {
         linked += 1;
-        await notifyNewProduct(db, result.identity);
+        await notifyNewProduct(db, result.identity).catch(() => console.error('Product notification write failed'));
       }
     }
     after = rows.at(-1)!.id;

@@ -6,6 +6,8 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { rankAlternatives, safeHttpsUrl, type RecommendationProduct } from './recommendation-matching.js';
+import { activeAffiliate } from './purchase-destinations.js';
+import type { AffiliateRepository } from './prisma-affiliate.js';
 
 const uuid = z.uuid();
 const answersSchema = z.strictObject({
@@ -28,7 +30,7 @@ function inferCategory(title: string): string | null {
 }
 
 /** Consumer-only endpoints. Never accept an ownerId from request parameters. */
-export function recommendationConsumerRoutes(db: PrismaClient) {
+export function recommendationConsumerRoutes(db: PrismaClient, affiliate?: AffiliateRepository) {
   const router = Router();
   router.use((req, res, next) => {
     res.set('Cache-Control', 'private, no-store');
@@ -44,6 +46,21 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
   });
   const readLimit = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'Terlalu banyak permintaan. Coba lagi sebentar.' } });
+  async function withPurchaseDestination<T extends { id: string; url: string }>(product: T) {
+    const mapping = await activeAffiliate(affiliate, product.url);
+    return mapping ? { ...product, purchasePath: `/api/recommendations/products/${product.id}/open` } : product;
+  }
+  router.get('/products/:id/open', readLimit, async (req, res) => {
+    const id = uuid.safeParse(req.params.id);
+    if (!id.success) return res.sendStatus(404);
+    const product = await db.curatedRecommendation.findFirst({ where: {
+      id: id.data, published: true, priceVerified: true,
+      priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() },
+    }, select: { url: true } });
+    if (!product || !safeHttpsUrl(product.url)) return res.sendStatus(404);
+    const mapping = await activeAffiliate(affiliate, product.url);
+    res.set('Referrer-Policy', 'no-referrer').redirect(302, mapping?.affiliateUrl ?? product.url);
+  });
   async function ownedItem(ownerId: string, wishlistId: string, itemId: string) {
     const wishlist = await db.wishlist.findFirst({
       where: { id: wishlistId, ownerId }, include: { items: true },
@@ -83,7 +100,9 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
     const alternatives = rankAlternatives(source, candidates.map(product => ({
       ...product, description: product.description ?? null,
     })));
-    res.json({ alternatives, hasMore: false });
+    res.json({ alternatives: await Promise.all(alternatives.map(async match => ({
+      ...match, product: await withPurchaseDestination(match.product),
+    }))), hasMore: false });
   });
   router.post('/requests', requestLimit, async (req, res) => {
     const parsed = requestBody.safeParse(req.body);
@@ -143,7 +162,8 @@ export function recommendationConsumerRoutes(db: PrismaClient) {
         priceVerified: true, priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } },
       select: { id: true, title: true, url: true, priceMinor: true, currency: true },
     });
-    const valid = new Map(products.filter(product => safeHttpsUrl(product.url)).map(product => [product.id, product]));
+    const validProducts = await Promise.all(products.filter(product => safeHttpsUrl(product.url)).map(withPurchaseDestination));
+    const valid = new Map(validProducts.map(product => [product.id, product]));
     res.json({ notices: notices.filter(notice => valid.has(notice.productId)).map(notice => ({
       ...notice, product: valid.get(notice.productId),
     })) });

@@ -10,6 +10,7 @@ import { adminCredentialScope, adminSessionMs, adminTokenHash, newAdminSession, 
 import { AffiliateProblem } from './prisma-affiliate.js';
 import type { AffiliateRepository } from './prisma-affiliate.js';
 import { safeAdminUrl } from './product-identity.js';
+import { hasPublicDestination, replacementUrl } from './effective-product-url.js';
 
 const id = z.uuid();
 const page = z.strictObject({ after: id.optional() });
@@ -96,6 +97,37 @@ export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCr
     recommendationManagementEnabled: recommendationSuperadminEnabled,
   }));
   if (recommendationsDb && recommendationSuperadminEnabled) router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
+
+  router.get('/products', async (req, res) => {
+    const input = page.extend({ q: z.string().trim().max(160).optional(),
+      state: z.enum(['original', 'replacement']).optional() }).parse(req.query);
+    res.json(await affiliate.listProducts(input));
+  });
+  router.get('/products/:id', async (req, res) => {
+    const product = await affiliate.productDetail(id.parse(req.params.id));
+    if (!product) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+    res.json(product);
+  });
+  router.get('/products/:id/photo', async (req, res) => {
+    const photo = await affiliate.productPhoto(id.parse(req.params.id));
+    if (!photo) return res.sendStatus(404);
+    res.set('Cache-Control', 'private, no-store').type('image/jpeg').send(photo);
+  });
+  router.patch('/products/:id', async (req, res) => {
+    const identityId = id.parse(req.params.id);
+    const input = z.strictObject({ url: z.string().trim().min(1).max(2048) }).safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Masukkan URL produk HTTPS yang valid.' });
+    const product = await affiliate.productDetail(identityId);
+    if (!product) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+    const restore = input.data.url === product.originalUrl;
+    const url = replacementUrl(input.data.url);
+    if (!restore && (!url || !await hasPublicDestination(url))) {
+      return res.status(400).json({ error: 'Masukkan URL produk HTTPS dengan tujuan publik yang valid.' });
+    }
+    const result = await affiliate.replaceProductUrl(identityId, restore ? product.originalUrl : url!.href, credentials.username);
+    if (!result) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+    res.json(result);
+  });
 
   router.get('/opportunities', async (req, res) => {
     const input = opportunityQuery.parse(req.query);

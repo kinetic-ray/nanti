@@ -7,6 +7,8 @@ export type ProductImport = {
   hostname: string;
   originalUrl: string;
   name: string | null;
+  publicTitleProof?: string;
+  publicPriceProof?: string;
   status: 'name_available' | 'details_available' | 'manual_required';
   price?: { priceMinor: number; currency: Currency };
   imagePath?: string;

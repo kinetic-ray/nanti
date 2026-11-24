@@ -1,221 +1,180 @@
+
 import assert from 'node:assert/strict';
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { mkdir } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import sharp from 'sharp';
+import { adminCredentialScope, hashAdminPassword } from '../server/admin-credentials.ts';
+import { createApp } from '../server/app.ts';
+import { connectDatabase } from '../server/database.ts';
+import { createMysqlImageStorage } from '../server/mysql-image-storage.ts';
+import { prismaAccounts } from '../server/prisma-accounts.ts';
+import { prismaAffiliate } from '../server/prisma-affiliate.ts';
+import { prismaWishlists } from '../server/prisma-wishlists.ts';
 
-const baseURL = process.env.NANTI_BROWSER_BASE_URL ?? 'http://127.0.0.1:3000';
-const username = process.env.NANTI_TEST_ADMIN_USERNAME;
-const password = process.env.NANTI_TEST_ADMIN_PASSWORD;
-const screenshots = process.env.NANTI_BROWSER_ARTIFACTS;
-if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseURL).hostname) || !username || !password) {
-  throw new Error('Use a local instance with an isolated database and set the test administrator credentials.');
-}
-
-const browser = await chromium.launch({
-  executablePath: process.env.NANTI_BROWSER_PATH ??
-    (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined),
-  args: ['--disable-background-networking'], headless: true,
+const databaseUrl = process.env.TEST_DATABASE_URL;
+if (!databaseUrl || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(databaseUrl).hostname) ||
+    !/_test$/u.test(new URL(databaseUrl).pathname)) throw new Error('Set a disposable local TEST_DATABASE_URL.');
+const db = connectDatabase(databaseUrl);
+const key = randomUUID();
+const original = 'https://www.tokopedia.com/fixture-store/charger-' + key;
+const replacement = 'https://shopee.co.id/product/11111/22222';
+const title = 'Public fixture charger ' + key;
+const email = key + '@example.test';
+const image = 'https://images.tokopedia.net/fixture.jpg';
+const password = randomBytes(24).toString('base64url');
+const secret = randomBytes(32).toString('hex');
+const credentials = { username: 'fixture-admin', passwordHash: await hashAdminPassword(password) };
+const accounts = prismaAccounts(db);
+await accounts.passwords.register(email, password);
+const verification = await accounts.passwords.issue(email, 'verify');
+assert.ok(verification);
+assert.ok(await accounts.passwords.consume(verification, 'verify', password));
+const jpeg = await sharp({ create: { width: 48, height: 48, channels: 3, background: '#334455' } }).jpeg().toBuffer();
+const app = createApp({ secret, secureCookies: false, preview: async () => null,
+  consumer: { accounts, providers: {} }, admin: credentials, affiliate: prismaAffiliate(db),
+  repository: prismaWishlists(db), mysqlImages: createMysqlImageStorage(db), recommendationsDb: db,
+  lookupMetadata: async url => url.href === original ? { productUrl: original, title, image,
+    price: { priceMinor: 173500000, currency: 'IDR' } } : null,
+  marketplaceImageRequest: async () => new Response(Uint8Array.from(jpeg), { headers: { 'content-type': 'image/jpeg' } }),
+  webRoot: fileURLToPath(new URL('../dist/web/', import.meta.url)),
 });
-const createPage = () => browser.newPage({ baseURL, viewport: { width: 1365, height: 900 }, locale: 'en-US' });
-const shopper = await createPage();
-const admin = await createPage();
-const axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
+const server = createServer(app).listen(0, '127.0.0.1');
+await once(server, 'listening');
+const baseURL = 'http://127.0.0.1:' + server.address().port;
+const browser = await chromium.launch({ executablePath: process.env.NANTI_BROWSER_PATH, headless: true });
+const shopper = await browser.newPage({ baseURL });
+const admin = await browser.newPage({ baseURL, viewport: { width: 1365, height: 900 } });
+const artifacts = process.env.NANTI_BROWSER_ARTIFACTS;
+if (artifacts) await mkdir(artifacts, { recursive: true });
+const screenshot = name => artifacts && admin.screenshot({ path: join(artifacts, name) });
 const button = (root, name) => root.getByRole('button', { name, exact: true });
-const modal = (root, name) => root.getByRole('dialog', { name, exact: true });
-const show = (locator) => locator.waitFor({ state: 'visible' });
-const step = async (name, work) => { await work(); console.log('PASS ' + name); };
-const errors = [];
-for (const page of [shopper, admin]) {
-  page.setDefaultTimeout(8000);
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript({ path: axePath });
-}
-if (screenshots) await mkdir(screenshots, { recursive: true });
-
-async function axe(page, name) {
-  const failures = await page.evaluate(async () => (await window.axe.run(document, {
+const dialog = (root, name) => root.getByRole('dialog', { name, exact: true });
+const headers = { 'X-Nanti-Request': '1' };
+const show = locator => locator.waitFor({ state: 'visible' });
+await admin.addInitScript({ path: createRequire(import.meta.url).resolve('axe-core/axe.min.js') });
+async function axe() {
+  const violations = await admin.evaluate(async () => (await window.axe.run(document, {
     runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] },
-  })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(({ target }) => target) })));
-  assert.deepEqual(failures, [], name);
+  })).violations.map(({ id, nodes }) => ({ id, nodes: nodes.map(({ target }) => target) })));
+  assert.deepEqual(violations, []);
 }
-
-const article = String(randomInt(10_000_000, 99_999_999));
-const original = `https://www.ikea.com/us/en/p/browser-fixture-${article}/`;
-const candidate = `${original}?utm_source=isolated-browser-fixture`;
-const title = `Fixture product ${article}`;
-const headers = { 'X-Nanti-Request': '1', 'Content-Type': 'application/json' };
-let wishlistId;
-let activeHref;
-
-async function addProduct(name, url) {
-  await button(shopper, 'Tambah produk').click();
-  const form = modal(shopper, 'Tambah produk');
-  await button(form, 'Isi sendiri').click();
-  await form.getByLabel('Nama produk', { exact: true }).fill(name);
-  if (url) await form.getByLabel('Tempel tautan produk').fill(url);
-  await button(form, 'Simpan produk').click();
-  await show(shopper.getByRole('heading', { name, exact: true }));
-}
-
 try {
-  await step('Original and missing purchase destinations in Indonesian', async () => {
-    await shopper.goto('/');
-    assert.equal(await shopper.locator('html').getAttribute('lang'), 'id');
-    await button(shopper, 'Buat wishlist').click();
-    await modal(shopper, 'Kategori wishlist baru').getByLabel('Nama kategori wishlist').fill('Browser affiliate QA');
-    await button(modal(shopper, 'Kategori wishlist baru'), 'Simpan wishlist').click();
-    await show(shopper.getByRole('heading', { name: 'Browser affiliate QA' }));
-    wishlistId = (await (await shopper.request.get('/api/wishlists')).json())[0].id;
-    await addProduct(title, original);
-    await addProduct('Item without a link');
-    await button(shopper, `Bantu putuskan untuk ${title}`).click();
-    let details = modal(shopper, title);
-    const link = details.getByRole('link', { name: /^Beli produk/u });
-    await show(link);
-    assert.equal(await link.getAttribute('href'), original);
-    assert.equal(await details.getByText(/komisi/u).count(), 0);
-    await shopper.keyboard.press('Escape');
-    await button(shopper, 'Bantu putuskan untuk Item without a link').click();
-    details = modal(shopper, 'Item without a link');
-    assert.equal(await button(details, 'Beli produk').isDisabled(), true);
-    await show(details.getByText('Tambahkan link produk untuk memakai tombol ini.'));
-    await shopper.keyboard.press('Escape');
-  });
+  assert.equal((await shopper.request.post('/api/account/password/login', { headers, data: { email, password } })).status(), 204);
+  await shopper.route(image, route => route.fulfill({ contentType: 'image/jpeg', body: jpeg }));
+  await shopper.goto('/');
+  await button(shopper, 'Buat wishlist').click();
+  const category = dialog(shopper, 'Kategori wishlist baru');
+  await category.getByLabel('Nama kategori wishlist').fill('Private browser wishlist');
+  await button(category, 'Simpan wishlist').click();
+  await show(shopper.getByRole('heading', { name: 'Private browser wishlist' }));
+  await button(shopper, 'Tambah produk').click();
+  const form = dialog(shopper, 'Tambah produk');
+  await form.getByLabel('Tempel tautan produk').fill(original);
+  await button(form, 'Cek link produk').click();
+  await show(form.getByText(title, { exact: true }));
+  await button(form, 'Simpan produk').click();
+  await show(shopper.getByRole('heading', { name: title }));
+  const [list] = await (await shopper.request.get('/api/wishlists')).json();
+  const [item] = (await (await shopper.request.get('/api/wishlists/' + list.id)).json()).items;
+  assert.equal(item.url, original);
+  assert.equal(item.priceMinor, 173500000);
+  assert.match(item.imageKey, /^mysql\//u);
 
-  await step('Separate administrator sign-in and explicit verification', async () => {
-    await admin.goto('/admin');
-    await admin.getByLabel('Nama pengguna').fill(username);
-    await admin.getByLabel('Kata sandi').fill(password);
-    await button(admin, 'Masuk').click();
-    await admin.getByRole('link', { name: 'Produk', exact: true }).click();
-    await show(admin.getByRole('heading', { name: 'Produk yang disimpan pengguna' }));
-    const submittedProduct = admin.locator('.aw-submission-list li').filter({ hasText: 'IKEA · 1 kali disimpan' }).first();
-    await show(submittedProduct.getByText('Nama produk belum tersedia', { exact: true }).first());
-    await show(submittedProduct.getByText('Menunggu tinjauan', { exact: true }));
-    await show(admin.getByRole('link', { name: /Notifikasi, \d+ belum dibaca/u }));
-    assert.equal(await admin.getByText(title, { exact: true }).count(), 0);
-    await show(admin.getByRole('heading', { name: 'Peluang afiliasi' }));
-    assert.equal(await admin.locator('html').getAttribute('lang'), 'id');
-    await admin.locator('.admin-queue button').first().click();
-    await admin.getByLabel('URL kandidat afiliasi').fill(candidate);
-    await button(admin, 'Tambahkan kandidat').click();
-    await show(admin.getByText('Kandidat disimpan untuk ditinjau.'));
-    await button(admin, 'Verifikasi dan setujui').click();
-    const review = modal(admin, 'Verifikasi dan setujui');
-    await review.getByLabel('Nama produk terverifikasi').fill(title);
-    await review.getByLabel('Warna').fill('White');
-    await review.getByLabel('Model').fill('Browser fixture');
-    await review.getByLabel('Catatan verifikasi').fill('Isolated automated fixture confirming the same article and variant.');
-    await review.getByRole('checkbox', { name: /Saya sudah memeriksa kedua listing/u }).check();
-    await button(review, 'Verifikasi dan setujui').click();
-    await show(admin.getByText('Pemetaan terverifikasi aktif'));
-    await show(admin.getByText('Riwayat verifikasi dan perubahan'));
-    await axe(admin, 'desktop admin');
-    if (screenshots) await admin.screenshot({ path: join(screenshots, 'affiliate-admin-desktop.png') });
-  });
+  await admin.goto('/admin');
+  await admin.getByLabel('Nama pengguna').fill(credentials.username);
+  await admin.getByLabel('Kata sandi').fill(password);
+  await button(admin, 'Masuk').click();
+  await admin.getByRole('link', { name: /^Notifikasi/u }).first().click();
+  const inbox = await (await admin.request.get('/api/admin/notifications')).json();
+  const productId = (await db.item.findUniqueOrThrow({ where: { id: item.id } })).productIdentityId;
+  const notice = inbox.records.find(row => row.identityId === productId);
+  assert.ok(notice);
+  assert.equal(notice.targetPath, '/admin?section=products#product-' + productId);
+  const event = admin.locator('li').filter({ has: admin.locator('a[href="' + notice.targetPath + '"]') });
+  await event.getByRole('link', { name: 'Buka' }).click();
+  const editor = dialog(admin, 'Edit produk');
+  await show(editor.getByLabel('URL produk'));
+  assert.equal(await editor.getByLabel('URL produk').inputValue(), original);
+  await button(editor, 'Batal').click();
+  const row = admin.locator('.aw-submission-list li').filter({ hasText: title });
+  await show(row.getByText('Belum diganti'));
+  await row.locator('img').evaluate(node => node.decode());
+  await show(row.getByText(/1\.735\.000/u));
+  assert.equal((await shopper.request.get(await row.locator('img').getAttribute('src'))).status(), 401);
+  await axe();
+  await screenshot('admin-products-before.png');
 
-  await step('Disclosed affiliate purchase on mobile in both languages', async () => {
-    await shopper.setViewportSize({ width: 390, height: 844 });
-    await button(shopper, `Bantu putuskan untuk ${title}`).click();
-    let details = modal(shopper, title);
-    await show(details.getByText('Tautan ini bisa memberi Nanti komisi, tanpa biaya tambahan dari Nanti.'));
-    let buy = details.getByRole('link', { name: /^Beli produk/u });
-    assert.match((await buy.getAttribute('rel')) ?? '', /sponsored.*noopener.*noreferrer/u);
-    assert.equal(await details.getByRole('link', { name: /^Buka link produk asli/u }).getAttribute('href'), original);
-    activeHref = await buy.getAttribute('href');
-    assert.match(activeHref, /^\/api\/wishlists\//u);
-    const redirect = await shopper.request.get(activeHref, { maxRedirects: 0 });
-    assert.equal(redirect.status(), 302);
-    assert.equal(redirect.headers().location, candidate);
-    assert.equal(await shopper.evaluate(() => document.documentElement.scrollWidth), 390);
-    await axe(shopper, 'mobile Indonesian product');
-    if (screenshots) await shopper.screenshot({ path: join(screenshots, 'affiliate-buy-mobile.png') });
-    await shopper.keyboard.press('Escape');
-    await button(shopper, 'Switch to English').click();
-    await button(shopper, `Purchase tools for ${title}`).click();
-    details = modal(shopper, title);
-    buy = details.getByRole('link', { name: /^Buy product/u });
-    await show(buy);
-    await show(details.getByText('Nanti may earn a commission through this link, at no additional charge from Nanti.'));
-    await show(details.getByRole('link', { name: /^Open original listing/u }));
-    await shopper.keyboard.press('Escape');
-  });
+  await row.getByRole('button', { name: /^Edit/u }).click();
+  const url = editor.getByLabel('URL produk');
+  await show(url);
+  assert.equal(await editor.locator('input').count(), 1);
+  await screenshot('admin-product-editor.png');
+  await url.fill('https://127.0.0.1/unsafe');
+  assert.equal(await button(editor, 'Simpan perubahan').isDisabled(), true);
+  assert.equal(await url.inputValue(), 'https://127.0.0.1/unsafe');
+  assert.equal(await admin.getByText('Tautan produk berhasil diperbarui.').count(), 0);
+  await url.fill('https://missing-destination.invalid/product');
+  await button(editor, 'Simpan perubahan').click();
+  await show(editor.getByRole('alert'));
+  assert.equal(await url.inputValue(), 'https://missing-destination.invalid/product');
+  assert.equal(await admin.getByText('Tautan produk berhasil diperbarui.').count(), 0);
+  await url.fill(replacement);
+  await button(editor, 'Simpan perubahan').click();
+  await show(admin.getByText('Tautan produk berhasil diperbarui.'));
+  await editor.waitFor({ state: 'hidden' });
+  await show(row.getByText('Tautan diganti'));
+  await screenshot('admin-products-replaced.png');
+  await admin.getByRole('searchbox', { name: 'Cari produk' }).fill(title);
+  await button(admin, 'Cari').click();
+  await admin.getByLabel('Status tautan').selectOption('replacement');
+  await show(row.getByText('Tautan diganti'));
+  await admin.getByLabel('Status tautan').selectOption('');
+  await show(row.getByText('Tautan diganti'));
+  for (const obsolete of ['Tambahkan kandidat', 'Verifikasi dan setujui', 'Buka tautan asli', 'Tinjau tautan afiliasi']) {
+    assert.equal(await admin.getByText(obsolete, { exact: true }).count(), 0);
+  }
 
-  await step('Revocation, immediate fallback, mobile inbox, and sign-out', async () => {
-    await button(admin, 'Cabut').click();
-    const review = modal(admin, 'Cabut');
-    await review.getByLabel('Alasan').fill('Isolated browser test finished.');
-    await button(review, 'Cabut').click();
-    await show(admin.getByText('Tautan asli saja'));
-    const fallback = await shopper.request.get(activeHref, { maxRedirects: 0 });
-    assert.equal(fallback.status(), 302);
-    assert.equal(fallback.headers().location, original);
-    await button(shopper, `Purchase tools for ${title}`).click();
-    const details = modal(shopper, title);
-    const buy = details.getByRole('link', { name: /^Buy product/u });
-    await show(buy);
-    assert.equal(await buy.getAttribute('href'), original);
-    assert.equal(await details.getByText(/commission/u).count(), 0);
-    await shopper.keyboard.press('Escape');
+  await button(shopper, 'Bantu putuskan untuk ' + title).click();
+  const chooser = dialog(shopper, title);
+  await show(chooser.getByText(/komisi/u));
+  const link = chooser.getByRole('link', { name: /^Beli produk/u });
+  await show(link);
+  const activeHref = await link.getAttribute('href');
+  const redirected = await shopper.request.get(activeHref, { maxRedirects: 0 });
+  assert.equal(redirected.status(), 302);
+  assert.equal(redirected.headers().location, replacement);
 
-    await admin.setViewportSize({ width: 390, height: 844 });
-    await admin.getByRole('button', { name: /^Kotak masuk/u }).click();
-    const event = admin.getByRole('listitem').filter({ hasText: 'Pemetaan dicabut' }).filter({ hasText: title });
-    await show(event);
-    await button(admin, 'Tandai semua dibaca').click();
-    await show(admin.getByRole('link', { name: 'Notifikasi', exact: true }));
-    const recordLink = event.getByRole('link', { name: 'Buka' });
-    const recordPath = await recordLink.getAttribute('href');
-    const recordTarget = new URL(recordPath, baseURL);
-    assert.equal(recordTarget.pathname, '/admin');
-    assert.equal(recordTarget.search, '?section=links');
-    assert.match(recordTarget.hash, /^#opportunity-/u);
-    const targetNavigation = admin.waitForURL(recordTarget.href);
-    await recordLink.click();
-    await targetNavigation;
-    await show(admin.getByRole('heading', { name: 'Pemetaan tautan afiliasi', exact: true }));
-    assert.equal(new URL(admin.url()).hash, recordTarget.hash);
-    await admin.reload();
-    await show(admin.getByRole('heading', { name: 'Pemetaan tautan afiliasi', exact: true }));
-    await button(admin, 'Pulihkan tautan').click();
-    const restore = modal(admin, 'Pulihkan tautan');
-    await restore.getByLabel('Catatan verifikasi').fill('Rechecked the same article and variant before restoring the direct affiliate link.');
-    await restore.getByRole('checkbox', { name: /Saya sudah memeriksa kedua listing/u }).check();
-    await button(restore, 'Pulihkan tautan').click();
-    await show(admin.getByText('Pemetaan terverifikasi aktif'));
-    await button(shopper, `Purchase tools for ${title}`).click();
-    const restoredDetails = modal(shopper, title);
-    const restoredBuy = restoredDetails.getByRole('link', { name: /^Buy product/u });
-    await show(restoredBuy);
-    const restoredHref = await restoredBuy.getAttribute('href');
-    assert.ok(restoredHref);
-    const restored = await shopper.request.get(restoredHref, { maxRedirects: 0 });
-    assert.equal(restored.status(), 302);
-    assert.equal(restored.headers().location, candidate);
-    await shopper.keyboard.press('Escape');
-    await button(admin, 'Nonaktifkan').click();
-    const disable = modal(admin, 'Nonaktifkan');
-    await disable.getByLabel('Alasan').fill('Restore flow browser test complete.');
-    await button(disable, 'Nonaktifkan').click();
-    await show(admin.getByText('Tautan asli saja'));
-    await admin.getByRole('button', { name: /^Kotak masuk/u }).click();
-    await button(event, 'Tandai belum dibaca').click();
-    await show(button(event, 'Tandai sudah dibaca'));
-    await button(event, 'Tandai sudah dibaca').click();
-    await show(button(event, 'Tandai belum dibaca'));
-    await button(event, 'Singkirkan').click();
-    await event.waitFor({ state: 'hidden' });
-    assert.equal(await admin.evaluate(() => document.documentElement.scrollWidth), 390);
-    await axe(admin, 'mobile admin inbox');
-    await button(admin, 'Menu akun').click();
-    await button(admin, 'Keluar').click();
-    await show(admin.getByRole('heading', { name: 'Masuk sebagai Superadmin' }));
-    assert.equal((await admin.request.get('/api/admin/notifications')).status(), 401);
-  });
-  assert.deepEqual(errors, []);
+  await admin.setViewportSize({ width: 390, height: 844 });
+  await row.getByRole('button', { name: /^Edit/u }).click();
+  await show(url);
+  assert.equal(await url.inputValue(), replacement);
+  assert.equal(await admin.evaluate(() => document.documentElement.scrollWidth), 390);
+  await axe();
+  await url.fill(original);
+  await button(editor, 'Simpan perubahan').click();
+  await show(row.getByText('Belum diganti'));
+  await screenshot('admin-products-restored.png');
+  const restored = await shopper.request.get(activeHref, { maxRedirects: 0 });
+  assert.equal(restored.headers().location, original);
+  console.log('PASS registered import, admin metadata, notification, replacement, disclosure, restoration, responsive layout, and accessibility');
 } finally {
-  if (wishlistId) await shopper.request.delete(`/api/wishlists/${wishlistId}`, { headers, data: {} }).catch(() => undefined);
+  const identity = await db.productIdentity.findFirst({ where: { canonicalUrl: original } });
+  await db.user.deleteMany({ where: { password: { email } } });
+  if (identity) {
+    const identityId = identity.id;
+    await db.affiliateAudit.deleteMany({ where: { identityId } });
+    await db.adminNotification.deleteMany({ where: { identityId } });
+    await db.affiliateMapping.deleteMany({ where: { identityId } });
+    await db.productIdentity.delete({ where: { id: identityId } });
+  }
+  await db.adminSession.deleteMany({ where: { credentialScope: adminCredentialScope(credentials, secret) } });
   await browser.close();
+  server.close();
+  await db.$disconnect();
 }

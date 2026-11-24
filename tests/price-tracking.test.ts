@@ -62,7 +62,8 @@ it('returns a reviewable authorized preview while keeping external image URLs ou
   await guest.post('/api/session').set(mutation).send({}).expect(200);
   const { body } = await guest.post('/api/products/import').set(mutation).send({ url: listing + '?utm_source=fixture' }).expect(200);
   expect(body).toEqual({ originalUrl: listing + '?utm_source=fixture', merchant: 'ikea', hostname: 'www.ikea.com',
-    status: 'details_available', name: 'Fixture lamp', price: { priceMinor: 1234, currency: 'USD' },
+    status: 'details_available', name: 'Fixture lamp', publicTitleProof: expect.any(String), publicPriceProof: expect.any(String),
+    price: { priceMinor: 1234, currency: 'USD' },
     imagePath: `/api/products/import/image?url=${encodeURIComponent(listing)}` });
   await request(app).get(body.imagePath).expect(401);
   await guest.get('/api/products/import/image').query({ url: 'https://retailer.example.test/image.jpg' }).expect(404);

@@ -17,6 +17,7 @@ export interface RecommendationProduct {
   priceVerifiedAt?: Date | null;
   published: boolean;
   url: string;
+  purchasePath?: string;
   priority?: number;
 }
 export interface RecommendationMatch {

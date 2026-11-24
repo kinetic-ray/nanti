@@ -45,40 +45,46 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
     async remove(ownerId, id) {
       return (await db.wishlist.deleteMany({ where: { id, dataOwner: authorizedOwner(ownerId) } })).count > 0;
     },
-    async addItem(ownerId, wishlistId, { priceSource, ...data }, requestId, photo) {
+    async addItem(ownerId, wishlistId, { priceSource, ...data }, requestId, photo, publicMetadata) {
       const started = performance.now();
       let stage = 'begin';
       try {
         const result = await db.$transaction(async (tx) => {
           stage = 'ownership';
           const list = await tx.wishlist.findFirst({
-            where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) }, select: { ownerId: true, currency: true },
+            where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) },
+            select: { ownerId: true, currency: true, dataOwner: { select: { userId: true } } },
           });
           if (!list || !await lockOwner(tx, list.ownerId, ownerId)) return false;
           stage = 'idempotency';
           if (requestId && await tx.item.findUnique({ where: { id: requestId }, select: { id: true } })) return false;
           stage = 'catalog';
-          const identity = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+          const identity = data.url ? await getOrCreateProductIdentity(tx, data.url, publicMetadata?.title) : null;
           stage = 'item';
           const created = await tx.item.create({
             data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId: identity?.id ?? null }, select: { id: true },
           });
           if (data.imageKey && mysqlImageId(data.imageKey)) {
             stage = 'image';
-            if (photo) await writeProductImage(tx, data.imageKey, list.ownerId, photo, created.id);
+            if (photo) await writeProductImage(tx, data.imageKey, list.ownerId, photo, created.id,
+              publicMetadata?.marketplacePhoto ? identity?.id : undefined);
             else await attachProductImage(tx, data.imageKey, ownerId, created.id);
           }
           if (data.priceMinor !== null) {
             stage = 'price';
             // A new item has no observations or target to look up.
             await tx.priceObservation.createMany({ data: [{ ownerId: list.ownerId, wishlistId, itemId: created.id,
-              priceMinor: data.priceMinor, currency: list.currency, source: priceSource ?? 'manual' }] });
+              priceMinor: data.priceMinor, currency: list.currency, source: priceSource ?? 'manual',
+              marketplaceIdentityId: publicMetadata?.priceCurrency === list.currency ? identity?.id : undefined }] });
           }
+          stage = 'notification';
+          const registered = Boolean(list.dataOwner.userId);
+          if (registered) await notifyNewProduct(tx, identity, created.id);
           stage = 'commit';
-          return { identity };
+          return { identity, registered };
         }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, maxWait: 8_000, timeout: 15_000 });
         if (!result) return false;
-        await notifyNewProduct(db, result.identity);
+        if (!result.registered) await notifyNewProduct(db, result.identity).catch(() => console.error('Product review notification write failed'));
         return true;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -112,7 +118,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
         return { identity };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
       if (!result) return false;
-      await notifyNewProduct(db, result.identity);
+      await notifyNewProduct(db, result.identity).catch(() => console.error('Product notification write failed'));
       return true;
     },
     async removeItem(ownerId, wishlistId, id) {

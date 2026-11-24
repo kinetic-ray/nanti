@@ -7,6 +7,8 @@ export type WishlistSummary = { id: string; name: string; currency: Currency };
 export type ItemInput = { name: string; url: string | null; priceMinor: number | null; quantity: number; imageKey?: string | null; sellerName?: string | null };
 export type ItemWriteInput = ItemInput & { priceSource?: 'imported_unverified' };
 export type ItemSaveInput = ItemWriteInput & {
+  publicTitle?: { title: string; proof: string };
+  publicPriceProof?: string;
   saveMarketplaceImage?: true;
   tokopediaProductUrl?: string;
   tokopediaImage?: { url: string; proof: string };

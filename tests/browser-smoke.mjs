@@ -151,7 +151,7 @@ try {
     assert.equal((await page.request.post(`/api/wishlists/${secondList.id}/items`, { headers,
       data: { name: 'Desk', url: null, priceMinor: 9000, quantity: 1 },
     })).ok(), true);
-    await button(page, 'English').click();
+    await button(page, 'Switch to English').click();
     await page.reload();
     await shown(button(page, 'Compare priorities'));
     assert.equal(await page.locator('html').getAttribute('lang'), 'en');
@@ -175,42 +175,32 @@ try {
     if (screenshots) await page.screenshot({ path: join(screenshots, 'p25-comparison-mobile.png') });
     await closeTop();
   });
-  await step('Impulse methodology, saved result, and keyboard focus', async () => {
-    await button(page, 'Purchase tools for Lamp A50').click();
+  await step('Optional buying reflection and keyboard focus', async () => {
+    const trigger = button(page, 'Purchase tools for Lamp A50');
+    await trigger.click();
     const item = dialog('Lamp A50');
     await focusIs(item.getByRole('heading', { name: 'Lamp A50', exact: true }));
-    await page.keyboard.press('Tab');
-    await focusIs(button(item, 'Check buying reasons'));
+    const open = button(item, 'Help me decide');
+    await open.focus();
+    await focusIs(open);
     await page.keyboard.press('Enter');
-    let tool = dialog('Check buying reasons');
-    const research = button(tool, 'Research & Methodology');
-    await research.click();
-    const method = dialog('Research & Methodology');
-    await focusIs(method.getByRole('heading', { name: 'Research & Methodology' }));
-    await shown(method.getByText(/Version 2.0.0/));
-    assert.ok(await method.getByRole('link').count() >= 4);
+    const tool = dialog('Help me decide');
+    await shown(tool.getByRole('heading', { name: 'Current purchase impact' }));
+    await button(tool, 'Continue with this limited analysis').click();
+    await shown(tool.getByText('This is a partial estimate, not a claim that the purchase is safe or affordable.'));
+    await tool.getByText('Buying reasons (optional)', { exact: true }).click();
+    const reflection = tool.locator('.guided-reasons');
+    const answers = reflection.getByRole('button', { name: 'No', exact: true });
+    assert.equal(await answers.count(), 6);
+    for (const answer of await answers.all()) {
+      await answer.click();
+      assert.equal(await answer.getAttribute('aria-pressed'), 'true');
+    }
+    await shown(reflection.getByRole('status'));
+    await button(tool, 'Done').click();
+    await shown(item);
     await closeTop();
-    await focusIs(research);
-    for (let i = 0; i < 4; i++) await button(tool, 'No').click();
-    await tool.getByRole('radio', { name: /^3 days/ }).check();
-    await shown(tool.getByText(/^Check again on /));
-    await button(tool, 'Save and check later').click();
-    await shown(tool.getByText('Decision saved.', { exact: true }));
-    await closeTop();
-    await focusIs(button(item, 'Check buying reasons'));
-    await button(item, 'Check buying reasons').click();
-    tool = dialog('Check buying reasons');
-    await button(tool, 'View previous decision').click();
-    await shown(tool.getByText(/^You planned to check again on /));
-    await button(tool, 'Check again').click();
-    await focusIs(tool.getByRole('heading', { name: 'Would you still want this at full price?', exact: true }));
-    await tool.locator('summary').getByText('Previous decisions', { exact: true }).click();
-    await button(tool, 'Delete').click();
-    await focusIs(button(tool, 'Cancel'));
-    await button(tool, 'Cancel').click();
-    await focusIs(button(tool, 'Delete'));
-    await closeTop();
-    await closeTop();
+    await focusIs(trigger);
   });
   await step('Comparison history survives a shrinking wishlist and private data can be cleared', async () => {
     for (const name of ['Cover', 'Lamp A50']) {

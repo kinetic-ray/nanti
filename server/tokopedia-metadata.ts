@@ -32,6 +32,10 @@ for (const [network, prefix] of [
   ['203.0.113.0', 24], ['224.0.0.0', 3],
 ] as const) privateAddresses.addSubnet(network, prefix);
 
+export function isPublicIpv4(address: string) {
+  return !privateAddresses.check(address);
+}
+
 export async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
   signal.throwIfAborted();
   // DNS resolution does not take an AbortSignal. Enforce the same deadline before TLS starts.
