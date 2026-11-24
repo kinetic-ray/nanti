@@ -3,6 +3,7 @@ import { connectDatabase } from '../server/database.js';
 import request from 'supertest';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../server/app.js';
+import { Prisma } from '../server/generated/prisma/client.js';
 import { createImageStorage } from '../server/image-storage.js';
 import * as tokopedia from '../server/tokopedia-metadata.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
@@ -65,6 +66,27 @@ function memoryWishlists(): WishlistRepository {
 
 const mutation = { 'X-Nanti-Request': '1', 'Content-Type': 'application/json' };
 const product = { name: 'Lamp', url: 'https://example.com/lamp', priceMinor: 10, quantity: 3 };
+
+it('distinguishes a save transaction failure from validation and preserves retry identity', async () => {
+  const repository = memoryWishlists();
+  const add = vi.spyOn(repository, 'addItem').mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError(
+    'Transaction expired', { code: 'P2028', clientVersion: 'test' },
+  ));
+  const app = createApp({ repository, preview: async () => null, secret: randomBytes(32).toString('hex'), secureCookies: false });
+  const agent = request.agent(app);
+  await agent.post('/api/session').set(mutation).send({}).expect(200);
+  const { body } = await agent.post('/api/wishlists').set(mutation).send({ name: 'Fixture', currency: 'IDR' }).expect(201);
+  const path = `/api/wishlists/${body.id}/items`;
+  const key = randomUUID();
+  await agent.post(path).set(mutation).set('Idempotency-Key', key).send({ ...product, quantity: 0 }).expect(400, {
+    code: 'invalid_product_details', error: 'Enter a whole number from 1 to 999.',
+  });
+  const failed = await agent.post(path).set(mutation).set('Idempotency-Key', key).send(product).expect(503);
+  expect(failed.body.code).toBe('product_save_transaction_unavailable');
+  expect(failed.headers['x-nanti-request-id']).toMatch(/^[0-9a-f-]{36}$/u);
+  await agent.post(path).set(mutation).set('Idempotency-Key', key).send(product).expect(201);
+  expect(add.mock.calls.map(args => args[3])).toEqual([key, key]);
+});
 
 function contract(repository: WishlistRepository) {
   const preview = vi.fn(async (_url: URL) => null);

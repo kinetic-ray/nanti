@@ -60,9 +60,11 @@ function SubmissionQueue({ onExpired, revision }: { onExpired: OnExpired; revisi
   const [result, setResult] = useState<AdminPage<Opportunity>>();
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
+  const [after, setAfter] = useState<string>();
   useEffect(() => {
     const controller = new AbortController();
-    api<AdminPage<Opportunity>>('/admin/opportunities', { signal: controller.signal }).then(data => {
+    const search = after ? '?' + new URLSearchParams({ after }) : '';
+    api<AdminPage<Opportunity>>('/admin/opportunities' + search, { signal: controller.signal }).then(data => {
       if (!controller.signal.aborted) { setResult(data); setError(''); }
     }, failure => {
       if (controller.signal.aborted) return;
@@ -70,11 +72,11 @@ function SubmissionQueue({ onExpired, revision }: { onExpired: OnExpired; revisi
       else setError(failureMessage(failure));
     });
     return () => controller.abort();
-  }, [onExpired, reload, revision]);
+  }, [after, onExpired, reload, revision]);
   return <section className="aw-card aw-submissions">
     <header className="aw-card-header"><div><h2>Produk yang disimpan pengguna</h2>
       <p>Antrean katalog bersama. Informasi wishlist pribadi tidak ditampilkan.</p></div>
-      <button type="button" onClick={() => { setError(''); setResult(undefined); setReload(value => value + 1); }}>Muat ulang</button>
+      <button type="button" onClick={() => { setError(''); setResult(undefined); setAfter(undefined); setReload(value => value + 1); }}>Muat ulang</button>
     </header>
     {error ? <ReportError message={error} retry={() => setReload(value => value + 1)} /> : !result ? <WorkspaceLoading /> :
       result.records.length ? <ul className="aw-submission-list">{result.records.map(product => {
@@ -91,6 +93,10 @@ function SubmissionQueue({ onExpired, revision }: { onExpired: OnExpired; revisi
           </div>
         </li>;
       })}</ul> : <WorkspaceEmpty icon={Package} title="Belum ada produk tersimpan" />}
+    {(after || result?.next) && <div className="aw-actions">
+      {after && <button type="button" onClick={() => { setResult(undefined); setAfter(undefined); }}>Halaman pertama</button>}
+      {result?.next && <button type="button" onClick={() => { setAfter(result.next!); setResult(undefined); }}>Halaman berikutnya</button>}
+    </div>}
   </section>;
 }
 
