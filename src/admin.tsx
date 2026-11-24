@@ -287,10 +287,10 @@ function Workspace({ onExpired }: { onExpired: () => void }) {
             <p>{notice.title ?? notice.listingId}</p>
             <small>{notice.readAt ? 'Sudah dibaca' : 'Belum dibaca'} · {recordedAt(notice.createdAt)}</small></div>
           <div className="actions">
-            <a className="buy-original" href={opportunityHash(notice.identityId)} onClick={(event) => {
+            <a className="buy-original" href={notice.identityId ? opportunityHash(notice.identityId) : '#'} onClick={(event) => {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
-              select(notice.identityId);
+              if (notice.identityId) select(notice.identityId);
             }}>Buka produk</a>
             <button type="button" disabled={busy} onClick={() => void updateNotice(notice, notice.readAt ? 'unread' : 'read')}>
               {notice.readAt ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}

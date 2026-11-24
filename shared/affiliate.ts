@@ -31,7 +31,7 @@ export type OpportunityDetail = Opportunity & {
 };
 export type NoticeKind = 'new_opportunity' | 'candidate_review' | 'mapping_revoked' | 'mapping_invalid';
 export type AdminNotice = {
-  id: string; identityId: string; kind: NoticeKind; listingId: string; title: string | null;
+  id: string; identityId: string | null; kind: NoticeKind; listingId?: string | null; title?: string | null; targetPath?: string;
   readAt: string | null; createdAt: string;
 };
 export type AdminPage<T> = { records: T[]; next: string | null };
