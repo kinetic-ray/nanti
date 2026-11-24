@@ -1,14 +1,12 @@
 import type { Prisma, PrismaClient } from './generated/prisma/client.js';
 import { identifyProduct } from './product-identity.js';
 
-export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, url: string, title?: string) {
+export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, url: string) {
   const product = identifyProduct(url);
   if (!product) return null;
   const { hasAttribution: _hasAttribution, ...listing } = product;
-  const safeTitle = title?.trim().slice(0, 160) || null;
-  const created = await db.productIdentity.createMany({ data: [{ ...listing, title: safeTitle }], skipDuplicates: true });
+  const created = await db.productIdentity.createMany({ data: [{ ...listing, title: null }], skipDuplicates: true });
   const { id } = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: listing.lookupKey }, select: { id: true } });
-  if (safeTitle) await db.productIdentity.updateMany({ where: { id, title: null }, data: { title: safeTitle } });
   return { id, created: created.count > 0 };
 }
 
@@ -29,17 +27,17 @@ export async function indexExistingProducts(db: PrismaClient) {
   while (true) {
     const rows = await db.item.findMany({
       where: { id: after ? { gt: after } : undefined, productIdentityId: null, url: { not: null } },
-      orderBy: { id: 'asc' }, take: 150, select: { id: true, url: true, name: true },
+      orderBy: { id: 'asc' }, take: 150, select: { id: true, url: true },
     });
     if (!rows.length) return linked;
-    for (const { id, url, name } of rows) {
+    for (const { id, url } of rows) {
       if (!url || !identifyProduct(url)) continue;
       const result = await db.$transaction(async (tx) => {
         const locked = await tx.$queryRaw<{ id: string }[]>`
           SELECT id FROM Item WHERE id = ${id} AND BINARY url = ${url} AND productIdentityId IS NULL FOR UPDATE
         `;
         if (!locked.length) return null;
-        const identity = await getOrCreateProductIdentity(tx, url, name);
+        const identity = await getOrCreateProductIdentity(tx, url);
         await tx.item.update({ where: { id }, data: { productIdentityId: identity?.id ?? null } });
         return { identity };
       });
