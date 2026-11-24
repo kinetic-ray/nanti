@@ -92,7 +92,8 @@ try {
     await admin.getByRole('link', { name: 'Produk', exact: true }).click();
     await show(admin.getByRole('heading', { name: 'Produk yang disimpan pengguna' }));
     await show(admin.getByText(`IKEA · ${article}`, { exact: true }));
-    await show(admin.getByText('Menunggu tinjauan', { exact: true }));
+    const submittedProduct = admin.locator('.aw-submission-list li').filter({ hasText: `IKEA · ${article}` });
+    await show(submittedProduct.getByText('Menunggu tinjauan', { exact: true }));
     await show(admin.getByRole('link', { name: /Notifikasi, \d+ belum dibaca/u }));
     assert.equal(await admin.getByText(title, { exact: true }).count(), 0);
     await admin.getByRole('link', { name: 'Tautan afiliasi', exact: true }).click();
