@@ -4,7 +4,8 @@ import { z } from 'zod';
 import type { PurchaseDestination } from '../shared/affiliate.js';
 import { safeProductUrl } from '../shared/wishlist.js';
 import type { AffiliateRepository } from './prisma-affiliate.js';
-import { identifyProduct, isEligibleAffiliate } from './product-identity.js';
+import { identifyProduct } from './product-identity.js';
+import { effectiveMapping } from './effective-product-url.js';
 import type { WishlistRepository } from './wishlist.js';
 
 const ids = z.strictObject({ listId: z.uuid(), itemId: z.uuid() });
@@ -16,18 +17,13 @@ function matches(left: string, right: string) {
   return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 }
 
-async function activeAffiliate(affiliate: AffiliateRepository | undefined, originalUrl: string) {
+export async function activeAffiliate(affiliate: AffiliateRepository | undefined, originalUrl: string) {
   const identity = identifyProduct(originalUrl);
   if (!affiliate || !identity) return null;
   const record = await affiliate.activeDestination(identity.lookupKey);
   const mapping = record?.activeMapping;
   if (!record || !mapping) return null;
-  if (mapping.status === 'approved' && mapping.classification === 'verified_exact' && mapping.identityId === record.id &&
-      mapping.approvedAt && mapping.validatedAt && mapping.approvedBy &&
-      (mapping.evidence as { confirmedExact?: boolean } | null)?.confirmedExact === true &&
-      record.canonicalUrl === identity.canonicalUrl && mapping.originalUrl === identity.canonicalUrl &&
-      (isEligibleAffiliate(originalUrl, mapping.affiliateUrl) ||
-        Boolean((mapping.evidence as { overrideReason?: string } | null)?.overrideReason))) {
+  if (record.canonicalUrl === identity.canonicalUrl && effectiveMapping(record, originalUrl)) {
     return mapping;
   }
   try {

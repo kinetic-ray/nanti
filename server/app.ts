@@ -27,6 +27,7 @@ import { type createMysqlImageStorage, mysqlImageId, newMysqlImageKey, ProductIm
 import { compressProductImage } from './product-image-jpeg.js';
 import { signTokopediaImage, verifyTokopediaImage } from './tokopedia-image-proof.js';
 import { signShopeeImage, verifyShopeeImage } from './shopee-image-proof.js';
+import { signPublicTitle, verifyPublicTitle } from './product-title-proof.js';
 import { accountRoutes } from './account-routes.js';
 import type { Accounts } from './prisma-accounts.js';
 import type { OAuthProviders } from './oauth-providers.js';
@@ -195,7 +196,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   });
   if (intelligence) api.use('/intelligence', intelligenceRoutes(repository, intelligence, secret));
   if (prices) api.use(priceRoutes(prices));
-  if (recommendationsDb) api.use('/recommendations', recommendationConsumerRoutes(recommendationsDb));
+  if (recommendationsDb) api.use('/recommendations', recommendationConsumerRoutes(recommendationsDb, affiliate));
   api.use(purchaseDestinationRoutes(repository, affiliate, secret));
 
   const limitImageUpload = rateLimit({
@@ -303,7 +304,9 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   }, limitMarketplaceSave, async (req, res) => {
     const listId = uuid.parse(req.params.listId);
     const { saveMarketplaceImage, saveTokopediaImage, tokopediaProductUrl, tokopediaImage,
-      shopeeProductUrl, shopeeImage, ...input } = itemInput.extend({
+      shopeeProductUrl, shopeeImage, publicTitle, publicPriceProof, ...input } = itemInput.extend({
+      publicPriceProof: z.string().max(80).optional(),
+      publicTitle: z.strictObject({ title: z.string().min(1).max(160), proof: z.string().max(80) }).optional(),
       saveMarketplaceImage: z.literal(true).optional(),
       saveTokopediaImage: z.literal(true).optional(), tokopediaProductUrl: z.string().max(2048).optional(),
       tokopediaImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
@@ -311,6 +314,10 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       shopeeImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
     }).parse(req.body);
     const owner = res.locals.ownerId as string;
+    const publicUrl = input.url && safeImportUrl(input.url);
+    const verifiedTitle = publicTitle && publicUrl && verifyPublicTitle(secret, {
+      owner, url: publicUrl.href, title: publicTitle.title,
+    }, publicTitle.proof) ? publicTitle.title : undefined;
     const key = req.get('Idempotency-Key');
     const parsedKey = key ? uuid.safeParse(key) : undefined;
     if (parsedKey && !parsedKey.success) {
@@ -323,6 +330,11 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     }
     const list = await repository.find(owner, listId);
     if (!list) return notFound(res);
+    const price = input.priceMinor !== null ? { priceMinor: input.priceMinor, currency: list.currency } : undefined;
+    const priceVerified = publicPriceProof && publicUrl && price && verifyPublicTitle(secret, {
+      owner, url: publicUrl.href, title: '', price,
+    }, publicPriceProof);
+    const publicMetadata = { title: verifiedTitle, priceCurrency: priceVerified ? list.currency : undefined };
     const replay = (saved: (typeof list.items)[number]) => {
       if (saved.url !== input.url || saved.name !== input.name || saved.priceMinor !== input.priceMinor ||
           saved.quantity !== input.quantity || (saved.sellerName ?? null) !== (input.sellerName ?? null) ||
@@ -343,7 +355,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     }
     if ((!saveMarketplaceImage && !saveTokopediaImage) || input.imageKey) {
       try {
-        if (await repository.addItem(owner, listId, input, requestId)) return res.sendStatus(201);
+        if (await repository.addItem(owner, listId, input, requestId, undefined, publicMetadata)) return res.sendStatus(201);
       } catch (error) {
         if (error instanceof ProductImageWriteError) return res.status(400).json({ error: error.message });
         if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
@@ -355,14 +367,16 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const idempotencyKey = requestId!;
     const listing = input.url && safeImportUrl(input.url);
     const merchant = listing && productMerchant(listing.hostname);
-    if (!listing || (merchant !== 'tokopedia' && (merchant !== 'shopee' || !saveMarketplaceImage))) {
-      return res.status(400).json({ error: 'Enter a valid Shopee or Tokopedia product link.' });
+    const ikeaPhoto = listing && merchant === 'ikea' && mysqlImages && isIkeaMetadataLink(listing);
+    if (!listing || (!ikeaPhoto && merchant !== 'tokopedia' && (merchant !== 'shopee' || !saveMarketplaceImage))) {
+      return res.status(400).json({ error: 'Enter a valid marketplace product link.' });
     }
 
     if (mysqlImages) {
       let photo: Buffer | null = null;
       try {
         const loadPhoto = async (url: string) => {
+          if (merchant !== 'shopee' && merchant !== 'tokopedia') return null;
           const bytes = await downloadMarketplaceImage(merchant, url, marketplaceImageRequest);
           return bytes ? compressProductImage(bytes, true) : null;
         };
@@ -372,9 +386,13 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
         const verifiedShopeeImage = merchant === 'shopee' && shopeeImage && shopeeProductUrl &&
           verifyShopeeImage(secret, { owner, listing: listing.href, product: shopeeProductUrl, image: shopeeImage.url },
             shopeeImage.proof) ? shopeeImage.url : null;
+        if (ikeaPhoto) {
+          const media = await productMedia(listing.href);
+          if (media) photo = await compressProductImage(media.bytes, true);
+        }
         if (verifiedImage) photo = await loadPhoto(verifiedImage);
         if (verifiedShopeeImage) photo = await loadPhoto(verifiedShopeeImage);
-        if (!photo && !verifiedShopeeImage && !shopeeImage) {
+        if (!ikeaPhoto && !photo && !verifiedShopeeImage && !shopeeImage) {
           const metadata = await lookupMetadata?.(listing);
           if (metadata?.image && metadata.image !== verifiedImage &&
               (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl) &&
@@ -387,7 +405,8 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       }
       if (photo) {
         try {
-          if (await repository.addItem(owner, listId, { ...input, imageKey: newMysqlImageKey() }, idempotencyKey, photo)) {
+          if (await repository.addItem(owner, listId, { ...input, imageKey: newMysqlImageKey() }, idempotencyKey, photo,
+            { ...publicMetadata, marketplacePhoto: true })) {
             return res.status(201).json({ photoStatus: 'saved' });
           }
         } catch (error) {
@@ -397,7 +416,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
         }
       }
       try {
-        if (await repository.addItem(owner, listId, { ...input, imageKey: null }, idempotencyKey)) {
+        if (await repository.addItem(owner, listId, { ...input, imageKey: null }, idempotencyKey, undefined, publicMetadata)) {
           return res.status(201).json({ photoStatus: 'unavailable' });
         }
       } catch (error) {
@@ -443,7 +462,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
 
     let writeError: unknown;
     try {
-      if (await repository.addItem(owner, listId, { ...input, imageKey }, requestId)) {
+      if (await repository.addItem(owner, listId, { ...input, imageKey }, requestId, undefined, publicMetadata)) {
         return res.status(201).json({ photoStatus: imageKey ? 'saved' : 'unavailable' });
       }
     } catch (error) {
@@ -511,8 +530,15 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       (merchant === 'shopee' || merchant === 'tokopedia') ? meta?.image ?? null : null;
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: original, name,
+      ...(meta?.title && meta.title.length <= 160 && { publicTitleProof: signPublicTitle(secret, {
+        owner: res.locals.ownerId, url: url.href, title: meta.title,
+      }) }),
+      ...(meta?.price && { publicPriceProof: signPublicTitle(secret, {
+        owner: res.locals.ownerId, url: url.href, title: '', price: meta.price,
+      }) }),
       ...(merchant === 'tokopedia' && meta?.productUrl && { productUrl: meta.productUrl }),
       ...((merchant === 'tokopedia' || merchant === 'shopee') && (mysqlImages || imageStorage) && imagePath && { canSaveImage: true }),
+      ...(merchant === 'ikea' && mysqlImages && imagePath && { canSaveImage: true }),
       ...(mysqlImages && merchant === 'tokopedia' && meta?.productUrl && imagePath && {
         tokopediaImageProof: signTokopediaImage(secret, {
           owner: res.locals.ownerId, listing: url.href, product: meta.productUrl, image: imagePath,

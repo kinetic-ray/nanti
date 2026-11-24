@@ -4,11 +4,14 @@ import type {
   AdminNotice, AdminPage, AuditEvent, Mapping, MatchClassification, NoticeKind, Opportunity, OpportunityDetail, VerificationEvidence,
 } from '../shared/affiliate.js';
 import { classifyProductMatch, isEligibleAffiliate, normalizeProductTitle, productKey, safeAdminUrl } from './product-identity.js';
+import { adminProducts } from './admin-products.js';
+import { catalogUrl, destinationFields } from './effective-product-url.js';
 
 const pageSize = 25;
 const mappingFields = {
   id: true, identityId: true, activeIdentityId: true, originalUrl: true, affiliateUrl: true, status: true,
   classification: true, evidence: true, approvedBy: true, approvedAt: true, validatedAt: true, createdAt: true, revision: true,
+  directReplacement: true,
   identity: { select: { merchant: true } },
 } as const;
 const identityFields = {
@@ -46,14 +49,6 @@ function windowAfter(after: string | undefined) {
 function candidateClassification(original: string, candidate: string): MatchClassification {
   const match = classifyProductMatch(original, candidate);
   return match === 'exact' ? 'potential' : match;
-}
-
-function catalogUrl(value: string, merchant: string) {
-  if (merchant !== 'Other' && merchant !== 'Tokopedia') return value;
-  const url = new URL(value);
-  return merchant === 'Tokopedia' && url.hostname === 'www.tokopedia.com'
-    ? url.origin + url.pathname
-    : `${url.origin}/`;
 }
 
 function mappingView(row: Prisma.AffiliateMappingGetPayload<{ select: typeof mappingFields }>): Mapping {
@@ -118,6 +113,7 @@ export function prismaAffiliate(db: PrismaClient) {
   }
 
   return {
+    ...adminProducts(db),
     async listOpportunities(after?: string, filters: { q?: string; merchant?: string; reviewed?: boolean; active?: boolean } = {}) {
       const q = filters.q?.trim();
       const where: Prisma.ProductIdentityWhereInput = {
@@ -189,6 +185,7 @@ export function prismaAffiliate(db: PrismaClient) {
             } },
           });
           if (!row) throw unavailable();
+          if (row.directReplacement) throw conflict('Use the authorized product editor to change this destination.');
           if (row.revision !== review.revision) throw conflict();
           const { action } = review;
           const now = new Date();
@@ -259,10 +256,7 @@ export function prismaAffiliate(db: PrismaClient) {
     },
     async activeDestination(lookupKey: string) {
       return db.productIdentity.findUnique({ where: { lookupKey }, select: {
-        id: true, canonicalUrl: true, activeMapping: { select: {
-          id: true, identityId: true, revision: true, affiliateUrl: true, originalUrl: true, classification: true,
-          status: true, approvedAt: true, validatedAt: true, approvedBy: true, evidence: true,
-        } },
+        id: true, canonicalUrl: true, activeMapping: { select: destinationFields },
       } });
     },
     async invalidateMapping(identityId: string, mappingId: string, revision: number) {
@@ -289,7 +283,8 @@ export function prismaAffiliate(db: PrismaClient) {
       return { ...paginate(rows, (row) => ({
         id: row.id, identityId: row.identityId, kind: row.kind as NoticeKind,
         title: row.subject ?? row.identity?.title ?? null, listingId: row.identity?.listingId ?? null,
-        targetPath: row.targetPath ?? (row.identityId ? `/admin?section=links#opportunity-${row.identityId}` : '/admin?section=notifications'),
+        targetPath: row.kind === 'new_opportunity' && row.identityId ? `/admin?section=products#product-${row.identityId}` :
+          row.targetPath ?? (row.identityId ? `/admin?section=products#product-${row.identityId}` : '/admin?section=notifications'),
         readAt: row.readAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString(),
       })), unread };
     },

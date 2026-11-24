@@ -1,6 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import request from 'supertest';
+import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { adminCredentialScope, digest, hashAdminPassword } from '../server/admin-credentials.js';
 import type { AdminCredentials } from '../server/admin-credentials.js';
@@ -11,6 +12,8 @@ import { identifyProduct } from '../server/product-identity.js';
 import { prismaAffiliate } from '../server/prisma-affiliate.js';
 import { prismaIntelligence } from '../server/prisma-intelligence.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
+import { createMysqlImageStorage } from '../server/mysql-image-storage.js';
+import { adminProducts } from '../server/admin-products.js';
 import type { VerificationEvidence } from '../shared/affiliate.js';
 import type { Item } from '../shared/wishlist.js';
 
@@ -126,6 +129,108 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
       .send({ username: credentials.username, password }).expect(429);
   });
 
+  it('shows the public import title while keeping the saved wishlist label private', async () => {
+    const title = 'Public marketplace lamp';
+    const application = createApp({ ...options, lookupMetadata: async () => ({ title, image: null, price: null }) });
+    const customer = await wishlist(application);
+    const sample = listing();
+    const forged = listing();
+    const preview = await customer.agent.post('/api/products/import').set(mutation).send({ url: sample.canonical }).expect(200);
+    expect(preview.body).toMatchObject({ name: title, publicTitleProof: expect.any(String) });
+    const data = { name: 'Private gift idea', priceMinor: null, quantity: 1,
+      publicTitle: { title, proof: preview.body.publicTitleProof }, url: sample.canonical };
+    const requestId = randomUUID();
+    for (let replay = 0; replay < 2; replay++) {
+      await customer.agent.post(`${customer.path}/items`).set(mutation).set('Idempotency-Key', requestId).send(data).expect(201);
+    }
+    await customer.agent.post(`${customer.path}/items`).set(mutation).send({ ...data, url: forged.canonical }).expect(201);
+    const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: sample.key }, include: { _count: {
+      select: { items: true, notifications: true },
+    } } });
+    expect(identity).toMatchObject({ title, _count: { items: 1, notifications: 1 } });
+    await expect(db.productIdentity.findUniqueOrThrow({ where: { lookupKey: forged.key } })).resolves.toMatchObject({ title: null });
+    const admin = await administrator(application);
+    const response = await admin.agent.get(`${adminPath}/opportunities`).query({ q: title }).expect(200);
+    expect(response.body.records).toEqual([expect.objectContaining({ id: identity.id, title })]);
+    expect(response.text).not.toContain(data.name);
+  });
+
+  it('publishes only signed prices and marketplace photos with an authorized admin image route', async () => {
+    const source = 'https://www.tokopedia.com/test-shop/' + randomUUID();
+    const photoUrl = 'https://images.tokopedia.net/test.jpg';
+    const photo = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#334455' } }).jpeg().toBuffer();
+    keys.add(identifyProduct(source)!.lookupKey);
+    const application = createApp({ ...options, mysqlImages: createMysqlImageStorage(db),
+      lookupMetadata: async () => ({ productUrl: source, title: 'Public test charger', image: photoUrl,
+        price: { priceMinor: 2300000, currency: 'IDR' } }),
+      marketplaceImageRequest: async () => new Response(Uint8Array.from(photo), { headers: { 'content-type': 'image/jpeg' } }),
+    });
+    const customer = await wishlist(application);
+    const preview = (await customer.agent.post('/api/products/import').set(mutation).send({ url: source }).expect(200)).body;
+    const payload = { name: 'Private label', url: source, priceMinor: 2300000, priceSource: 'imported_unverified', quantity: 1,
+      publicTitle: { title: preview.name, proof: preview.publicTitleProof }, publicPriceProof: preview.publicPriceProof,
+      saveMarketplaceImage: true, tokopediaProductUrl: source,
+      tokopediaImage: { url: photoUrl, proof: preview.tokopediaImageProof } };
+    await customer.agent.post(customer.path + '/items').set(mutation).set('Idempotency-Key', randomUUID()).send(payload).expect(201);
+    const privateImage = await createMysqlImageStorage(db).storeJpeg(customer.ownerId, photo);
+    await customer.agent.post(customer.path + '/items').set(mutation).send({ name: 'Private upload', url: source,
+      quantity: 1, priceMinor: 700, priceSource: 'imported_unverified', publicPriceProof: preview.publicPriceProof,
+      imageKey: privateImage }).expect(201);
+    const admin = await administrator(application);
+    const { body } = await admin.agent.get(adminPath + '/products').query({ q: preview.name, state: 'original' }).expect(200);
+    expect(body.records).toEqual([expect.objectContaining({ title: preview.name, merchant: 'Tokopedia', replaced: false,
+      price: { priceMinor: 2300000, currency: 'IDR' }, image: expect.any(String) })]);
+    const [product] = body.records;
+    await customer.agent.get(product.image).expect(401);
+    await admin.agent.get(product.image).expect('Content-Type', /image\/jpeg/u).expect(200);
+    expect(await db.productImage.count({ where: { marketplaceIdentityId: product.id } })).toBe(1);
+    expect(await db.priceObservation.count({ where: { marketplaceIdentityId: product.id } })).toBe(1);
+  });
+
+  it('activates a cross-market replacement, serializes changes, and restores the original', async () => {
+    const application = createApp({ ...options, recommendationsDb: db });
+    const customer = await wishlist(application);
+    const { canonical, key } = listing();
+    const item = await add(customer, canonical);
+    const { id } = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: key } });
+    const admin = await administrator(application);
+    const path = `${adminPath}/products/${id}`;
+    const purchase = `${customer.path}/items/${item.id}/purchase`;
+    const replacement = 'https://www.tokopedia.com/test-shop/test-product';
+    const next = 'https://www.tokopedia.com/test-shop/next-product';
+    const save = (url: string) => admin.agent.patch(path).set(mutation).send({ url });
+    await customer.agent.patch(path).set(mutation).send({ url: replacement }).expect(401);
+    await save('https://127.0.0.1/private').expect(400);
+    await save(replacement).expect(200, { url: replacement, replaced: true });
+    await save(replacement).expect(200, { url: replacement, replaced: true });
+    const active = (await customer.agent.get(purchase).expect(200)).body;
+    await customer.agent.get(active.affiliatePath).expect('Location', replacement).expect(302);
+    const curated = await db.curatedRecommendation.create({ data: {
+      title: 'Matching public recommendation', url: canonical, category: 'headphones', currency: 'IDR',
+      priceMinor: 10000, priceVerified: true, priceVerifiedAt: new Date(), published: true,
+    } });
+    const recommendation = `/api/recommendations/products/${curated.id}/open`;
+    try {
+      await customer.agent.get(recommendation).expect('Location', replacement).expect(302);
+    } finally {
+      await db.curatedRecommendation.delete({ where: { id: curated.id } });
+    }
+    expect(await db.affiliateAudit.count({ where: { identityId: id } })).toBe(1);
+    const failingDb = db.$extends({ query: { affiliateAudit: {
+      create() { throw new Error('Audit write failed'); },
+    } } });
+    await expect(adminProducts(failingDb as unknown as typeof db).replaceProductUrl(id, next, credentials.username))
+      .rejects.toThrow('Audit write failed');
+    expect(await db.affiliateMapping.findUnique({ where: { activeIdentityId: id } }))
+      .toMatchObject({ affiliateUrl: replacement });
+    await Promise.all([save(next).expect(200), save(replacement + '-other').expect(200)]);
+    expect(await db.affiliateMapping.count({ where: { activeIdentityId: id } })).toBe(1);
+    await save(canonical).expect(200, { url: canonical, replaced: false });
+    await customer.agent.get(purchase).expect(200, { originalUrl: canonical, affiliatePath: null });
+    expect(await db.affiliateAudit.count({ where: { identityId: id } })).toBe(4);
+    expect((await db.item.findUniqueOrThrow({ where: { id: item.id } })).url).toBe(canonical);
+  });
+
   it('deduplicates eligible listings, preserves saved URLs and withholds private wishlist details', async () => {
     const application = app();
     const first = await wishlist(application);
@@ -139,6 +244,14 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     await add(second, 'https://example.test/private-path?token=private', 'Private domain');
     expect(item.url).toBe(raw);
     const { agent } = await administrator(application);
+    const shared = await agent.get(adminPath + '/products').query({ q: 'Other' }).expect(200);
+    const otherKey = identifyProduct('https://example.test/private-path?token=private')!.lookupKey;
+    keys.add(otherKey);
+    const other = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: otherKey } });
+    expect(shared.body.records).toContainEqual(expect.objectContaining({ id: other.id, title: null, image: null, price: null }));
+    const detailResponse = await agent.get(adminPath + '/products/' + other.id).expect(200);
+    expect(detailResponse.body).toMatchObject({ url: 'https://example.test/', originalUrl: 'https://example.test/' });
+    expect(detailResponse.text).not.toContain('private-path');
     const list = await agent.get(`${adminPath}/opportunities`).expect(200);
     const detail = list.body.records.find((entry: { listingId: string }) => entry.listingId === sample.article);
     expect(detail).toMatchObject({
@@ -155,7 +268,7 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     expect(body.records.filter(({ identityId, kind }: { identityId: string | null; kind: string }) =>
       identityId === detail.id && kind === 'new_opportunity')).toHaveLength(1);
     const event = body.records.find(({ identityId }: { identityId: string }) => identityId === detail.id);
-    expect(event.targetPath).toBe(`/admin?section=links#opportunity-${detail.id}`);
+    expect(event.targetPath).toBe(`/admin?section=products#product-${detail.id}`);
     for (const action of ['read', 'unread', 'dismiss']) {
       await agent.patch(`${adminPath}/notifications/${event.id}`).set(mutation).send({ action }).expect(204);
       const current = await agent.get(`${adminPath}/notifications`).expect(200);

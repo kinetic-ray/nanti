@@ -19,7 +19,7 @@
     "build": "tsc -p tsconfig.server.json && node scripts/build-web.mjs",
     "test": "vitest run",
     "test:browser": "node tests/browser-smoke.mjs",
-    "test:browser:affiliate": "node tests/browser-affiliate.mjs",
+    "test:browser:affiliate": "node --import tsx tests/browser-affiliate.mjs",
     "test:browser:accounts": "node --import tsx tests/browser-accounts.mjs",
     "test:browser:creator": "node --import tsx tests/browser-creator-catalog.mjs",
     "test:browser:creator-design": "node tests/browser-creator-design.mjs",

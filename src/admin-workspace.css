@@ -324,6 +324,10 @@
 .aw-settings-privacy { margin: .5rem 1rem 1rem; color: var(--aw-muted); font-size: .75rem; }
 .aw-submissions { margin-block-end: 1rem; overflow: hidden; }
 .aw-submission-list { margin: 0; padding: 0; list-style: none; }
+.aw-catalog-summary { display: flex; align-items: center; min-width: 0; gap: .75rem; }
+.aw-catalog-summary .aw-thumb { flex: none; }
+.aw-replacement-status { display: inline-flex; align-items: center; gap: .35rem; }
+.aw-replacement-status[data-live=false] { color: #4f4f55; background: #f0f0f2; }
 .aw-submission-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1rem; padding: .875rem 1rem; border-top: 1px solid var(--aw-divider); }
 .aw-submission-copy { display: grid; min-width: min(100%, 14rem); gap: .25rem; overflow-wrap: anywhere; }
 .aw-submission-copy > span:not(.aw-badge) { color: var(--aw-muted); font-size: .875rem; }

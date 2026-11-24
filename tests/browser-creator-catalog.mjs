@@ -281,7 +281,8 @@ try {
   for (const width of widths) await layout(visitor, 'superadmin-overview', width);
   const nav = visitor.getByRole('navigation', { name: 'Navigasi ruang kerja' });
   const select = label => nav.getByRole('link', { name: label, exact: true }).click();
-  await select('Produk');
+  await select('Etalase');
+  await button(visitor, 'Kelola produk kreator').click();
   await visitor.getByRole('row').filter({ hasText: 'Canvas tote updated' }).waitFor();
   for (const width of widths) await layout(visitor, 'superadmin-products', width);
   await button(visitor, 'Ubah tautan Canvas tote updated').click();

@@ -11,12 +11,13 @@ export class ProductImageWriteError extends Error {
   }
 }
 
-export async function writeProductImage(db: Prisma.TransactionClient, key: string, ownerId: string, bytes: Buffer, itemId?: string) {
+export async function writeProductImage(db: Prisma.TransactionClient, key: string, ownerId: string, bytes: Buffer, itemId?: string,
+  marketplaceIdentityId?: string) {
   const id = mysqlImageId(key);
   if (!id || !bytes.length || bytes.length > 195_000) throw new ProductImageWriteError();
   try {
     await db.productImage.create({
-      data: { id, ownerId, itemId, mimeType: 'image/jpeg', size: bytes.length,
+      data: { id, ownerId, itemId, marketplaceIdentityId, mimeType: 'image/jpeg', size: bytes.length,
         checksum: createHash('sha256').update(bytes).digest('hex'), bytes: Uint8Array.from(bytes) },
       select: { id: true },
     });

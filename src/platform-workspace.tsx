@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { CircleCheck, ClipboardList, ExternalLink, Link2, Package, Search, Store, UserRound, Users } from 'lucide-react';
 import type { PlatformAudit, PlatformCreator, PlatformPage, PlatformProduct, PlatformSettingsStatus, PlatformStorefront, PlatformSummary, PlatformUser, PlatformUserDetail } from '../shared/admin-workspace.js';
-import type { AdminPage, Opportunity } from '../shared/affiliate.js';
 import { safeImportUrl } from '../shared/product-import.js';
 import { formatPrice } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
@@ -18,7 +17,7 @@ type State<T> = { data?: T; error?: string };
 type Action = { type: 'link'; row: PlatformProduct } | { type: 'unpublish-product'; row: PlatformProduct }
   | { type: 'unpublish-storefront'; row: PlatformStorefront };
 const directories = {
-  products: { title: 'Produk', description: 'Periksa tautan produk dan tarik publikasi jika diperlukan.', search: 'Nama produk atau kreator' },
+  products: { title: 'Produk kreator', description: 'Periksa tautan produk dan tarik publikasi jika diperlukan.', search: 'Nama produk atau kreator' },
   users: { title: 'Pengguna', description: 'Lihat akun Nanti dan peran yang terdaftar.', search: 'Nama pengguna atau ID akun' },
   creators: { title: 'Kreator', description: 'Lihat profil kreator dan jumlah produk di setiap katalog.', search: 'Nama kreator' },
   storefronts: { title: 'Etalase', description: 'Periksa status publikasi dan tarik etalase dari publik jika diperlukan.', search: 'Nama etalase' },
@@ -57,50 +56,6 @@ function ReportError({ message, retry }: { message: string; retry: () => void })
     <button type="button" onClick={retry}>Coba lagi</button></div>;
 }
 
-function SubmissionQueue({ onExpired, revision }: { onExpired: OnExpired; revision: number }) {
-  const [result, setResult] = useState<AdminPage<Opportunity>>();
-  const [error, setError] = useState('');
-  const [reload, setReload] = useState(0);
-  const [after, setAfter] = useState<string>();
-  useEffect(() => {
-    const controller = new AbortController();
-    const search = after ? '?' + new URLSearchParams({ after }) : '';
-    api<AdminPage<Opportunity>>('/admin/opportunities' + search, { signal: controller.signal }).then(data => {
-      if (!controller.signal.aborted) { setResult(data); setError(''); }
-    }, failure => {
-      if (controller.signal.aborted) return;
-      if (errorMessage(failure) === 'Administrator sign-in is required.') onExpired();
-      else setError(failureMessage(failure));
-    });
-    return () => controller.abort();
-  }, [after, onExpired, reload, revision]);
-  return <section className="aw-card aw-submissions">
-    <header className="aw-card-header"><div><h2>Produk yang disimpan pengguna</h2>
-      <p>Antrean katalog bersama. Informasi wishlist pribadi tidak ditampilkan.</p></div>
-      <button type="button" onClick={() => { setError(''); setResult(undefined); setAfter(undefined); setReload(value => value + 1); }}>Muat ulang</button>
-    </header>
-    {error ? <ReportError message={error} retry={() => setReload(value => value + 1)} /> : !result ? <WorkspaceLoading /> :
-      result.records.length ? <ul className="aw-submission-list">{result.records.map(product => {
-        const status = product.submissionStatus === 'affiliate_link_assigned' ? 'Tautan afiliasi ditetapkan' :
-          product.submissionStatus === 'reviewed' ? 'Sudah ditinjau' : 'Menunggu tinjauan';
-        return <li key={product.id}>
-          <div className="aw-submission-copy"><strong>{product.title ?? 'Nama produk belum tersedia'}</strong>
-            <span>{product.merchant === 'Other' ? 'Marketplace belum diketahui' : product.merchant} · {product.savedCount} kali disimpan</span>
-            <span className="aw-badge" data-live={product.submissionStatus === 'affiliate_link_assigned'}>{status}</span>
-          </div>
-          <div className="aw-actions">
-            <a className="aw-button" href={product.canonicalUrl} target="_blank" rel="noopener noreferrer">Buka tautan asli</a>
-            <a className="aw-button aw-primary" href={`/admin?section=links#opportunity-${product.id}`}>Tinjau tautan afiliasi</a>
-          </div>
-        </li>;
-      })}</ul> : <WorkspaceEmpty icon={Package} title="Belum ada produk tersimpan" />}
-    {(after || result?.next) && <div className="aw-actions">
-      {after && <button type="button" onClick={() => { setResult(undefined); setAfter(undefined); }}>Halaman pertama</button>}
-      {result?.next && <button type="button" onClick={() => { setAfter(result.next!); setResult(undefined); }}>Halaman berikutnya</button>}
-    </div>}
-  </section>;
-}
-
 function publication(published: boolean, label?: string) {
   return <span className="aw-badge" data-live={published}>{published ? 'Terbit' : label ?? 'Draf'}</span>;
 }
@@ -109,7 +64,7 @@ function Time({ value }: { value: string }) {
   return <time dateTime={value}>{date.format(new Date(value))}</time>;
 }
 
-export function PlatformOverview({ open, onExpired }: { open: (section: 'products' | 'storefronts') => void; onExpired: OnExpired }) {
+export function PlatformOverview({ open, onExpired }: { open: (section: 'creator-products' | 'storefronts') => void; onExpired: OnExpired }) {
   const { data, error, reload } = usePlatformData<PlatformSummary>('/overview', onExpired);
   return <>
     <WorkspaceHeading title="Ringkasan" description="Pantau akun, katalog kreator, dan etalase Nanti." />
@@ -123,7 +78,7 @@ export function PlatformOverview({ open, onExpired }: { open: (section: 'product
       <div className="aw-card">
         <section className="aw-card-header">
           <div><h2>Katalog kreator</h2><p>Periksa produk, sumber, dan tautan etalase.</p></div>
-          <button type="button" onClick={() => open('products')}>Lihat produk</button>
+          <button type="button" onClick={() => open('creator-products')}>Lihat produk</button>
         </section>
         <section className="aw-card-header aw-divided">
           <div><h2>Etalase kreator</h2><p>Tinjau etalase yang tersedia untuk pengunjung.</p></div>
@@ -196,7 +151,6 @@ export function PlatformDirectory({ directory, onExpired }: { directory: Directo
   return <>
     {directory === 'products' && <>
       <WorkspaceHeading title="Produk" description="Tinjau kiriman pengguna dan kelola produk katalog kreator." />
-      <SubmissionQueue onExpired={onExpired} revision={revision} />
       <PlatformTable<PlatformProduct> directory={directory} onExpired={onExpired} revision={revision} notice={notice} columns={[
       { label: 'Produk', className: 'aw-product-cell', cell: row => <div className="aw-product-name"><WorkspaceThumbnail image={row.image} name={row.title} /><strong>{row.title}</strong></div> },
       { label: 'Kreator', cell: row => row.creator },
@@ -240,7 +194,8 @@ export function PlatformDirectory({ directory, onExpired }: { directory: Directo
     ]} />}
     {action && <PlatformAction action={action} onExpired={onExpired} cancel={() => setAction(null)} finished={finished}
       stale={() => { setAction(null); setRevision(value => value + 1); }} />}
-    {userDetail && <Dialog title="Detail pengguna" busy={false} close={() => setUserDetail(null)} focusHeading>
+    {userDetail && <Dialog title="Detail pengguna" busy={false} close={() => setUserDetail(null)} focusHeading
+      headerAction={<button type="button" onClick={() => setUserDetail(null)}>Tutup</button>}>
       <dl className="admin-facts">
         <div><dt>Nama</dt><dd>{userDetail.displayName || 'Akun tanpa nama'}</dd></div>
         <div><dt>Peran</dt><dd>{userDetail.role === 'admin' ? 'Administrator' : 'Anggota'}</dd></div>

@@ -83,7 +83,8 @@ export function AlternativeRecommendations({
                     {product.priceMinor !== null && <p><strong>{new Intl.NumberFormat('id-ID', {
                       style: 'currency', currency,
                     }).format(product.priceMinor / 100)}</strong></p>}
-                    <button type="button" onClick={() => onOpenProduct(product.url)}>
+                    {product.purchasePath && <p>Tautan ini bisa memberi Nanti komisi, tanpa biaya tambahan dari Nanti.</p>}
+                    <button type="button" onClick={() => onOpenProduct(product.purchasePath ?? product.url)}>
                       Lihat produk
                     </button>
                   </li>

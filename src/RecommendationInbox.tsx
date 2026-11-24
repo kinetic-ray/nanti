@@ -7,7 +7,7 @@ import { Icon } from './visual.js';
 type Notice = {
   id: string; readAt: string | null; createdAt: string;
   request: { productName: string };
-  product: { id: string; title: string; url: string; priceMinor: number | null; currency: Currency };
+  product: { id: string; title: string; url: string; priceMinor: number | null; currency: Currency; purchasePath?: string };
 };
 export function RecommendationInbox({ close, focusOnOpen }: { close: () => void; focusOnOpen: boolean }) {
   const { t, money, error: localizeError } = useLocale();
@@ -61,8 +61,10 @@ export function RecommendationInbox({ close, focusOnOpen }: { close: () => void;
           <h3>{notice.product.title}</h3>
           <p>{t('Alternative for {product}', { product: notice.request.productName })}</p>
           {notice.product.priceMinor !== null && <strong>{money(notice.product.priceMinor, notice.product.currency)}</strong>}
+          {notice.product.purchasePath && <p>{t('Nanti may earn a commission through this link, at no additional charge from Nanti.')}</p>}
           <div className="actions recommendation-actions">
-            <a href={notice.product.url} target="_blank" rel="noopener noreferrer"
+            <a href={notice.product.purchasePath ?? notice.product.url} target="_blank"
+              rel={notice.product.purchasePath ? 'sponsored noopener noreferrer' : 'noopener noreferrer'}
               onClick={() => { if (!notice.readAt) void markRead(notice.id); }}>
               {t('View product')}<span className="sr-only"> ({t('opens in a new tab')})</span>
             </a>

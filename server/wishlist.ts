@@ -8,7 +8,8 @@ export interface WishlistRepository {
   create(ownerId: string, data: { name: string; currency: Currency }, guest?: boolean): Promise<WishlistSummary>;
   rename(ownerId: string, id: string, name: string): Promise<boolean>;
   remove(ownerId: string, id: string): Promise<boolean>;
-  addItem(ownerId: string, listId: string, data: ItemWriteInput, requestId?: string, photo?: Buffer): Promise<boolean>;
+  addItem(ownerId: string, listId: string, data: ItemWriteInput, requestId?: string, photo?: Buffer,
+    publicMetadata?: { title?: string; priceCurrency?: Currency; marketplacePhoto?: boolean }): Promise<boolean>;
   updateItem(ownerId: string, listId: string, id: string, data: ItemWriteInput): Promise<boolean>;
   removeItem(ownerId: string, listId: string, id: string): Promise<boolean>;
 }

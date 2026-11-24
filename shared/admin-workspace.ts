@@ -26,3 +26,11 @@ export type PlatformSettingsStatus = {
     recommendationManagementEnabled: boolean;
   };
 };
+export type AdminCatalogProduct = {
+  id: string;
+  title: string | null;
+  merchant: string;
+  replaced: boolean;
+  image: string | null;
+  price: { priceMinor: number; currency: Currency } | null;
+};
