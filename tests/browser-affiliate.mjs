@@ -159,6 +159,7 @@ try {
     await show(buy);
     assert.equal(await buy.getAttribute('href'), original);
     assert.equal(await details.getByText(/commission/u).count(), 0);
+    await shopper.keyboard.press('Escape');
 
     await admin.setViewportSize({ width: 390, height: 844 });
     await admin.getByRole('button', { name: /^Kotak masuk/u }).click();
