@@ -98,7 +98,7 @@ try {
     assert.equal(await admin.getByText(title, { exact: true }).count(), 0);
     await show(admin.getByRole('heading', { name: 'Peluang afiliasi' }));
     assert.equal(await admin.locator('html').getAttribute('lang'), 'id');
-    await admin.locator('.admin-queue button').filter({ hasText: 'IKEA' }).first().click();
+    await admin.locator('.admin-queue button').first().click();
     await admin.getByLabel('URL kandidat afiliasi').fill(candidate);
     await button(admin, 'Tambahkan kandidat').click();
     await show(admin.getByText('Kandidat disimpan untuk ditinjau.'));
