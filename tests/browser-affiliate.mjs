@@ -185,9 +185,16 @@ try {
     await restore.getByRole('checkbox', { name: /Saya sudah memeriksa kedua listing/u }).check();
     await button(restore, 'Pulihkan tautan').click();
     await show(admin.getByText('Pemetaan terverifikasi aktif'));
-    const restored = await shopper.request.get(activeHref, { maxRedirects: 0 });
+    await button(shopper, `Purchase tools for ${title}`).click();
+    const restoredDetails = modal(shopper, title);
+    const restoredBuy = restoredDetails.getByRole('link', { name: /^Buy product/u });
+    await show(restoredBuy);
+    const restoredHref = await restoredBuy.getAttribute('href');
+    assert.ok(restoredHref);
+    const restored = await shopper.request.get(restoredHref, { maxRedirects: 0 });
     assert.equal(restored.status(), 302);
     assert.equal(restored.headers().location, candidate);
+    await shopper.keyboard.press('Escape');
     await button(admin, 'Nonaktifkan').click();
     const disable = modal(admin, 'Nonaktifkan');
     await disable.getByLabel('Alasan').fill('Restore flow browser test complete.');
