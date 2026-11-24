@@ -288,6 +288,12 @@ function PlatformAction({ action, onExpired, cancel, finished, stale }: {
 }
 
 const workspaceActions: Record<string, string> = {
+  recommendation_created: 'Rekomendasi ditambahkan',
+  recommendation_updated: 'Kurasi rekomendasi diubah',
+  recommendation_published: 'Rekomendasi diterbitkan',
+  recommendation_unpublished: 'Publikasi rekomendasi ditarik',
+  recommendation_archived: 'Rekomendasi diarsipkan',
+  recommendation_restored: 'Rekomendasi dipulihkan',
   product_link_updated: 'Tautan produk diubah', product_unpublished: 'Publikasi produk ditarik',
   storefront_unpublished: 'Publikasi etalase ditarik',
 };

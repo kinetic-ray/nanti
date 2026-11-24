@@ -169,6 +169,8 @@ model ProductIdentity {
   audit           AffiliateAudit[]
   notifications   AdminNotification[]
 
+  recommendation  CuratedRecommendation?
+
   @@index([createdAt, id])
 }
 
@@ -460,6 +462,14 @@ model CuratedRecommendation {
   fulfillmentCursor String? @db.Char(36)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  productIdentityId String? @unique @db.Char(36)
+  productIdentity ProductIdentity? @relation(fields: [productIdentityId], references: [id], onDelete: Restrict)
+  listingUrl     String?  @db.VarChar(2048)
+  importedTitle  String?  @db.VarChar(160)
+  importedImage  String?  @db.VarChar(2048)
+  importedPriceAt DateTime?
+  archivedAt     DateTime?
 
   @@index([published, category, currency])
 }

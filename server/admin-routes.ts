@@ -1,6 +1,8 @@
+import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { adminWorkspaceRoutes } from './admin-workspace-routes.js';
+import { recommendationWorkspaceRoutes } from './recommendation-workspace-routes.js';
 import { recommendationAdminRoutes } from './recommendation-admin-routes.js';
 import type { CookieOptions, ErrorRequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
@@ -46,7 +48,7 @@ const handleAffiliateProblem: ErrorRequestHandler = (error: unknown, _req, res, 
   res.status(error.status).json({ error: error.message });
 };
 
-export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCredentials, secret: string, secure: boolean, recommendationsDb?: PrismaClient, recommendationSuperadminEnabled = false) {
+export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCredentials, secret: string, secure: boolean, recommendationsDb?: PrismaClient, recommendationSuperadminEnabled = false, recommendationPreview?: RequestHandler[]) {
   const router = Router();
   const scope = adminCredentialScope(credentials, secret);
   const cookie = secure ? '__Host-nanti-admin' : 'nanti-admin';
@@ -96,7 +98,11 @@ export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCr
     administratorLoginConfigured: Boolean(credentials.username && credentials.passwordHash),
     recommendationManagementEnabled: recommendationSuperadminEnabled,
   }));
-  if (recommendationsDb && recommendationSuperadminEnabled) router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
+  if (recommendationsDb && recommendationSuperadminEnabled) {
+    if (recommendationPreview) router.use('/recommendations/workspace',
+      recommendationWorkspaceRoutes(recommendationsDb, credentials.username, secret, recommendationPreview));
+    router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
+  }
 
   router.get('/products', async (req, res) => {
     const input = page.extend({ q: z.string().trim().max(160).optional(),

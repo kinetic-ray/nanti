@@ -63,7 +63,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (!parsed.success) return res.status(400).json({ error: 'Periksa kembali data produk yang diisi.' });
     const data = parsed.data;
     const result = await db.curatedRecommendation.updateMany({
-      where: { id }, data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false, fulfillmentCursor: null },
+      where: { id, productIdentityId: null, archivedAt: null }, data: { ...data, priceVerified: false, priceVerifiedAt: null, published: false, fulfillmentCursor: null },
     });
     if (!result.count) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
     res.json(await db.curatedRecommendation.findUnique({ where: { id } }));
@@ -77,12 +77,13 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     const evidence = parsed.data;
     const item = await db.curatedRecommendation.findUnique({ where: { id } });
     if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+    if (item.productIdentityId || item.archivedAt) return res.status(409).json({ error: 'Gunakan editor rekomendasi.' });
     const checked = safeAdminUrl(evidence.checkedUrl);
     if (!checked || !safeHttpsUrl(checked.href) || checked.href !== item.url) {
       return res.status(422).json({ error: 'Periksa harga di link produk yang tersimpan, lalu coba lagi.' });
     }
     const changed = await db.curatedRecommendation.updateMany({
-      where: { id, url: checked.href },
+      where: { id, url: checked.href, productIdentityId: null, archivedAt: null },
       data: { priceMinor: evidence.priceMinor, priceVerified: true, priceVerifiedAt: new Date(), published: false, fulfillmentCursor: null },
     });
     if (!changed.count) return res.status(409).json({ error: 'Link produk berubah. Muat ulang dan periksa lagi.' });
@@ -99,7 +100,7 @@ export function recommendationAdminRoutes(db: PrismaClient) {
     if (published) {
       const item = await db.curatedRecommendation.findUnique({ where: { id } });
       if (!item) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
-      if (!item.priceVerified || !item.priceMinor || !item.priceVerifiedAt ||
+      if (item.productIdentityId || item.archivedAt || !item.priceVerified || !item.priceMinor || !item.priceVerifiedAt ||
         item.priceVerifiedAt.getTime() < Date.now() - 7 * 86_400_000) {
         return res.status(409).json({
           error: 'Harga belum terverifikasi. Produk tetap menjadi draf sampai ada verifikasi harga.',
@@ -107,8 +108,8 @@ export function recommendationAdminRoutes(db: PrismaClient) {
       }
     }
     const result = await db.curatedRecommendation.updateMany({
-      where: published ? { id, priceVerified: true, priceMinor: { gt: 0 },
-        priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } } : { id },
+      where: published ? { id, productIdentityId: null, archivedAt: null, priceVerified: true, priceMinor: { gt: 0 },
+        priceVerifiedAt: { gte: new Date(Date.now() - 7 * 86_400_000), lte: new Date() } } : { id, productIdentityId: null, archivedAt: null },
       data: { published },
     });
     if (!result.count) return res.status(409).json({ error: 'Produk tidak ditemukan atau harga perlu diverifikasi ulang.' });
@@ -153,10 +154,10 @@ export function recommendationAdminRoutes(db: PrismaClient) {
       }
     }
     if (published) {
-      await db.curatedRecommendation.updateMany({ where: { id, published: true },
+      await db.curatedRecommendation.updateMany({ where: { id, published: true, productIdentityId: null, archivedAt: null },
         data: { fulfillmentCursor: continuation } });
     } else {
-      await db.curatedRecommendation.updateMany({ where: { id }, data: { fulfillmentCursor: null } });
+      await db.curatedRecommendation.updateMany({ where: { id, productIdentityId: null, archivedAt: null }, data: { fulfillmentCursor: null } });
     }
     res.json({ product, fulfillment: published ? 'bounded' : 'disabled',
       nextCursor: published ? continuation : null });

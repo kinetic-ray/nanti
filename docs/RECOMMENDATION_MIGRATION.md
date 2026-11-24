@@ -1,4 +1,40 @@
-# Recommendation Management V1 — Migration and rollout checklist
+# Recommendation workspace migration
+
+## Sprint 2 release
+
+Apply `20261125100000_recommendation_workspace` after
+`20261125000000_catalog_provenance_and_direct_replacement`. It adds six nullable
+columns to `CuratedRecommendation`: the shared identity foreign key, resolved
+listing URL, imported title, imported thumbnail URL, imported price timestamp,
+and archive timestamp. The unique identity index prevents concurrent duplicate
+curation. Existing rows keep their publication and price confirmation state.
+Refreshing a supported existing listing can associate it with its shared identity.
+
+Apply the additive schema before the Sprint 2 application serves requests. The
+production migration workflow requires a verified restorable backup and explicit
+authorization. Verify migration status after deployment. To roll back the
+application, keep the additive schema and redeploy the previous code. Sprint 2
+archive and restore write `published = false` so the prior consumer code also
+excludes those rows. Dropping the new fields would discard curation provenance
+and archive history and needs a separately reviewed migration.
+
+The recommendation workspace shares the existing Superadmin session and only
+mounts when `NANTI_RECOMMENDATION_SUPERADMIN_USERNAME` matches
+`NANTI_ADMIN_USERNAME`. The existing retailer metadata and price permissions
+still apply. The workspace keeps the entered URL and the resolved listing
+separately. Thumbnails use the public importer path or a retailer image URL.
+Curation never writes personal wishlist items, image uploads or price history.
+
+Active entries join the existing on-demand Kabar alternatif candidate query.
+Existing matching, currency, safety and seven-day price eligibility still apply.
+An entry can be published while marketplace price is missing. It enters matching
+after eligible price metadata is imported. Restore returns an entry to draft.
+Publishing through the workspace does not scan existing pending requests or send
+inbox notices. The existing legacy request and inbox paths remain available.
+No data backfill is needed.
+
+## Historical V1 notes
+
 
 PR: #71 · Issue: #70 · Branch: `feat/issue-70-recommendation-management`
 
