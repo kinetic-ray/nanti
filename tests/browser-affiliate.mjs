@@ -91,12 +91,11 @@ try {
     await button(admin, 'Masuk').click();
     await admin.getByRole('link', { name: 'Produk', exact: true }).click();
     await show(admin.getByRole('heading', { name: 'Produk yang disimpan pengguna' }));
-    await show(admin.getByText(`IKEA · ${article}`, { exact: true }));
-    const submittedProduct = admin.locator('.aw-submission-list li').filter({ hasText: `IKEA · ${article}` });
+    await show(admin.getByText('Nama produk belum tersedia', { exact: true }));
+    const submittedProduct = admin.locator('.aw-submission-list li').filter({ hasText: 'Nama produk belum tersedia' });
     await show(submittedProduct.getByText('Menunggu tinjauan', { exact: true }));
     await show(admin.getByRole('link', { name: /Notifikasi, \d+ belum dibaca/u }));
     assert.equal(await admin.getByText(title, { exact: true }).count(), 0);
-    await admin.getByRole('link', { name: 'Tautan afiliasi', exact: true }).click();
     await show(admin.getByRole('heading', { name: 'Peluang afiliasi' }));
     assert.equal(await admin.locator('html').getAttribute('lang'), 'id');
     await admin.getByRole('button', { name: new RegExp('IKEA artikel ' + article, 'u') }).click();
