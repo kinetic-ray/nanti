@@ -184,7 +184,7 @@ describe('Safe import diagnostics', () => {
     const target = new URL('https://s.shopee.co.id/8AXmF9lYur?affiliate=private');
     await expect(previewProductMetadata(target, async () => new Response(null, { status: 403 }), report))
       .resolves.toBeNull();
-    expect(report).toHaveBeenCalledWith('http_failure', 's.shopee.co.id', 403);
+    expect(report).toHaveBeenCalledWith('access_blocked', 's.shopee.co.id', 403);
     expect(JSON.stringify(report.mock.calls)).not.toContain('affiliate');
     expect(JSON.stringify(report.mock.calls)).not.toContain('8AXmF9lYur');
   });
@@ -249,6 +249,42 @@ describe('Shopee import reliability', () => {
       JSON.stringify(entries) + '</script>';
     await expect(previewProductMetadata(listing, async () => new Response(html, { headers: { 'content-type': 'text/html' } })))
       .resolves.toMatchObject({ title: 'Lamp', image: 'https://cf.shopee.co.id/lamp' });
+  });
+
+  it('imports one identity-matched single IDR offer and its seller across www aliases', async () => {
+    const product = { '@type': 'Product', url: 'https://www.shopee.co.id/lamp-i.123.456', name: 'Lamp',
+      offers: { '@type': 'Offer', price: '129000', priceCurrency: 'IDR',
+        seller: { '@type': 'Organization', name: 'Lamp Shop' } } };
+    const html = '<script type="application/ld+json">' + JSON.stringify(product) + '</script>';
+    await expect(previewProductMetadata(listing, async () => new Response(html,
+      { headers: { 'content-type': 'text/html' } }))).resolves.toMatchObject({
+      title: 'Lamp', sellerName: 'Lamp Shop', productUrl: 'https://shopee.co.id/lamp-i.123.456',
+      price: { priceMinor: 12900000, currency: 'IDR' },
+    });
+  });
+
+  it.each([
+    { '@type': 'AggregateOffer', lowPrice: '100', highPrice: '200', priceCurrency: 'IDR' },
+    [{ '@type': 'Offer', price: '100', priceCurrency: 'IDR' },
+      { '@type': 'Offer', price: '200', priceCurrency: 'IDR' }],
+    { '@type': 'Offer', price: '100', priceCurrency: 'IDR', priceSpecification: { price: '50' } },
+  ])('withholds aggregate, multiple, or promotional offer data: %j', async offers => {
+    const html = '<script type="application/ld+json">' + JSON.stringify({
+      '@type': 'Product', url: listing.href, name: 'Lamp', offers,
+    }) + '</script>';
+    await expect(previewProductMetadata(listing, async () => new Response(html,
+      { headers: { 'content-type': 'text/html' } }))).resolves.toMatchObject({ title: 'Lamp', price: null });
+  });
+
+  it('withholds prices when product variants or multiple matching products are present', async () => {
+    const product = { '@type': 'Product', url: listing.href, name: 'Lamp', hasVariant: [{ '@type': 'Product' }],
+      offers: { '@type': 'Offer', price: '100', priceCurrency: 'IDR' } };
+    const duplicate = { ...product, hasVariant: undefined };
+    for (const data of [product, [duplicate, duplicate]]) {
+      const html = '<script type="application/ld+json">' + JSON.stringify(data) + '</script>';
+      await expect(previewProductMetadata(listing, async () => new Response(html,
+        { headers: { 'content-type': 'text/html' } }))).resolves.toMatchObject({ price: null });
+    }
   });
 });
 

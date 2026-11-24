@@ -555,15 +555,13 @@ export async function downloadTokopediaImage(value: string, transport: PageReque
 }
 
 export function downloadShopeeImage(value: string): Promise<Buffer | null> {
-  const url = value.length <= 2048 ? safeHttps(value) : null;
-  if (!url || !/(^|\.)susercontent\.com$/u.test(url.hostname)) return Promise.resolve(null);
-  return downloadMarketplaceJpeg(url, (target, signal) => requestPublicPage(target, signal, 'image/jpeg'));
+  return downloadMarketplaceImage('shopee', value);
 }
 
 export function downloadMarketplaceImage(merchant: 'tokopedia' | 'shopee', value: string, transport: PageRequest =
   (url, signal) => requestPublicPage(url, signal, 'image/jpeg,image/png,image/webp')): Promise<Buffer | null> {
   const url = value.length <= 2048 ? safeHttps(value) : null;
-  const hosts = merchant === 'tokopedia' ? imageHosts : /(^|\.)susercontent\.com$/u;
+  const hosts = merchant === 'tokopedia' ? imageHosts : /(^|\.)susercontent\.com$|^cf\.shopee\.co\.id$/u;
   return url && hosts.test(url.hostname) ? downloadMarketplaceJpeg(url, transport, true) : Promise.resolve(null);
 }
 

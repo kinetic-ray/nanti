@@ -19,7 +19,7 @@ Set these in the Vercel **Production** environment. Keep credentials server-side
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | Optional as a pair | Register the exact HTTPS callback `/api/account/google/callback` on the canonical origin. Google returns by GET. |
 | `AUTH_APPLE_CLIENT_ID`, `AUTH_APPLE_TEAM_ID`, `AUTH_APPLE_KEY_ID`, `AUTH_APPLE_PRIVATE_KEY_BASE64` | Optional as a complete group | Register the exact HTTPS callback `/api/account/apple/callback` on the canonical origin. Apple returns by form POST. Encode the full PKCS#8 `.p8` key as base64. |
 | `NANTI_ADMIN_USERNAME`, `NANTI_ADMIN_PASSWORD_HASH` | Optional as a pair | Existing Affiliate Center credentials. Use the stored `scrypt-v1` hash for the password, with the administrator UI at `/admin`. |
-| `NANTI_IKEA_METADATA_PERMISSION`, `NANTI_IKEA_PRICE_METADATA_PERMISSION` | Optional | Set each to `granted` only for the authorized metadata. Price lookup also requires metadata permission. |
+| `NANTI_IKEA_METADATA_PERMISSION`, `NANTI_IKEA_PRICE_METADATA_PERMISSION`, `NANTI_SHOPEE_PRICE_METADATA_PERMISSION` | Optional | Set each to `granted` only for the corresponding authorized metadata. Shopee price lookup is disabled unless explicitly enabled. |
 
 Leave the standalone `HOST`, `PORT`, and `NANTI_TRUST_PROXY` settings unset on Vercel. The function trusts its single Vercel proxy hop for request IPs. Express keeps the per-instance request limits and secure host-scoped cookies. API mutations require JSON and the app's custom request header. Apple's callback uses the existing browser-bound, one-use OAuth state check and its cross-site attempt cookie.
 

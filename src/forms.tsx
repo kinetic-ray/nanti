@@ -299,7 +299,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
       return;
     }
     const originalUrl = parsed ? url.trim() : null;
-    const sellerName = preview?.merchant === 'tokopedia' && preview.originalUrl === originalUrl
+    const sellerName = (preview?.merchant === 'tokopedia' || preview?.merchant === 'shopee') && preview.originalUrl === originalUrl
       ? preview.sellerName ?? (item?.url === originalUrl ? item.sellerName : null)
       : item?.url === originalUrl ? item.sellerName : null;
     const saveMarketplaceImage = !item && !imageKey && !uploadedImage && preview?.originalUrl === originalUrl &&
@@ -327,6 +327,10 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
         ...(saveMarketplaceImage && { saveMarketplaceImage: true, tokopediaProductUrl: preview?.productUrl,
           ...(preview?.tokopediaImageProof && preview.imagePath && {
             tokopediaImage: { url: preview.imagePath, proof: preview.tokopediaImageProof },
+          }),
+          ...(preview?.merchant === 'shopee' && preview.productUrl && preview.imagePath && preview.shopeeImageProof && {
+            shopeeProductUrl: preview.productUrl,
+            shopeeImage: { url: preview.imagePath, proof: preview.shopeeImageProof },
           }) }),
         ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) },
         saveMarketplaceImage ? saveRequestKey.current ?? undefined : undefined);

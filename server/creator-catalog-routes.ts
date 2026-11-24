@@ -5,14 +5,17 @@ import { z } from 'zod';
 import { validateDesign } from '../shared/creator-design.js';
 import { safeImportUrl, productMerchant } from '../shared/product-import.js';
 import { currencies } from '../shared/wishlist.js';
-import { boundedJpeg, downloadShopeeImage, downloadTokopediaImage } from './tokopedia-metadata.js';
+import { boundedJpeg, downloadMarketplaceImage, downloadTokopediaImage } from './tokopedia-metadata.js';
+import { compressProductImage } from './product-image-jpeg.js';
 import type { CreatorCatalogRepository } from './prisma-creator-catalog.js';
 import type { previewProductMetadata } from './product-preview.js';
 import type { createProductMedia } from './product-media.js';
 
 export type CreatorMedia = {
   lookupMetadata?: typeof previewProductMetadata;
+  marketplaceImageRequest?: Parameters<typeof downloadMarketplaceImage>[2];
   productMedia: ReturnType<typeof createProductMedia>;
+  verifyShopeeImage?: (owner: string, listing: string, product: string, image: string, proof: string) => boolean;
 };
 
 const catalogPath = '/creator/catalog';
@@ -120,15 +123,26 @@ export function creatorCatalogRoutes(
     res.sendStatus(204);
   });
   router.post(catalogPath + '/import-photo', imageLimit, async (req, res) => {
-    const { url: value } = z.strictObject({ url: z.string().max(2048) }).parse(req.body);
+    const { url: value, productUrl, imageUrl, proof } = z.strictObject({ url: z.string().max(2048),
+      productUrl: z.string().max(2048).optional(), imageUrl: z.string().max(2048).optional(),
+      proof: z.string().max(80).optional() }).parse(req.body);
     const url = safeImportUrl(value);
     let bytes: Buffer | null = null;
     if (url && media) {
       const merchant = productMerchant(url.hostname);
-      if ((merchant === 'tokopedia' || merchant === 'shopee') && media.lookupMetadata) {
+      const proofProvided = productUrl !== undefined || imageUrl !== undefined || proof !== undefined;
+      if (merchant === 'shopee' && proofProvided) {
+        const valid = productUrl && imageUrl && proof && media.verifyShopeeImage?.(
+          res.locals.creator.userId, url.href, productUrl, imageUrl, proof);
+        if (!valid) return res.status(422).json({ error: 'The previewed store photo expired. Import the product again.' });
+        bytes = await downloadMarketplaceImage('shopee', imageUrl, media.marketplaceImageRequest);
+        if (bytes) bytes = await compressProductImage(bytes, true);
+      } else if ((merchant === 'tokopedia' || merchant === 'shopee') && media.lookupMetadata) {
         const result = await media.lookupMetadata(url).catch(() => null);
-        const download = merchant === 'tokopedia' ? downloadTokopediaImage : downloadShopeeImage;
-        if (result?.image) bytes = await download(result.image);
+        if (result?.image) bytes = merchant === 'shopee'
+          ? await downloadMarketplaceImage('shopee', result.image, media.marketplaceImageRequest)
+          : await downloadTokopediaImage(result.image);
+        if (bytes && merchant === 'shopee') bytes = await compressProductImage(bytes, true);
       }
       if (!bytes && merchant === 'ikea') {
         const thumbnail = await media.productMedia(url.href);
