@@ -34,6 +34,7 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     secureCookies: false, preview: async () => null };
   const owners = new Set<string>();
   const keys = new Set<string>();
+  const noticeKeys = new Set<string>();
 
   beforeAll(async () => { credentials.passwordHash = await hashAdminPassword(password); });
   // The router derives its session scope when created, after the asynchronous password bootstrap.
@@ -77,7 +78,8 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     await db.affiliateMapping.deleteMany({ where: { identityId: { in: identityIds } } });
     await db.productIdentity.deleteMany({ where: { id: { in: identityIds } } });
     await db.adminSession.deleteMany({ where: { credentialScope: adminCredentialScope(credentials, secret) } });
-    owners.clear(); keys.clear();
+    if (noticeKeys.size) await db.adminNotification.deleteMany({ where: { eventKey: { in: [...noticeKeys] } } });
+    owners.clear(); keys.clear(); noticeKeys.clear();
   });
   afterAll(() => db.$disconnect());
 
@@ -149,9 +151,10 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
       expect(serialized).not.toContain(value);
     }
     const { body } = await agent.get(`${adminPath}/notifications`).expect(200);
-    expect(body.records.filter(({ identityId, kind }: { identityId: string; kind: string }) =>
+    expect(body.records.filter(({ identityId, kind }: { identityId: string | null; kind: string }) =>
       identityId === detail.id && kind === 'new_opportunity')).toHaveLength(1);
     const event = body.records.find(({ identityId }: { identityId: string }) => identityId === detail.id);
+    expect(event.targetPath).toBe(`/admin?section=links#opportunity-${detail.id}`);
     for (const action of ['read', 'unread', 'dismiss']) {
       await agent.patch(`${adminPath}/notifications/${event.id}`).set(mutation).send({ action }).expect(204);
       const current = await agent.get(`${adminPath}/notifications`).expect(200);
@@ -162,6 +165,71 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     const purchase = await first.agent.get(`${first.path}/items/${item.id}/purchase`).expect(200, { originalUrl: raw, affiliatePath: null });
     expect(purchase.headers['cache-control']).toBe('no-store');
     await second.agent.get(`${first.path}/items/${item.id}/purchase`).expect(404);
+  });
+
+  it('makes saved products idempotent and visible in the Superadmin product review queue', async () => {
+    const owner = await wishlist();
+    const sample = listing();
+    const requestId = randomUUID();
+    const input = { name: 'Shared lamp listing', priceMinor: 12500, quantity: 1, url: sample.canonical };
+    const submit = () => owner.agent.post(`${owner.path}/items`).set(mutation).set('Idempotency-Key', requestId).send(input).expect(201);
+    await Promise.all([submit(), submit()]);
+    await submit();
+    const saved = await owner.agent.get(owner.path).expect(200);
+    expect(saved.body.items.filter(({ id }: { id: string }) => id === requestId)).toHaveLength(1);
+
+    await owner.agent.post(`${owner.path}/items`).set(mutation).set('Idempotency-Key', requestId)
+      .send({ ...input, name: 'Different payload' }).expect(409);
+    const { agent } = await administrator();
+    const queue = await agent.get(`${adminPath}/opportunities`).expect(200);
+    const row = queue.body.records.find(({ listingId }: { listingId: string }) => listingId === sample.article);
+    expect(row).toMatchObject({ canonicalUrl: sample.canonical, savedCount: 1, submissionStatus: 'pending' });
+    expect(JSON.stringify(queue.body)).not.toContain(owner.ownerId);
+  });
+
+  it('resolves reviewed Tokopedia, Shopee, and manual affiliate URLs from their saved products', async () => {
+    const owner = await wishlist();
+    const admin = await administrator();
+    const samples = [
+      ['https://www.tokopedia.com/store/phone-case', 'https://www.tokopedia.com/store/phone-case?utm_source=partner'],
+      ['https://shopee.co.id/Phone-Case-i.123.456', 'https://shopee.co.id/Phone-Case-i.123.456?utm_source=partner'],
+      ['https://shop.example.test/items/phone-case?variant=blue', 'https://shop.example.test/items/phone-case?variant=blue&utm_source=partner'],
+    ] as const;
+    for (const [original, affiliateUrl] of samples) {
+      keys.add(identifyProduct(original)!.lookupKey);
+      const item = await add(owner, original, `Saved ${new URL(original).hostname}`);
+      const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: identifyProduct(original)!.lookupKey } });
+      expect(identity.title).toBeNull();
+      const path = `${adminPath}/opportunities/${identity.id}`;
+      const candidate = await admin.agent.post(`${path}/mappings`).set(mutation).send({ url: affiliateUrl }).expect(201);
+      expect(candidate.body.eligible).toBe(true);
+      await admin.agent.patch(`${path}/mappings/${candidate.body.id}`).set(mutation).send({ action: 'approve', revision: 0, evidence }).expect(200);
+      const purchase = await owner.agent.get(`${owner.path}/items/${item.id}/purchase`).expect(200);
+      await owner.agent.get(purchase.body.affiliatePath).expect('Location', affiliateUrl).expect(302);
+    }
+  });
+
+  it('deduplicates hourly system failure notices and marks the full notification center read', async () => {
+    const hour = new Date().toISOString().slice(0, 13);
+    const failureKey = `failure:product-save:P2034:${hour}`;
+    await affiliate.recordSystemFailure('P2034');
+    await affiliate.recordSystemFailure('P2034');
+    const userId = randomUUID();
+    noticeKeys.add(failureKey);
+    noticeKeys.add(`test-user:${userId}`);
+    await db.adminNotification.create({ data: { eventKey: `test-user:${userId}`, kind: 'new_user',
+      subject: 'Pengguna baru terdaftar', targetPath: '/admin?section=users' } });
+    const { agent } = await administrator();
+    const before = await agent.get(`${adminPath}/notifications`).expect(200);
+    const failure = before.body.records.find(({ kind }: { kind: string }) => kind === 'system_failure');
+    const user = before.body.records.find(({ kind }: { kind: string }) => kind === 'new_user');
+    expect(before.body.unread).toBeGreaterThanOrEqual(2);
+    expect(failure).toMatchObject({ identityId: null, title: 'Gangguan penyimpanan produk (P2034)',
+      targetPath: '/admin?section=settings' });
+    expect(await db.adminNotification.count({ where: { kind: 'system_failure', subject: 'Gangguan penyimpanan produk (P2034)' } })).toBe(1);
+    expect(user).toMatchObject({ identityId: null, title: 'Pengguna baru terdaftar', targetPath: '/admin?section=users' });
+    await agent.post(`${adminPath}/notifications/read-all`).set(mutation).send({}).expect(204);
+    expect((await agent.get(`${adminPath}/notifications`).expect(200)).body.unread).toBe(0);
   });
 
   it('requires exact verification, protects the active slot, and falls back promptly after revocation', async () => {
@@ -243,6 +311,11 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     await review(first.body.id, { action: 'revoke', revision: 2, reason: 'Tracking relationship ended.' }).expect(200);
     await owner.agent.get(link).expect('Location', sample.canonical).expect(302);
     await owner.agent.get(purchase).expect(200, { originalUrl: sample.canonical, affiliatePath: null });
+    const restored = await review(first.body.id, { action: 'restore', revision: 3, evidence }).expect(200);
+    expect(restored.body).toMatchObject({ status: 'approved', active: true, revision: 4 });
+    const restoredPurchase = await owner.agent.get(purchase).expect(200);
+    await owner.agent.get(restoredPurchase.body.affiliatePath).expect('Location', direct).expect(302);
+    await review(first.body.id, { action: 'disable', revision: 4, reason: 'Switching to a replacement link.' }).expect(200);
     const inbox = await agent.get(`${adminPath}/notifications`).expect(200);
     expect(inbox.body.records.filter(({ identityId, kind }: { identityId: string; kind: string }) =>
       identityId === identity.id && kind === 'mapping_revoked')).toHaveLength(1);

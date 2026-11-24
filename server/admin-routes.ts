@@ -33,7 +33,7 @@ const evidence = z.strictObject({
 });
 const revision = z.number().int().nonnegative();
 const review = z.union([
-  z.strictObject({ action: z.enum(['approve', 'revalidate']), revision, evidence }),
+  z.strictObject({ action: z.enum(['approve', 'revalidate', 'restore']), revision, evidence }),
   z.strictObject({ action: z.enum(['reject', 'disable', 'revoke', 'invalid']), revision, reason: z.string().trim().min(3).max(600) }),
 ]);
 
@@ -119,6 +119,10 @@ export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCr
 
   router.get('/notifications', async (req, res) => {
     res.json(await affiliate.notices(page.parse(req.query).after));
+  });
+  router.post('/notifications/read-all', async (_req, res) => {
+    await affiliate.markAllNoticesRead();
+    res.sendStatus(204);
   });
   router.patch('/notifications/:noticeId', async (req, res) => {
     const { action } = z.strictObject({ action: z.enum(['read', 'unread', 'dismiss']) }).parse(req.body);

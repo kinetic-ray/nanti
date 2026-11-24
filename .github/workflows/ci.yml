@@ -83,6 +83,21 @@ jobs:
           NANTI_BROWSER_BASE_URL=http://127.0.0.1:3000 \
             NANTI_BROWSER_ARTIFACTS=test-results/browser \
             npm run test:browser:mvp 2>&1 | tee test-results/browser-mvp.log
+      - name: Run Superadmin product and notification browser E2E
+        run: |
+          set -o pipefail
+          export NANTI_ADMIN_USERNAME=nanti-ci-admin
+          export NANTI_TEST_ADMIN_USERNAME="$NANTI_ADMIN_USERNAME"
+          export NANTI_TEST_ADMIN_PASSWORD=isolated-ci-only-superadmin-password
+          admin_hash="$(printf '%s' "$NANTI_TEST_ADMIN_PASSWORD" | node --import tsx scripts/hash-admin-password.mjs)"
+          export NANTI_ADMIN_PASSWORD_HASH="$admin_hash"
+          npm start > test-results/affiliate-server.log 2>&1 &
+          app_server=$!
+          trap 'kill "$app_server" 2>/dev/null || true' EXIT
+          curl --fail --silent --retry 20 --retry-connrefused http://127.0.0.1:3000/api/health >/dev/null
+          NANTI_BROWSER_BASE_URL=http://127.0.0.1:3000 \
+            NANTI_BROWSER_ARTIFACTS=test-results/browser \
+            npm run test:browser:affiliate 2>&1 | tee test-results/browser-affiliate.log
       - name: Test public navigation and recommendation inbox
         run: |
           set -o pipefail

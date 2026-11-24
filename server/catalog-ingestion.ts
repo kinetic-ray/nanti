@@ -5,11 +5,13 @@ export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, u
   const product = identifyProduct(url);
   if (!product) return null;
   const { hasAttribution: _hasAttribution, ...listing } = product;
-  const created = await db.productIdentity.createMany({ data: [listing], skipDuplicates: true });
+  const created = await db.productIdentity.createMany({ data: [{ ...listing, title: null }], skipDuplicates: true });
   const { id } = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: listing.lookupKey }, select: { id: true } });
   if (created.count) {
-    await db.adminNotification.create({
-      data: { eventKey: `opportunity:${id}`, identityId: id, kind: 'new_opportunity' }, select: { id: true },
+    await db.adminNotification.createMany({
+      data: [{ eventKey: `opportunity:${id}`, identityId: id, kind: 'new_opportunity',
+        subject: 'Produk baru menunggu ditinjau', targetPath: `/admin?section=links#opportunity-${id}` }],
+      skipDuplicates: true,
     });
   }
   return id;

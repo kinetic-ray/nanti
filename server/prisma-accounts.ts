@@ -1,5 +1,6 @@
 import { passwordAccounts } from './password-accounts.js';
 import { prismaCreatorCatalog } from './prisma-creator-catalog.js';
+import { notifyNewRegisteredUser } from './admin-notifications.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Prisma } from './generated/prisma/client.js';
 import type { AuthProvider, OAuthAttempt, PrismaClient, UserSession } from './generated/prisma/client.js';
@@ -110,6 +111,7 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
           const id = randomUUID();
           await tx.user.create({ data: { id, displayName, dataOwners: { create: { id } },
             identities: { create: { ...key, verifiedEmail, avatarUrl } } } });
+          await notifyNewRegisteredUser(tx, id);
           return newSession(tx, id, guestOwnerId, provider);
         });
       } catch (error) {

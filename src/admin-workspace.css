@@ -129,6 +129,12 @@
 .aw-breadcrumb a:hover { text-decoration: underline; }
 .aw-breadcrumb [aria-current] { color: var(--aw-ink); font-weight: 750; }
 .aw-top-actions { margin-inline-start: auto; flex: none; }
+.aw-notification-link { position: relative; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.aw-notification-count {
+  position: absolute; inset: -0.2rem -0.25rem auto auto; min-width: 1.125rem; height: 1.125rem; padding-inline: .2rem;
+  display: grid; place-items: center; border-radius: 999px; background: var(--aw-danger); color: #fff;
+  font-size: .625rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums;
+}
 .aw-account { position: relative; }
 .aw-account summary {
   display: flex;
@@ -316,6 +322,19 @@
 .aw-settings-status.is-ready { background: #e6f6ee; color: #175b3a; }
 .aw-settings-status.is-missing { background: #fff0d8; color: #744400; }
 .aw-settings-privacy { margin: .5rem 1rem 1rem; color: var(--aw-muted); font-size: .75rem; }
+.aw-submissions { margin-block-end: 1rem; overflow: hidden; }
+.aw-submission-list { margin: 0; padding: 0; list-style: none; }
+.aw-submission-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1rem; padding: .875rem 1rem; border-top: 1px solid var(--aw-divider); }
+.aw-submission-copy { display: grid; min-width: min(100%, 14rem); gap: .25rem; overflow-wrap: anywhere; }
+.aw-submission-copy > span:not(.aw-badge) { color: var(--aw-muted); font-size: .875rem; }
+.aw-submissions .aw-actions { justify-content: flex-end; }
+.aw-submissions .aw-button { min-height: 2.75rem; }
+.aw-submissions .aw-button.aw-primary { color: #fff; background: var(--aw-primary); border-color: var(--aw-primary); }
+@media (max-width: 38rem) {
+  .aw-submission-list li { align-items: stretch; }
+  .aw-submissions .aw-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aw-submissions .aw-button { justify-content: center; text-align: center; white-space: normal; }
+}
 @media (max-width: 38rem) {
   .aw-settings-list li { align-items: flex-start; }
   .aw-settings-status { white-space: nowrap; }

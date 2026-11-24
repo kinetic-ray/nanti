@@ -31,6 +31,7 @@ import { accountRoutes } from './account-routes.js';
 import type { Accounts } from './prisma-accounts.js';
 import type { OAuthProviders } from './oauth-providers.js';
 import { databaseProblem, databaseUnavailable } from './database-health.js';
+import { Prisma } from './generated/prisma/client.js';
 import { priceRoutes } from './price-routes.js';
 import type { Prices } from './prisma-prices.js';
 
@@ -300,38 +301,47 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       shopeeImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
     }).parse(req.body);
     const owner = res.locals.ownerId as string;
+    const requestId = req.get('Idempotency-Key') ? uuid.parse(req.get('Idempotency-Key')) : undefined;
+    if ((saveMarketplaceImage || saveTokopediaImage) && !requestId) {
+      return res.status(400).json({ error: 'This product save expired. Check the details and submit it again.' });
+    }
+    const list = await repository.find(owner, listId);
+    if (!list) return notFound(res);
+    const replay = (saved: (typeof list.items)[number]) => {
+      if (saved.url !== input.url || saved.name !== input.name || saved.priceMinor !== input.priceMinor ||
+          saved.quantity !== input.quantity || (saved.sellerName ?? null) !== (input.sellerName ?? null) ||
+          (input.imageKey && saved.imageKey !== input.imageKey)) {
+        return res.status(409).json({ error: 'This save key belongs to different product details. Review your wishlist before submitting again.' });
+      }
+      if (!saveMarketplaceImage && !saveTokopediaImage) return res.sendStatus(201);
+      return res.status(201).json({ photoStatus: saved.imageKey ? 'saved' : 'unavailable' });
+    };
+    const findSaved = async () => requestId
+      ? (await repository.find(owner, listId))?.items.find(item => item.id === requestId)
+      : undefined;
+    const existing = await findSaved();
+    if (existing) return replay(existing);
     if (input.imageKey && !(mysqlImages && mysqlImageId(input.imageKey)) &&
       (mysqlImages || !imageStorage?.validKey(owner, input.imageKey) || !await imageStorage.exists(input.imageKey))) {
       return res.status(400).json({ error: 'Image upload was not verified.' });
     }
     if ((!saveMarketplaceImage && !saveTokopediaImage) || input.imageKey) {
       try {
-        if (!await repository.addItem(owner, listId, input)) return notFound(res);
+        if (await repository.addItem(owner, listId, input, requestId)) return res.sendStatus(201);
       } catch (error) {
         if (error instanceof ProductImageWriteError) return res.status(400).json({ error: error.message });
-        throw error;
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
       }
-      return res.sendStatus(201);
+      const saved = await findSaved();
+      return saved ? replay(saved) : res.status(409).json({ error: 'This save could not be confirmed. Refresh your wishlist and check whether the product was added.' });
     }
 
-    const requestId = uuid.parse(req.get('Idempotency-Key'));
+    const idempotencyKey = requestId!;
     const listing = input.url && safeImportUrl(input.url);
     const merchant = listing && productMerchant(listing.hostname);
     if (!listing || (merchant !== 'tokopedia' && (merchant !== 'shopee' || !saveMarketplaceImage))) {
       return res.status(400).json({ error: 'Enter a valid Shopee or Tokopedia product link.' });
     }
-
-    const list = await repository.find(owner, listId);
-    if (!list) return notFound(res);
-    const replay = (saved: (typeof list.items)[number]) => {
-      if (saved.url !== input.url || saved.name !== input.name || saved.priceMinor !== input.priceMinor ||
-          saved.quantity !== input.quantity || (saved.sellerName ?? null) !== (input.sellerName ?? null)) {
-        return res.status(409).json({ error: 'This save was already used for a different product.' });
-      }
-      return res.status(201).json({ photoStatus: saved.imageKey ? 'saved' : 'unavailable' });
-    };
-    const existing = list.items.find(item => item.id === requestId);
-    if (existing) return replay(existing);
 
     if (mysqlImages) {
       let photo: Buffer | null = null;
@@ -361,25 +371,25 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       }
       if (photo) {
         try {
-          if (await repository.addItem(owner, listId, { ...input, imageKey: newMysqlImageKey() }, requestId, photo)) {
+          if (await repository.addItem(owner, listId, { ...input, imageKey: newMysqlImageKey() }, idempotencyKey, photo)) {
             return res.status(201).json({ photoStatus: 'saved' });
           }
         } catch (error) {
-          const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
+          const saved = await findSaved();
           if (saved) return replay(saved);
           if (!(error instanceof ProductImageWriteError)) throw error;
         }
       }
       try {
-        if (await repository.addItem(owner, listId, { ...input, imageKey: null }, requestId)) {
+        if (await repository.addItem(owner, listId, { ...input, imageKey: null }, idempotencyKey)) {
           return res.status(201).json({ photoStatus: 'unavailable' });
         }
       } catch (error) {
-        const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
+        const saved = await findSaved();
         if (saved) return replay(saved);
         throw error;
       }
-      const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
+      const saved = await findSaved();
       return saved ? replay(saved) : notFound(res);
     }
 
@@ -425,8 +435,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     }
 
     // Check the stored key before cleanup in case the database committed before the response failed.
-    const current = await repository.find(owner, listId);
-    const saved = current?.items.find(item => item.id === requestId);
+    const saved = await findSaved();
     if (imageKey && saved?.imageKey !== imageKey) await discard(imageKey);
     if (saved) return replay(saved);
     if (writeError) throw writeError;
@@ -481,7 +490,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       diagnostic = { code, host, ...(httpStatus === undefined ? {} : { httpStatus }) };
     }) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
-    const listing = meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
+    const listing = merchant === 'ikea' && meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
     const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
       (merchant === 'shopee' || merchant === 'tokopedia') ? meta?.image ?? null : null;
     const result: ProductImport = {
@@ -526,7 +535,8 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   api.get('/products/import/image', limitProductLookup, async (req, res) => {
     const { url } = z.strictObject({ url: productUrl }).parse(req.query);
     const listing = identifyProduct(url.href);
-    const image = listing && await productMedia(listing.canonicalUrl);
+    if (listing?.merchant !== 'IKEA') return notFound(res);
+    const image = await productMedia(listing.canonicalUrl);
     if (!image) return notFound(res);
     res.set('Content-Type', image.type).send(image.bytes);
   });
@@ -541,6 +551,14 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     app.use(express.static(webRoot, { dotfiles: 'deny' }));
   }
   app.use((_req, res) => notFound(res));
+  api.use(async (error: unknown, req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    if (req.method === 'POST' && /^\/wishlists\/[0-9a-f-]{36}\/items\/?$/iu.test(req.path) &&
+        !(error instanceof z.ZodError) && (error as { status?: unknown } | null)?.status !== 400) {
+      const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : 'unexpected';
+      await affiliate?.recordSystemFailure(code).catch(() => undefined);
+    }
+    next(error);
+  });
   app.use(handleError);
   return app;
 }
@@ -564,6 +582,17 @@ const handleError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
     res.status(status).json({ error: 'The request body is invalid or too large.' });
     return;
   }
-  console.error('Request failed', { type: error instanceof Error ? error.name : 'unknown' });
-  res.status(500).json({ error: 'Something went wrong. Try again.' });
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    console.error('Request failed', { type: error.name, code: error.code });
+    res.status(409).json({ error: 'This save may already be in your wishlist. Refresh the list and check before submitting again.' });
+    return;
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+    console.error('Request failed', { type: error.name, code: error.code });
+    res.status(409).json({ error: 'This save conflicted with another update. Refresh your wishlist and check whether the product was added before trying again.' });
+    return;
+  }
+  const safeCode = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined;
+  console.error('Request failed', { type: error instanceof Error ? error.name : 'unknown', ...(safeCode && { code: safeCode }) });
+  res.status(500).json({ error: 'Could not save the product. Your details are still here. Refresh your wishlist and check whether it was added before trying again.' });
 };

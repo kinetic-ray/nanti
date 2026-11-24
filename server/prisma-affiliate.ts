@@ -20,7 +20,7 @@ const auditFields = { id: true, mappingId: true, actor: true, action: true, deta
 const recent = [{ createdAt: 'desc' }, { id: 'desc' }] as const;
 
 export type ReviewAction =
-  | { action: 'approve' | 'revalidate'; revision: number; evidence: VerificationEvidence }
+  | { action: 'approve' | 'revalidate' | 'restore'; revision: number; evidence: VerificationEvidence }
   | { action: 'reject' | 'disable' | 'revoke' | 'invalid'; revision: number; reason: string };
 
 export class AffiliateProblem extends Error {
@@ -65,6 +65,7 @@ function opportunityView(row: Prisma.ProductIdentityGetPayload<{ select: typeof 
     title: row.title, savedCount: row._count.items, coverage,
     classification: coverage ? 'verified_exact' : row.mappings[0]?.classification ?? 'insufficient',
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    submissionStatus: coverage ? 'affiliate_link_assigned' : row.reviewedAt ? 'reviewed' : 'pending',
   };
 }
 
@@ -172,7 +173,9 @@ export function prismaAffiliate(db: PrismaClient) {
           let details: Prisma.InputJsonObject = { previousStatus: row.status, revision };
 
           if ('evidence' in review) {
-            const allowed = action === 'approve' ? row.status === 'pending' || row.status === 'disabled' : row.status === 'approved';
+            const allowed = action === 'approve' ? row.status === 'pending' :
+              action === 'restore' ? row.status === 'disabled' || row.status === 'revoked' || row.status === 'invalid' :
+              row.status === 'approved';
             if (!allowed) throw conflict('This mapping cannot be approved or validated in its current state.');
             if (!isEligibleAffiliate(row.identity.canonicalUrl, row.affiliateUrl)) {
               throw new AffiliateProblem(400, 'Approval requires the same product, variant, market, and a direct attributed link.');
@@ -182,7 +185,7 @@ export function prismaAffiliate(db: PrismaClient) {
             update = {
               activeIdentityId: identityId, status: 'approved', classification: 'verified_exact', validatedAt: now,
               evidence,
-              ...(action === 'approve' && { approvedBy: actor, approvedAt: now }),
+              ...((action === 'approve' || action === 'restore') && { approvedBy: actor, approvedAt: now }),
             };
             details = { ...details, evidence, originalUrl: row.originalUrl, affiliateUrl: row.affiliateUrl, status: 'approved' };
             identityData = {
@@ -250,14 +253,25 @@ export function prismaAffiliate(db: PrismaClient) {
     async notices(after?: string): Promise<AdminPage<AdminNotice> & { unread: number }> {
       const [rows, unread] = await Promise.all([
         db.adminNotification.findMany({ ...windowAfter(after), where: { dismissedAt: null },
-          select: { id: true, identityId: true, kind: true, readAt: true, createdAt: true,
+          select: { id: true, identityId: true, kind: true, subject: true, targetPath: true, readAt: true, createdAt: true,
             identity: { select: { title: true, listingId: true } } } }),
         db.adminNotification.count({ where: { dismissedAt: null, readAt: null } }),
       ]);
       return { ...paginate(rows, (row) => ({
-        id: row.id, identityId: row.identityId, kind: row.kind as NoticeKind, ...row.identity,
+        id: row.id, identityId: row.identityId, kind: row.kind as NoticeKind,
+        title: row.subject ?? row.identity?.title ?? null, listingId: row.identity?.listingId ?? null,
+        targetPath: row.targetPath ?? (row.identityId ? `/admin?section=links#opportunity-${row.identityId}` : '/admin?section=notifications'),
         readAt: row.readAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString(),
       })), unread };
+    },
+    async recordSystemFailure(code: string) {
+      const safeCode = /^[A-Za-z0-9_]{2,32}$/u.test(code) ? code : 'unexpected';
+      const hour = new Date().toISOString().slice(0, 13);
+      await db.adminNotification.createMany({
+        data: [{ eventKey: `failure:product-save:${safeCode}:${hour}`, kind: 'system_failure',
+          subject: `Gangguan penyimpanan produk (${safeCode})`, targetPath: '/admin?section=settings' }],
+        skipDuplicates: true,
+      });
     },
     async updateNotice(id: string, action: 'read' | 'unread' | 'dismiss') {
       const now = new Date();
@@ -265,6 +279,10 @@ export function prismaAffiliate(db: PrismaClient) {
         where: { id, dismissedAt: null },
         data: action === 'dismiss' ? { dismissedAt: now } : { readAt: action === 'read' ? now : null },
       })).count > 0;
+    },
+    async markAllNoticesRead() {
+      const now = new Date();
+      return db.adminNotification.updateMany({ where: { dismissedAt: null, readAt: null }, data: { readAt: now } });
     },
     async addSession(tokenHash: string, credentialScope: string, expiresAt: Date, replaceHash: string | null) {
       await db.$transaction([
