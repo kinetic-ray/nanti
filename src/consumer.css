@@ -302,6 +302,8 @@ body:has(.consumer) { background: #f8f6fc; }
   color: var(--muted);
   font-size: .8125rem;
   overflow-wrap: anywhere;
+}
+a.merchant {
   text-decoration: underline;
   text-decoration-color: #c6b9d9;
 }
