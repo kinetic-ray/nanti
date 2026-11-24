@@ -95,10 +95,18 @@ jobs:
           node tests/browser-navigation-journey.mjs 2>&1 | tee test-results/browser-navigation-journey.log
       - name: Run account, creator, and design browser suites
         run: |
+          set +e
           set -o pipefail
           npm run test:browser:accounts 2>&1 | tee test-results/browser-accounts.log
+          accounts_status=$?
           npm run test:browser:creator 2>&1 | tee test-results/browser-creator.log
+          creator_status=$?
           npm run test:browser:creator-design 2>&1 | tee test-results/browser-creator-design.log
+          design_status=$?
+          if [ "$accounts_status" -ne 0 ] || [ "$creator_status" -ne 0 ] || [ "$design_status" -ne 0 ]; then
+            echo "Browser suite status: accounts=$accounts_status creator=$creator_status design=$design_status"
+            exit 1
+          fi
       - name: Upload test logs and browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
