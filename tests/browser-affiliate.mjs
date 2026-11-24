@@ -173,6 +173,8 @@ try {
     assert.equal(recordTarget.search, '?section=links');
     assert.match(recordTarget.hash, /^#opportunity-/u);
     await recordLink.click();
+    console.log('ADMIN_TARGET_DEBUG', JSON.stringify({ url: admin.url(), text: await admin.locator('main').innerText() }));
+    if (screenshots) await admin.screenshot({ path: join(screenshots, 'affiliate-notification-target.png') });
     await show(admin.getByRole('heading', { name: `IKEA artikel ${article}`, exact: true }));
     assert.equal(new URL(admin.url()).hash, recordTarget.hash);
     await admin.reload();
