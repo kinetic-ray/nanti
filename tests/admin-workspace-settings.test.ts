@@ -15,8 +15,8 @@ it('returns only non-secret platform configuration status', async () => {
   vi.stubEnv('AUTH_PUBLIC_ORIGIN', 'https://nanti.test');
   vi.stubEnv('AUTH_GOOGLE_CLIENT_ID', 'private-google-client');
   vi.stubEnv('AUTH_GOOGLE_CLIENT_SECRET', 'private-google-secret');
-  vi.stubEnv('NANTI_ACCOUNT_MAIL_API_KEY', 'private-mail-key');
-  vi.stubEnv('NANTI_ACCOUNT_MAIL_FROM', 'private-sender@example.test');
+  vi.stubEnv('RESEND_API_KEY', 'private-resend-key');
+  vi.stubEnv('NANTI_ACCOUNT_MAIL_FROM', '');
 
   const app = express();
   app.use('/api/admin/workspace', adminWorkspaceRoutes({} as PrismaClient, 'admin'));
@@ -35,7 +35,7 @@ it('returns only non-secret platform configuration status', async () => {
       recommendationManagementEnabled: true,
     },
   });
-  for (const secret of ['private-password', 'private-google-secret', 'private-mail-key', 'private-user']) {
+  for (const secret of ['private-password', 'private-google-secret', 'private-resend-key', 'private-user']) {
     expect(JSON.stringify(response.body)).not.toContain(secret);
   }
 });

@@ -9,9 +9,9 @@ const notices = {
 } as const;
 
 export function transactionalAccountMail(env: NodeJS.ProcessEnv = process.env) {
-  const key = env.NANTI_ACCOUNT_MAIL_API_KEY?.trim();
-  const from = env.NANTI_ACCOUNT_MAIL_FROM?.trim();
-  if (!key && !from) return null;
+  const key = env.RESEND_API_KEY?.trim() || env.NANTI_ACCOUNT_MAIL_API_KEY?.trim();
+  const from = env.NANTI_ACCOUNT_MAIL_FROM?.trim() || 'onboarding@resend.dev';
+  if (!key) return null;
   const origin = URL.parse(env.AUTH_PUBLIC_ORIGIN ?? '');
   if (!key || !from || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/u.test(from) ||
     !origin || origin.protocol !== 'https:' || origin.href !== origin.origin + '/') {
@@ -48,4 +48,8 @@ export function transactionalAccountMail(env: NodeJS.ProcessEnv = process.env) {
       await send(email, subject, `Nanti\n\n${message}`);
     },
   });
+}
+
+export function accountMailConfigured(env: NodeJS.ProcessEnv = process.env) {
+  return Boolean(env.RESEND_API_KEY?.trim() || env.NANTI_ACCOUNT_MAIL_API_KEY?.trim());
 }
