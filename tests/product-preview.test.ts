@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { previewProduct, previewProductMetadata } from '../server/product-preview.js';
 
 const link = new URL('https://www.ikea.com/us/en/p/example-product-12345678/?tracking=1#details');
@@ -111,6 +112,18 @@ describe('Marketplace price metadata', () => {
     await expect(previewProductMetadata(target, fetchHtml(
       '<script type="application/ld+json">' + json + '</script>')))
       .resolves.toMatchObject({ title: 'Product', price: { priceMinor: 12900000, currency: 'IDR' } });
+  });
+  it('normalizes a high Tokopedia PDP selling price to minor units despite stale social price tags', async () => {
+    const target = new URL('https://www.tokopedia.com/lenovo-authorized-surabaya/charger-innergie-by-delta-180w-gaming-adaptor-laptop-universal-t18');
+    const body = readFileSync(new URL('./fixtures/tokopedia/live-single.html', import.meta.url), 'utf8')
+      .replace('content="1735000"', 'content="999"')
+      .replace('"value":1735000', '"value":12500000')
+      .replace('"priceFmt":"Rp1.735.000"', '"priceFmt":"Rp12.500.000"');
+    await expect(previewProductMetadata(target, async () => new Response(body,
+      { headers: { 'content-type': 'text/html' } }))).resolves.toMatchObject({
+      title: expect.stringMatching(/Charger INNERGIE/),
+      price: { priceMinor: 1250000000, currency: 'IDR' },
+    });
   });
   it('withholds conflicting prices and rejects a page with only unrelated listing metadata', async () => {
     const json = JSON.stringify({ '@type': 'Product', url: 'https://www.tokopedia.com/other/item',

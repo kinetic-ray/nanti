@@ -394,7 +394,7 @@ export const idMessages = {
   'Product name found. Review the details before saving.': 'Nama produk ditemukan. Cek detailnya sebelum menyimpan.',
   'Details are unavailable for this link. Enter them below.': 'Detail produk belum tersedia. Kamu bisa mengisinya di bawah.',
   'You can enter the product details below.': 'Kamu bisa mengisi detailnya di bawah.',
-  'Enter a price up to 9,999,999.99 with at most two decimal places.': 'Isi harga sampai 9.999.999,99 dengan maksimal dua angka desimal.',
+  'Enter a price up to 21,474,836.47 with at most two decimal places.': 'Isi harga sampai 21.474.836,47 dengan maksimal dua angka desimal.',
   'Enter a valid HTTP or HTTPS product link, or leave it blank.': 'Isi link HTTP atau HTTPS yang valid, atau kosongkan.',
   'Delete wishlist?': 'Hapus wishlist?', 'Remove product?': 'Hapus produk?',
   '“{name}” and all its products will be deleted.': '“{name}” dan semua produknya akan dihapus.',

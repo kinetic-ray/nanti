@@ -99,7 +99,55 @@ function exactPrice(value: unknown, currency: unknown): Price | null {
   if (currency !== 'IDR' || (typeof value !== 'number' && typeof value !== 'string') ||
       !/^\d+(?:\.0+)?$/.test(String(value))) return null;
   const amount = Number(value);
-  return Number.isSafeInteger(amount) && amount > 0 ? { amount, currency } : null;
+  return Number.isSafeInteger(amount) && amount > 0 && amount * 100 <= 2_147_483_647 ? { amount, currency } : null;
+}
+
+function rupiahDisplay(value: string): Price | null {
+  const normalized = value.replace(/[\u00a0\u202f]/gu, ' ').trim();
+  const match = /^Rp\s*((?:\d{1,3}(?:\.\d{3})+)|\d+)$/iu.exec(normalized);
+  if (!match?.[1]) return null;
+  return exactPrice(Number(match[1].replace(/\./gu, '')), 'IDR');
+}
+
+function renderedProductPrice(html: string): Price | null {
+  const document = parse(html);
+  const candidates = new Map<number, Price>();
+  const misleading = /(?:voucher|cashback|installment|angsuran|shipping|delivery|ongkir|original|strike|slash|old[-_ ]?price|discount[-_ ]?badge|saving)/iu;
+  const stack: DefaultTreeAdapterTypes.ChildNode[] = [...document.childNodes];
+  const textContent = (node: DefaultTreeAdapterTypes.ChildNode): string => {
+    if ('value' in node) return node.value;
+    if ('childNodes' in node) return node.childNodes.map(textContent).join('');
+    return '';
+  };
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (!('tagName' in node)) continue;
+    for (const child of node.childNodes) stack.push(child);
+    const attrs = new Map(node.attrs.map(({ name, value }) => [name.toLowerCase(), value]));
+    const testId = attrs.get('data-testid') ?? attrs.get('data-qa') ?? '';
+    const className = attrs.get('class') ?? '';
+    const selector = attrs.get('itemprop') === 'price' ||
+      /(?:pdp|product)[-_ ]?.*price|price.*(?:pdp|product)/iu.test(testId) ||
+      /(?:^|[\s_-])(?:pdp|product)[_-]?price(?:$|[\s_-])/iu.test(className);
+    if (!selector || /^(script|style|template|noscript)$/iu.test(node.tagName) || misleading.test(testId + ' ' + className)) continue;
+    let ancestor: DefaultTreeAdapterTypes.ParentNode | null = node;
+    let hidden = false;
+    while (ancestor && 'tagName' in ancestor) {
+      const parentAttrs = new Map(ancestor.attrs.map(({ name, value }) => [name.toLowerCase(), value]));
+      const style = parentAttrs.get('style') ?? '';
+      if (parentAttrs.has('hidden') || parentAttrs.get('aria-hidden') === 'true' ||
+          /display\s*:\s*none|visibility\s*:\s*hidden/iu.test(style) ||
+          misleading.test((parentAttrs.get('data-testid') ?? '') + ' ' + (parentAttrs.get('class') ?? ''))) {
+        hidden = true;
+        break;
+      }
+      ancestor = ancestor.parentNode;
+    }
+    if (hidden) continue;
+    const price = rupiahDisplay(attrs.get('content') ?? textContent(node));
+    if (price) candidates.set(price.amount, price);
+  }
+  return candidates.size === 1 ? [...candidates.values()][0] ?? null : null;
 }
 
 function image(value: unknown, base: URL): string | null {
@@ -156,10 +204,10 @@ function parsePdpCache(script: string, url: URL) {
   const variantOptions = components.filter((component) => component?.name === 'variant_options');
   const ambiguousPrice = variant?.isVariant === true || rows('variant_options').length > 0;
   const cachedPrice = resolve(content?.price, 'pdpContentSnapshotPrice');
-  const formatted = /^Rp\s*(\d{1,3}(?:\.\d{3})+|\d+)$/u.exec(text(cachedPrice?.priceFmt) ?? '')?.[1];
+  const formatted = rupiahDisplay(text(cachedPrice?.priceFmt) ?? '');
   const amount = exactPrice(cachedPrice?.value, 'IDR');
   const price = !ambiguousPrice && variant?.isVariant === false && variantOptions.length === 1 &&
-    Array.isArray(variantOptions[0]?.data) && formatted && amount?.amount === Number(formatted.replace(/\./g, '')) &&
+    Array.isArray(variantOptions[0]?.data) && formatted && amount?.amount === formatted.amount &&
     (cachedPrice?.currency === 'UNKNOWN' || cachedPrice?.currency === 'IDR') ? amount : null;
   const media = rows('product_media').flatMap((ref) => {
     const gallery = resolve(ref, 'pdpDataProductMedia')?.media;
@@ -210,6 +258,7 @@ function parseMetadata(html: string, url: URL, originalUrl: string): MetadataRes
   const products: { product: Record<string, unknown>; resolve: ReturnType<typeof localGraphResolver> }[] = [];
   let state: Record<string, unknown> | undefined;
   let hydration: ReturnType<typeof parsePdpCache> = null;
+  let hydrationSeen = false;
   let hasReferencedProduct = false;
   let malformed = false;
   let pageIssue: string | undefined;
@@ -253,7 +302,10 @@ function parseMetadata(html: string, url: URL, originalUrl: string): MetadataRes
     if (!data || !('value' in data)) continue;
     try {
       if (!jsonLd && !nextData) {
-        if (attr('type')?.toLowerCase() === 'text/javascript') hydration ??= parsePdpCache(data.value, url);
+        if (attr('type')?.toLowerCase() === 'text/javascript' && /window\.__cache\s*=/.test(data.value)) {
+          hydrationSeen = true;
+          hydration ??= parsePdpCache(data.value, url);
+        }
         continue;
       }
       const parsed: unknown = JSON.parse(data.value);
@@ -315,38 +367,46 @@ function parseMetadata(html: string, url: URL, originalUrl: string): MetadataRes
     products.map(({ product, resolve }) => image([product.image].flat().map(value => resolve(value) ?? value), url)).find(Boolean) ??
     image(basic?.image, url) ?? hydration?.imageUrl ?? null;
 
-  const prices: Price[] = [];
   const sellers = new Set<string>();
-  let ambiguous = hasVariants || Boolean(hydration?.ambiguousPrice);
-  if (hydration?.price) prices.push(hydration.price);
   if (hydration?.storeName) sellers.add(hydration.storeName);
+  const jsonLdPrices: Price[] = [];
+  let jsonLdOfferSeen = false;
+  let jsonLdAmbiguous = false;
   for (const { product, resolve } of products) {
     if (product.offers == null) continue;
+    jsonLdOfferSeen = true;
     const offers = [product.offers].flat();
-    if (offers.length !== 1) ambiguous = true;
+    if (offers.length !== 1) jsonLdAmbiguous = true;
     for (const entry of offers) {
       const offer = resolve(entry);
       const reference = text(offer?.url);
-      if (reference && (!matches(reference) || hasDifferentQuery(reference))) { ambiguous = true; continue; }
+      if (reference && (!matches(reference) || hasDifferentQuery(reference))) { jsonLdAmbiguous = true; continue; }
       const price = offer && tagged(offer['@type'], 'Offer') && offer.lowPrice == null && offer.highPrice == null
         ? exactPrice(offer.price, offer.priceCurrency) : null;
-      if (price) prices.push(price);
-      else ambiguous = true;
+      if (price) jsonLdPrices.push(price);
+      else jsonLdAmbiguous = true;
       const seller = text(resolve(offer?.seller)?.name);
       if (seller) sellers.add(seller);
     }
   }
   const amounts = tags.get('product:price:amount') ?? [];
   const currencies = tags.get('product:price:currency') ?? [];
-  if (amounts.length || currencies.length) {
-    const currency = currencies[0] === 'Rp' && hydration?.price ? 'IDR' : currencies[0];
-    const price = amounts.length === 1 && currencies.length === 1 ? exactPrice(amounts[0], currency) : null;
-    if (price) prices.push(price);
-    else ambiguous = true;
-  }
   const stateSeller = text(record(record(state?.shopInfo)?.shopCore)?.name);
   if (stateSeller) sellers.add(stateSeller);
-  const price = !ambiguous && prices.every((candidate) => candidate.amount === prices[0]?.amount) ? prices[0] ?? null : null;
+  const exactPageIdentity = pageUrls.some(matches) || products.length > 0 || Boolean(state || hydration);
+  const blockedByVariants = hasVariants || Boolean(hydration?.ambiguousPrice);
+  const jsonLdPrice = jsonLdOfferSeen && !jsonLdAmbiguous && jsonLdPrices.length > 0 &&
+    jsonLdPrices.every(({ amount }) => amount === jsonLdPrices[0]?.amount) ? jsonLdPrices[0] ?? null : null;
+  const hasPriceTag = amounts.length > 0 || currencies.length > 0;
+  const taggedPrice = hasPriceTag && amounts.length === 1 && currencies.length === 1
+    ? exactPrice(amounts[0], currencies[0] === 'Rp' ? 'IDR' : currencies[0]) : null;
+  const conflictingPublishedPrices = Boolean(jsonLdPrice && taggedPrice && jsonLdPrice.amount !== taggedPrice.amount);
+  // Tokopedia's PDP cache exposes the current selling price separately from slashPriceFmt,
+  // discount badges, vouchers, and installment copy. It outranks social tags that can lag.
+  const price = blockedByVariants ? null : hydration?.price ??
+    (jsonLdOfferSeen ? (conflictingPublishedPrices ? null : jsonLdPrice) : null) ??
+    (!jsonLdOfferSeen && !hasPriceTag && !hydrationSeen && exactPageIdentity ? renderedProductPrice(html) : null) ??
+    (!jsonLdOfferSeen && !hydrationSeen && exactPageIdentity ? taggedPrice : null);
   const storeName = sellers.size === 1 ? [...sellers][0] ?? null : null;
   if (!title && !price && !imageUrl && !storeName) return { issue: malformed ? 'metadata_malformed' : 'metadata_missing' };
   return { metadata: { source: 'tokopedia', originalUrl, productUrl: 'https://www.tokopedia.com' + identity, title, price, imageUrl, storeName } };

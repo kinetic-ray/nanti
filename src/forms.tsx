@@ -290,7 +290,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
     }
     const priceMinor = parsePrice(normalizeProductPriceInput(price, language));
     if (price.trim() && priceMinor === null) {
-      setError('Enter a price up to 9,999,999.99 with at most two decimal places.');
+      setError('Enter a price up to 21,474,836.47 with at most two decimal places.');
       return;
     }
     const parsed = url.trim() ? safeImportUrl(url.trim()) : null;

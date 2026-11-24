@@ -17,7 +17,7 @@ const sourceLabel = {
   imported_unverified: 'Copied from a listing · unverified',
   marketplace_verified: 'Verified marketplace price',
 } as const satisfies Record<PriceSource, Message>;
-const invalidPrice = 'Enter a price up to 9,999,999.99 with at most two decimal places.';
+const invalidPrice = 'Enter a price up to 21,474,836.47 with at most two decimal places.';
 
 export function PriceDetails({ listId, item, close, onUpdate }: {
   listId: string; item: Item; close: () => void; onUpdate: () => void;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { impulseRules, waitingPeriods } from '../shared/impulse.js';
+import { maxPriceMinor } from '../shared/wishlist.js';
 import { screeningVersion } from '../shared/screening.js';
 import { priorityFactors, priorityLimit } from '../shared/priorities.js';
 import { readinessAnswers } from '../shared/quick-timing.js';
@@ -62,7 +63,7 @@ export const prioritiesBody = z.strictObject({
     wishlistId: id, itemId: id, ratings: z.record(z.enum(priorityFactors), z.number().int().min(0).max(2)),
   })).min(1).max(priorityLimit),
   expectedProducts: z.array(z.strictObject({
-    id, priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
+    id, priceMinor: z.number().int().min(0).max(maxPriceMinor).nullable(),
     quantity: z.number().int().min(1).max(999),
   })).min(1).max(priorityLimit),
 }).refine(({ alternatives }) => new Set(alternatives.map(({ itemId }) => itemId)).size === alternatives.length,
@@ -86,7 +87,7 @@ export const comparisonBody = z.strictObject({
     ratings: z.record(id, rating),
   })).min(2, 'Choose at least two products.').max(comparisonLimits.alternatives),
   expectedProducts: z.array(z.strictObject({
-    id, priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
+    id, priceMinor: z.number().int().min(0).max(maxPriceMinor).nullable(),
     quantity: z.number().int().min(1).max(999),
   })).max(comparisonLimits.alternatives).optional(),
 }).superRefine(({ criteria, alternatives }, ctx) => {

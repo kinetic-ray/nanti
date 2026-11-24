@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { userPriceSources } from '../shared/prices.js';
+import { maxPriceMinor } from '../shared/wishlist.js';
 import type { Prices } from './prisma-prices.js';
 
 const ids = z.strictObject({ listId: z.uuid(), itemId: z.uuid() });
-const priceMinor = z.number().int().min(0).max(999_999_999);
+const priceMinor = z.number().int().min(0).max(maxPriceMinor);
 const cursor = z.string().regex(/^[1-9]\d{0,19}$/u).transform(value => BigInt(value))
   .refine(value => value <= 18_446_744_073_709_551_615n).optional();
 const target = z.strictObject({ priceMinor, notify: z.boolean() });
