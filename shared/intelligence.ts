@@ -6,6 +6,7 @@ import type { QuickTimingInput, QuickTimingResult } from './quick-timing.js';
 import type { PurchasePlan, PurchaseQuote } from './purchase-plan.js';
 import type { TimingInput, TimingResult } from './purchase-timing.js';
 import type { Currency } from './wishlist.js';
+import type { PurchaseFinanceContext } from './purchase-impact.js';
 
 export type ProductSnapshot = { id: string; name: string; priceMinor: number | null; quantity: number; currency?: Currency };
 export type AssessmentSnapshot = { version: 1; products: ProductSnapshot[] };
@@ -36,6 +37,7 @@ export type SavedAssessment = SavedPayload & {
 export type AssessmentKind = SavedPayload['kind'];
 export type AssessmentPage = { records: SavedAssessment[]; next: string | null };
 export type Preferences = { coolingOffDays: number | null };
+export type SavedPurchaseFinanceContext = { context: PurchaseFinanceContext; updatedAt: string };
 
 export function isPriority<T extends SavedPayload>(record: T): record is T & PriorityAssessment {
   return record.kind === 'comparison' && 'mode' in record.input;

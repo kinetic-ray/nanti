@@ -520,7 +520,7 @@ export function PrivacyForm({ close, cleared, signedIn }: { close: () => void; c
   return <Dialog title={t(confirm ? 'Clear all assessment data?' : 'Privacy and history')} busy={busy} close={close} focusHeading>
     <p>{t(signedIn ? 'Saved assessments expire after 365 days. Only your account can access them.' :
       'Saved assessments expire after 365 days. Access is tied to this browser.')}</p>
-    {confirm && <p>{t('This clears your saved assessments and waiting preference. Your wishlists and products stay here.')}</p>}
+    {confirm && <p>{t('This clears saved assessments, the waiting preference, and saved financial details. Your wishlists and products stay here.')}</p>}
     {error && <p role="alert" className="error">{localError(error)}</p>}
     <div className="form-actions">
       <button ref={cancel} disabled={busy} onClick={close}>{t(confirm ? 'Cancel' : 'Close')}</button>

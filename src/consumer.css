@@ -1103,6 +1103,16 @@ body:has(.consumer) { background: #f8f6fc; }
 .consumer .guided-result-grid > div { background: var(--wash); border-radius: var(--radius); padding: .85rem; min-width: 0; display: grid; gap: .35rem; }
 .consumer .guided-result-grid small { color: var(--muted); }
 .consumer .guided-result-grid strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.consumer .guided-impact-preview { margin-block: .8rem 1rem; }
+.consumer .guided-impact-preview p { margin-block: .55rem 0 0; }
+.consumer .guided-context-details > summary, .consumer .guided-reasons > summary, .consumer .guided-missing > summary { cursor: pointer; font-weight: 750; }
+.consumer .guided-save-choice { display: grid; gap: .55rem; margin: 1rem 0; padding: .8rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.consumer .guided-save-choice legend { padding-inline: .25rem; font-weight: 700; }
+.consumer .guided-save-choice label { display: flex; align-items: flex-start; gap: .65rem; }
+.consumer .guided-save-choice input { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin-top: .2rem; accent-color: var(--accent); }
+.consumer .guided-reason-question { border: 0; padding: .6rem 0; }
+.consumer .guided-reason-question legend { font-weight: 650; }
+.consumer .guided-reason-question .answer-buttons button[aria-pressed="true"] { border-color: var(--accent); background: var(--wash); color: var(--accent-strong); }
 @media (max-width: 400px) { .consumer .guided-result-grid { grid-template-columns: 1fr; } }
 
 /* Hamburger navigation: recognizable Creator icon with aligned label. */

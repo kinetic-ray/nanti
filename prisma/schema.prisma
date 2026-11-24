@@ -135,8 +135,9 @@ model Assessment {
 }
 
 model IntelligencePreference {
-  ownerId        String @id @db.Char(36)
-  coolingOffDays Int
+  ownerId          String @id @db.Char(36)
+  coolingOffDays   Int?
+  financialContexts Json?
   updatedAt      DateTime @default(now()) @updatedAt
   dataOwner      DataOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 

@@ -1,159 +1,323 @@
 import { useEffect, useRef, useState } from 'react';
+import { evaluateScreening } from '../shared/screening.js';
 import { assessPurchase } from '../shared/purchase-decision.js';
-import { screeningQuestions } from '../shared/screening.js';
-import type { ScreeningAnswers } from '../shared/screening.js';
+import { analyzePurchaseImpact, type PurchaseFinanceContext } from '../shared/purchase-impact.js';
+import type { SavedPurchaseFinanceContext } from '../shared/intelligence.js';
 import type { Item, Wishlist } from '../shared/wishlist.js';
 import { useLocale } from './locale.js';
-import { api } from './api.js';
+import { api, errorMessage } from './api.js';
 import { AlternativeRecommendations } from './AlternativeRecommendations.js';
 import type { RecommendationMatch } from '../server/recommendation-matching.js';
 
 const prompts = {
-  practicalNeed: ['Apakah barang ini benar-benar kamu butuhkan?', 'Do you actually need this item?'],
-  alreadyHave: ['Apakah kamu sudah punya barang yang fungsinya sama?', 'Do you already own something similar?'],
-  useOften: ['Apakah barang ini akan sering kamu gunakan?', 'Will you use it often?'],
-  canWait: ['Apakah pembelian ini bisa ditunda tanpa masalah?', 'Can this purchase wait without consequences?'],
-  withoutDiscount: ['Kalau tidak sedang diskon, apakah kamu masih menginginkannya?', 'Would you still want it without a discount?'],
-  socialPressure: ['Apakah kamu ingin membeli karena tren atau takut ketinggalan?', 'Are trends or fear of missing out driving this purchase?'],
+  practicalNeed: 'Do you actually need this item?',
+  alreadyHave: 'Do you already own something similar?',
+  useOften: 'Will you use it often?',
+  canWait: 'Can this purchase wait without consequences?',
+  withoutDiscount: 'Would you still want it without a discount?',
+  socialPressure: 'Are trends or fear of missing out driving this purchase?',
 } as const;
-const labels = {
-  uncertain: ['Perlu informasi lebih lengkap', 'More information needed'],
-  pause: ['Tunda dulu pembeliannya', 'Pause this purchase'],
-  save: ['Butuh dana tambahan, tunda dulu', 'Save more before buying'],
-  alternative: ['Pertimbangkan alternatif lebih hemat', 'Consider a less expensive option'],
-  reflect: ['Pikirkan lagi sebelum membeli', 'Reflect before buying'],
-  consider: ['Layak dipertimbangkan untuk dibeli', 'Worth considering'],
+const questions = Object.keys(prompts) as (keyof typeof prompts)[];
+const reasons = {
+  green: 'Your answers suggest a clear practical benefit.',
+  yellow: 'Some buying reasons are still uncertain.',
+  red: 'Your answers suggest the purchase may be driven by low need or outside pressure.',
 } as const;
-const actions = {
-  uncertain: ['Lengkapi jawabanmu sebelum mengambil keputusan.', 'Complete your answers before deciding.'],
-  pause: ['Simpan di wishlist dan evaluasi lagi setelah beberapa hari. Uang cukup bukan alasan untuk membeli barang yang belum diperlukan.', 'Keep it on your wishlist and revisit it after a few days. Affordability alone is not a reason to buy.'],
-  save: ['Jangan gunakan uang untuk tagihan atau uang yang ingin disisihkan. Menabung dulu atau cari pilihan yang lebih murah.', 'Protect bill money and savings. Save first or find a cheaper option.'],
-  alternative: ['Harga barang ini memakai lebih dari separuh uang yang aman untuk belanja. Bandingkan pilihan yang lebih murah.', 'This would use over half of your spendable money. Compare less expensive options.'],
-  reflect: ['Kondisi uang memungkinkan, tetapi alasan membeli belum cukup kuat. Bandingkan manfaat dan alternatif.', 'Your finances may allow it, but your reasons are not yet strong. Compare benefits and alternatives.'],
-  consider: ['Kebutuhan cukup jelas dan uang belanja masih mencukupi. Tetap bandingkan harga dan kualitas sebelum membeli.', 'The need is clear and spendable funds cover the price. Compare price and quality first.'],
-} as const;
+
 export function formatMoneyInput(raw: string, language: 'id' | 'en'): string {
   const separator = language === 'id' ? '.' : ',';
-  // Keep entry simple: digits are whole currency units, grouped as they are typed.
-  // Paste from another locale is supported by stripping grouping marks.
   const digits = raw.replace(/[^\d]/g, '').slice(0, 15);
   if (!digits) return '';
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, separator);
 }
+
 export function toMinor(raw: string): bigint | null {
   const trimmed = raw.trim();
   if (!/^\d{1,15}$|^\d{1,3}(?:[.,]\d{3}){1,4}$/.test(trimmed)) return null;
-  const digits = trimmed.replace(/[.,]/g, '');
-  return BigInt(digits) * 100n;
+  return BigInt(trimmed.replace(/[.,]/g, '')) * 100n;
 }
+
+export function formatCurrencyInput(raw: string, language: 'id' | 'en'): string {
+  const decimal = language === 'id' ? ',' : '.';
+  const wholeRaw = raw.includes(decimal) ? raw.slice(0, raw.indexOf(decimal)) : raw;
+  const fractionRaw = raw.includes(decimal) ? raw.slice(raw.indexOf(decimal) + 1).replace(/\D/g, '').slice(0, 2) : null;
+  const whole = formatMoneyInput(wholeRaw, language);
+  return fractionRaw === null ? whole : `${whole}${decimal}${fractionRaw}`;
+}
+
+export function parseCurrencyMinor(raw: string, language: 'id' | 'en'): bigint | null {
+  const decimal = language === 'id' ? ',' : '.';
+  const group = language === 'id' ? '.' : ',';
+  const parts = raw.trim().split(decimal);
+  if (parts.length > 2) return null;
+  const whole = (parts[0] ?? '').replaceAll(group, '');
+  const fraction = parts[1];
+  if (!/^\d{1,15}$/.test(whole) || (fraction !== undefined && !/^\d{1,2}$/.test(fraction))) return null;
+  return BigInt(whole) * 100n + BigInt((fraction ?? '').padEnd(2, '0') || '0');
+}
+
+const toInput = (minor: string | null, language: 'id' | 'en') => {
+  if (minor === null) return '';
+  const amount = BigInt(minor);
+  const whole = formatCurrencyInput((amount / 100n).toString(), language);
+  const fraction = (amount % 100n).toString().padStart(2, '0').replace(/0$/u, '');
+  return fraction ? `${whole}${language === 'id' ? ',' : '.'}${fraction}` : whole;
+};
+
 export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; item: Item; close: () => void }) {
-  const { language, money } = useLocale();
-  const lang = language === 'id' ? 0 : 1;
-  const [stage, setStage] = useState<1 | 2 | 3>(1);
-  const [question, setQuestion] = useState(0);
-  const [answers, setAnswers] = useState<ScreeningAnswers>({});
-  const [cash, setCash] = useState('');
-  const [bills, setBills] = useState('');
-  const [aside, setAside] = useState('');
+  const { language, money, t, date } = useLocale();
+  const [stage, setStage] = useState<1 | 2>(1);
   const [price, setPrice] = useState('');
+  const [cash, setCash] = useState('');
+  const [expenses, setExpenses] = useState('');
+  const [aside, setAside] = useState('');
+  const [nextIncomeDate, setNextIncomeDate] = useState('');
+  const [nextIncome, setNextIncome] = useState('');
+  const [canWait, setCanWait] = useState<'yes' | 'no' | ''>('');
+  const [remember, setRemember] = useState(false);
+  const [answers, setAnswers] = useState<Partial<Record<keyof typeof prompts, boolean>>>({});
+  const [saved, setSaved] = useState<SavedPurchaseFinanceContext | null>(null);
+  const [loadingSaved, setLoadingSaved] = useState(true);
   const [error, setError] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
+  const profilePath = `/intelligence/financial-context/${list.currency}`;
   const fixedPrice = item.priceMinor === null ? null : BigInt(item.priceMinor) * BigInt(item.quantity);
-  const priceValue = fixedPrice ?? toMinor(price);
-  const finance = priceValue !== null && toMinor(cash) !== null && toMinor(bills) !== null && toMinor(aside) !== null
-    ? { priceMinor: priceValue, cashMinor: toMinor(cash)!, billsMinor: toMinor(bills)!, setAsideMinor: toMinor(aside)! } : null;
-  const assessment = finance ? assessPurchase(answers, finance) : null;
-  useEffect(() => { heading.current?.focus(); }, [stage, question]);
-  function next() {
+  const estimatedPrice = parseCurrencyMinor(price, language);
+  const priceMinor = fixedPrice ?? estimatedPrice;
+  const context: PurchaseFinanceContext = {
+    cashMinor: parseCurrencyMinor(cash, language)?.toString() ?? null,
+    essentialExpensesMinor: parseCurrencyMinor(expenses, language)?.toString() ?? null,
+    setAsideMinor: parseCurrencyMinor(aside, language)?.toString() ?? null,
+    nextIncomeDate: nextIncomeDate || null,
+    nextIncomeMinor: parseCurrencyMinor(nextIncome, language)?.toString() ?? null,
+    canWait: canWait === '' ? null : canWait === 'yes',
+  };
+  const impact = analyzePurchaseImpact(priceMinor, context);
+  const hasEnteredContext = Object.values(context).some(value => value !== null);
+  const format = (value: bigint) => money(value.toString(), list.currency);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<SavedPurchaseFinanceContext | null>(profilePath, { signal: controller.signal })
+      .then(setSaved)
+      .catch(() => setSaved(null))
+      .finally(() => setLoadingSaved(false));
+    return () => controller.abort();
+  }, [profilePath]);
+  useEffect(() => { heading.current?.focus(); }, [stage]);
+
+  function useSavedContext() {
+    if (!saved) return;
+    setCash(toInput(saved.context.cashMinor, language));
+    setExpenses(toInput(saved.context.essentialExpensesMinor, language));
+    setAside(toInput(saved.context.setAsideMinor, language));
+    setNextIncomeDate(saved.context.nextIncomeDate ?? '');
+    setNextIncome(toInput(saved.context.nextIncomeMinor, language));
+    setCanWait(saved.context.canWait === null ? '' : saved.context.canWait ? 'yes' : 'no');
+    setRemember(false);
     setError('');
-    if (!finance || finance.priceMinor <= 0n) {
-      setError(lang === 0 ? 'Isi semua jumlah dengan angka yang valid. Isi 0 jika tidak ada.' : 'Enter valid amounts in every field. Use 0 when none.');
-      return;
+  }
+
+  async function continueAnalysis() {
+    setError('');
+    setSaveNotice('');
+    if (remember && hasEnteredContext) {
+      try {
+        // Urgency belongs to this item, so do not carry it into a future analysis.
+        await api(profilePath, { method: 'PUT', data: { ...context, canWait: null } });
+        setSaved(await api<SavedPurchaseFinanceContext>(profilePath));
+        setSaveNotice(t('Your details were saved for future analyses.'));
+      } catch {
+        setSaveNotice(t('Could not save these details. You can still continue without saving them.'));
+      }
     }
-    setStage(3);
+    setStage(2);
   }
-  function answer(value: boolean | undefined) {
-    const key = screeningQuestions[question];
-    if (!key) return;
-    setAnswers(current => ({ ...current, [key]: value }));
-    if (question === screeningQuestions.length - 1) setStage(2);
-    else setQuestion(current => current + 1);
+
+  async function removeSavedContext() {
+    try {
+      await api(profilePath, { method: 'DELETE' });
+      setSaved(null);
+      setCash(''); setExpenses(''); setAside(''); setNextIncomeDate(''); setNextIncome(''); setCanWait('');
+      setSaveNotice(t('Saved purchase context was removed.'));
+    } catch (failure) { setError(errorMessage(failure)); }
   }
-  const currency = (value: bigint) => money(value.toString(), list.currency);
+
+  const screening = questions.every(question => answers[question] !== undefined)
+    ? evaluateScreening(answers, null, new Date().toISOString().slice(0, 10)) : null;
+  const cashBeforePurchase = context.cashMinor === null ? null : BigInt(context.cashMinor);
+  const expensesBeforeIncome = context.essentialExpensesMinor === null ? null : BigInt(context.essentialExpensesMinor);
+  const setAsideMinor = context.setAsideMinor === null ? null : BigInt(context.setAsideMinor);
+  const cheaperOptionLimit = cashBeforePurchase !== null && expensesBeforeIncome !== null && setAsideMinor !== null
+    ? cashBeforePurchase - expensesBeforeIncome - setAsideMinor : null;
+  const alternativeFinance = priceMinor !== null && cashBeforePurchase !== null && expensesBeforeIncome !== null &&
+    setAsideMinor !== null && context.nextIncomeDate !== null
+    ? { priceMinor, cashMinor: cashBeforePurchase, billsMinor: expensesBeforeIncome, setAsideMinor } : null;
+  const alternativeAssessment = screening && alternativeFinance ? assessPurchase(answers, alternativeFinance) : null;
+  const canLoadAlternatives = alternativeAssessment !== null && screening?.outcome === 'green' &&
+    ['save', 'alternative'].includes(alternativeAssessment.decision);
+
   return <div className="guided-decision">
     <p className="hint">{item.name}</p>
-    <div className="guided-progress" aria-label={lang === 0 ? 'Progres penilaian' : 'Assessment progress'}>
-      <span className={stage >= 1 ? 'active' : ''}>1. {lang === 0 ? 'Alasan beli' : 'Buying reasons'}</span>
-      <span className={stage >= 2 ? 'active' : ''}>2. {lang === 0 ? 'Kesiapan uang' : 'Money readiness'}</span>
-    </div>
     {stage === 1 && <section className="decision-section">
-      <p className="hint">{lang === 0 ? `Pertanyaan ${question + 1} dari ${screeningQuestions.length}` : `Question ${question + 1} of ${screeningQuestions.length}`}</p>
-      <h3 tabIndex={-1} ref={heading}>{prompts[screeningQuestions[question] ?? screeningQuestions[0]!][lang]}</h3>
-      <div className="answer-buttons screening-answers">
-        <button type="button" onClick={() => answer(true)}>{lang === 0 ? 'Ya' : 'Yes'}</button>
-        <button type="button" onClick={() => answer(false)}>{lang === 0 ? 'Tidak' : 'No'}</button>
-        <button type="button" onClick={() => answer(undefined)}>{lang === 0 ? 'Belum yakin' : 'Not sure'}</button>
+      <h3 tabIndex={-1} ref={heading}>{t('Current purchase impact')}</h3>
+      <div className="decision-result guided-impact-preview" aria-live="polite">
+        <strong>{t('Available information')}</strong>
+        <p><span>{t('Product price')}: </span>{priceMinor === null ? t('The item price is unknown.') : format(priceMinor)}</p>
+        {impact.cashAfterPurchaseMinor !== null
+          ? <p>{t('If you buy now, {amount} would remain before other expenses.', { amount: format(impact.cashAfterPurchaseMinor) })}</p>
+          : <p>{t('Add an amount to estimate what would remain after the purchase.')}</p>}
       </div>
-      {question > 0 && <button type="button" className="text-button" onClick={() => setQuestion(current => current - 1)}>{lang === 0 ? 'Kembali' : 'Back'}</button>}
-    </section>}
-    {stage === 2 && <section className="decision-section">
-      <h3 tabIndex={-1} ref={heading}>{lang === 0 ? 'Seberapa siap uangmu?' : 'How ready is your budget?'}</h3>
-      <p className="hint">{lang === 0 ? 'Kami hitung uang yang bisa dipakai tanpa mengganggu pengeluaran penting dan uang yang kamu sisihkan.' : 'We check what you can spend without touching important expenses or money set aside.'}</p>
-      <p><strong>{lang === 0 ? 'Harga barang' : 'Item price'}: </strong>{fixedPrice === null ? (lang === 0 ? 'Belum ada harga' : 'Price unknown') : currency(fixedPrice)}</p>
-      <form noValidate autoComplete="off" onSubmit={event => { event.preventDefault(); next(); }}>
-        <div className="guided-fields">
-          {fixedPrice === null && <label>{lang === 0 ? 'Perkiraan harga barang' : 'Estimated item price'}<input inputMode="numeric" value={price} onChange={event => setPrice(formatMoneyInput(event.target.value, language))} placeholder="0" required /></label>}
-          <label>{lang === 0 ? 'Uang yang kamu punya' : 'Money you have'}<input inputMode="numeric" value={cash} onChange={event => setCash(formatMoneyInput(event.target.value, language))} placeholder="0" required /></label>
-          <label>{lang === 0 ? 'Pengeluaran yang harus dibayar' : 'Expenses you still need to pay'}<input inputMode="numeric" value={bills} onChange={event => setBills(formatMoneyInput(event.target.value, language))} placeholder="0" required /><small className="hint">{lang === 0 ? 'Misalnya makan, kos, cicilan, dan tagihan yang belum dibayar.' : 'For example food, rent, installments and unpaid bills.'}</small></label>
-          <label>{lang === 0 ? 'Uang yang ingin kamu sisihkan' : 'Money you want to set aside'}<input inputMode="numeric" value={aside} onChange={event => setAside(formatMoneyInput(event.target.value, language))} placeholder="0" required /><small className="hint">{lang === 0 ? 'Misalnya tabungan atau dana darurat yang tidak ingin dipakai.' : 'For example savings or emergency money you want to protect.'}</small></label>
+      {impact.missing.length > 0 && <details className="decision-section guided-missing">
+        <summary>{t('Show what is missing')}</summary>
+        <ul className="decision-reasons">
+          {impact.missing.includes('price') && <li>{t('The saved price is missing, so we cannot calculate the amount left after buying.')}</li>}
+          {impact.missing.includes('cash') && <li>{t('Your available cash is missing, so we cannot estimate what would remain.')}</li>}
+          {impact.missing.includes('nextIncomeDate') && <li>{t('We do not know how long the remaining money needs to last because the next income date is missing.')}</li>}
+          {impact.missing.includes('essentialExpenses') && <li>{t('Expenses due before that income are unknown, so the remainder may still need to cover them.')}</li>}
+          {impact.missing.includes('setAside') && <li>{t('Money you want to protect is unknown, so this estimate does not account for it.')}</li>}
+        </ul>
+      </details>}
+
+      {saved && <aside className="account-notice" aria-label={t('Saved financial details for {currency} were last updated {date}. Review them before using them.', {
+        currency: list.currency, date: date(saved.updatedAt),
+      })}>
+        <p>{t('Saved financial details for {currency} were last updated {date}. Review them before using them.', {
+          currency: list.currency, date: date(saved.updatedAt),
+        })}</p>
+        <div className="actions">
+          <button type="button" onClick={useSavedContext}>{t('Use saved details')}</button>
+          <button type="button" onClick={() => void removeSavedContext()}>{t('Remove saved details')}</button>
         </div>
+      </aside>}
+      {loadingSaved && <p className="hint" role="status">{t('Loading preference…')}</p>}
+
+      <form noValidate autoComplete="off" onSubmit={event => { event.preventDefault(); void continueAnalysis(); }}>
+        <div className="guided-fields">
+          {fixedPrice === null && <label>{t('Estimated price (optional)')}<input inputMode="decimal" value={price}
+            onChange={event => setPrice(formatCurrencyInput(event.target.value, language))} placeholder="0" /></label>}
+          <label>{t('Cash available now (optional)')}<input inputMode="decimal" value={cash}
+            onChange={event => setCash(formatCurrencyInput(event.target.value, language))} placeholder="0" />
+            <small className="hint">{t('This information is optional. You can continue without it.')}</small>
+          </label>
+        </div>
+        <details className="decision-section guided-context-details">
+          <summary>{t('Add context that would make this estimate more useful')}</summary>
+          <div className="guided-fields">
+            <label>{t('Next income date (optional)')}<input type="date" value={nextIncomeDate} onChange={event => setNextIncomeDate(event.target.value)} /></label>
+            <label>{t('Expected amount (optional)')}<input inputMode="decimal" value={nextIncome}
+              onChange={event => setNextIncome(formatCurrencyInput(event.target.value, language))} placeholder="0" /></label>
+            <label>{t('Essential expenses due before your next income (optional)')}<input inputMode="decimal" value={expenses}
+              onChange={event => setExpenses(formatCurrencyInput(event.target.value, language))} placeholder="0" />
+              <small className="hint">{t('For example food, rent, installments and bills due before your next income.')}</small>
+            </label>
+            <label>{t('Money set aside that you do not want to spend (optional)')}<input inputMode="decimal" value={aside}
+              onChange={event => setAside(formatCurrencyInput(event.target.value, language))} placeholder="0" /></label>
+            <label>{t('Can this purchase wait? (optional)')}<select value={canWait} onChange={event => setCanWait(event.target.value as typeof canWait)}>
+              <option value="">{t('Not sure yet')}</option><option value="yes">{t('Yes, I can wait')}</option><option value="no">{t('No, I may need it sooner')}</option>
+            </select></label>
+          </div>
+        </details>
+
+        {hasEnteredContext && <fieldset className="guided-save-choice">
+          <legend>{t('How should we use this information?')}</legend>
+          <label><input type="radio" name="finance-context-use" checked={!remember} onChange={() => setRemember(false)} />
+            {t('Use this information for this analysis only')}</label>
+          <label><input type="radio" name="finance-context-use" checked={remember} onChange={() => setRemember(true)} />
+            {t('Save these details for future analyses')}</label>
+          {remember && <small className="hint">{t('Saved details stay private to your Nanti profile and are kept separately for each currency. You can remove them here; check that they are current before using them again.')}</small>}
+        </fieldset>}
         {error && <p className="error" role="alert">{error}</p>}
-        <div className="actions"><button type="button" onClick={() => { setStage(1); setQuestion(screeningQuestions.length - 1); }}>{lang === 0 ? 'Kembali' : 'Back'}</button><button className="primary" type="submit">{lang === 0 ? 'Lihat hasil' : 'See result'}</button></div>
+        {saveNotice && <p role="status" className="hint">{saveNotice}</p>}
+        <div className="actions"><button type="submit" className="primary">{t('Continue with this limited analysis')}</button></div>
       </form>
     </section>}
-    {stage === 3 && assessment && finance && <section className="decision-result guided-result">
-      <h3 tabIndex={-1} ref={heading}>{labels[assessment.decision][lang]}</h3>
-      <p>{actions[assessment.decision][lang]}</p>
-      <div className="guided-result-grid">
-        <div><small>{lang === 0 ? 'Alasan pembelian' : 'Buying reasons'}</small><strong>{assessment.screening.outcome === 'red' ? (lang === 0 ? 'Ada tanda impulsif / FOMO' : 'Impulse / FOMO signals') : assessment.screening.outcome === 'green' ? (lang === 0 ? 'Kebutuhan cukup jelas' : 'Need is fairly clear') : (lang === 0 ? 'Perlu dipikirkan lagi' : 'Needs more thought')}</strong></div>
-        <div><small>{lang === 0 ? 'Uang aman untuk belanja' : 'Protected spending capacity'}</small><strong>{currency(assessment.safeToSpend)}</strong></div>
-        <div><small>{lang === 0 ? 'Porsi harga dari uang belanja' : 'Share of spendable funds'}</small><strong>{assessment.share === null ? '—' : `${assessment.share}%`}</strong></div>
-        <div><small>{lang === 0 ? 'Kekurangan dana' : 'Funding gap'}</small><strong>{currency(assessment.gap)}</strong></div>
-      </div>
-      <h4>{lang === 0 ? 'Kenapa hasilnya begitu?' : 'Why this recommendation?'}</h4>
+
+    {stage === 2 && <section className="decision-result guided-result">
+      <h3 tabIndex={-1} ref={heading}>{t('Current purchase impact')}</h3>
+      {priceMinor !== null && <p><strong>{t('Product price')}: </strong>{format(priceMinor)}</p>}
+      {impact.cashAfterPurchaseMinor !== null && <p>
+        {impact.cashAfterPurchaseMinor >= 0n
+          ? t('If you buy now, {amount} would remain before other expenses.', { amount: format(impact.cashAfterPurchaseMinor) })
+          : t('Based only on the amounts you entered, the purchase is {amount} above the cash available.', { amount: format(-impact.cashAfterPurchaseMinor) })}
+      </p>}
+      {impact.cashAfterKnownCostsMinor !== null && (expensesBeforeIncome !== null || setAsideMinor !== null) && <div className="guided-result-grid">
+        <div><small>{t('Cash after the listed purchase and costs')}</small><strong>{format(impact.cashAfterKnownCostsMinor)}</strong></div>
+      </div>}
+
+      {impact.missing.length > 0 && <details className="decision-section guided-missing" open>
+        <summary>{t('Show what is missing')}</summary>
+        <ul className="decision-reasons">
+          {impact.missing.includes('price') && <li>{t('The saved price is missing, so we cannot calculate the amount left after buying.')}</li>}
+          {impact.missing.includes('cash') && <li>{t('Your available cash is missing, so we cannot estimate what would remain.')}</li>}
+          {impact.missing.includes('nextIncomeDate') && <li>{t('We do not know how long the remaining money needs to last because the next income date is missing.')}</li>}
+          {impact.missing.includes('essentialExpenses') && <li>{t('Expenses due before that income are unknown, so the remainder may still need to cover them.')}</li>}
+          {impact.missing.includes('setAside') && <li>{t('Money you want to protect is unknown, so this estimate does not account for it.')}</li>}
+        </ul>
+      </details>}
+
+      <h4>{t('Options to consider')}</h4>
       <ul className="decision-reasons">
-        <li>{assessment.screening.outcome === 'red' ? (lang === 0 ? 'Jawabanmu menunjukkan alasan membeli belum kuat atau ada pengaruh tren dan dorongan sesaat.' : 'Your answers suggest a weak need or outside pressure.') : assessment.screening.outcome === 'green' ? (lang === 0 ? 'Jawabanmu menunjukkan manfaat atau kebutuhan yang cukup jelas.' : 'Your answers indicate a clear practical benefit.') : (lang === 0 ? 'Beberapa alasan membeli masih perlu dipastikan.' : 'Some buying reasons remain unclear.')}</li>
-        <li>{assessment.gap > 0n ? (lang === 0 ? `Uang aman untuk belanja kurang ${currency(assessment.gap)} dari harga barang.` : `Your protected budget is short by ${currency(assessment.gap)}.`) : assessment.share !== null && assessment.share > 50 ? (lang === 0 ? 'Barang ini menghabiskan lebih dari separuh uang aman untuk belanja.' : 'This item uses over half your spendable funds.') : (lang === 0 ? 'Harga barang tercakup oleh uang yang tersisa setelah pengeluaran dan uang sisihan.' : 'The item fits after expenses and protected savings.')}</li>
+        {impact.cashAfterPurchaseMinor !== null && <li><strong>{t('Buy now')}: </strong>
+          {impact.cashAfterPurchaseMinor >= 0n
+            ? t('If you buy now, {amount} would remain before other expenses.', { amount: format(impact.cashAfterPurchaseMinor) })
+            : t('Based only on the amounts you entered, the purchase is {amount} above the cash available.', { amount: format(-impact.cashAfterPurchaseMinor) })}
+        </li>}
+        <li><strong>{t('Wait until your next income')}: </strong>{context.nextIncomeDate
+          ? t('Your next income date is {date}. Waiting lets you review the purchase then; the amount and other costs still matter.', { date: date(context.nextIncomeDate) })
+          : t('Without a next income date, we cannot estimate how long your remaining cash needs to last.')}</li>
+        {cheaperOptionLimit !== null && priceMinor !== null && priceMinor > cheaperOptionLimit && cheaperOptionLimit > 0n &&
+          <li><strong>{t('A cheaper option')}: </strong>{t('Based on the expenses and money you chose to protect, you could compare options priced at or below {amount}. This does not account for unknown costs.', { amount: format(cheaperOptionLimit) })}</li>}
       </ul>
-      {(assessment.decision === 'alternative' || assessment.decision === 'save') &&
-        assessment.screening.outcome === 'green' && (
-          <AlternativeRecommendations
-            eligible
-            currency={list.currency}
-            canNotify={false}
-            load={async () => {
-              const result = await api<{ alternatives: RecommendationMatch[] }>(
-                '/recommendations/alternatives', { method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
-                  finances: { cashMinor: finance.cashMinor.toString(), billsMinor: finance.billsMinor.toString(),
-                    setAsideMinor: finance.setAsideMinor.toString() },
-                  ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
-                    ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) } });
-              return result.alternatives;
-            }}
-            requestRecommendation={async () => {
-              await api('/recommendations/requests', {
-                method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
-                  finances: { cashMinor: finance.cashMinor.toString(), billsMinor: finance.billsMinor.toString(),
-                    setAsideMinor: finance.setAsideMinor.toString() },
-                  ...(item.priceMinor === null && finance.priceMinor <= 2_000_000_000n
-                    ? { estimatedPriceMinor: Number(finance.priceMinor) } : {}) },
-              });
-            }}
-            onOpenProduct={(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }}
-          />
-        )}
-      <p className="hint">{lang === 0 ? 'Ini perkiraan berdasarkan jawaban dan angka yang kamu isi, bukan jaminan kondisi keuangan sehat. Angka uang tunai, tagihan, dan dana sisihan tidak disimpan. Jika kamu meminta rekomendasi, harga barang dapat disimpan untuk mencocokkan alternatif.' : 'This is an estimate based on your answers, not a guarantee of financial health. Your cash, bills and set-aside amounts are not stored. If you request recommendations, the item price may be saved to match alternatives.'}</p>
-      <div className="actions"><button type="button" onClick={() => setStage(2)}>{lang === 0 ? 'Ubah isian' : 'Edit budget'}</button><button type="button" className="primary" onClick={close}>{lang === 0 ? 'Selesai' : 'Done'}</button></div>
+      {canLoadAlternatives && alternativeFinance && <>
+        <p className="hint">{t('If you request product alternatives, the item price may be stored to match options.')}</p>
+        <AlternativeRecommendations
+          eligible
+          currency={list.currency}
+          canNotify={false}
+          load={async () => {
+          const result = await api<{ alternatives: RecommendationMatch[] }>(
+            '/recommendations/alternatives', { method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+              finances: { cashMinor: alternativeFinance.cashMinor.toString(), billsMinor: alternativeFinance.billsMinor.toString(),
+                setAsideMinor: alternativeFinance.setAsideMinor.toString() },
+              ...(item.priceMinor === null && priceMinor !== null && priceMinor <= 2_000_000_000n
+                ? { estimatedPriceMinor: Number(priceMinor) } : {}) } });
+          return result.alternatives;
+          }}
+          requestRecommendation={async () => {
+          await api('/recommendations/requests', {
+            method: 'POST', data: { wishlistId: list.id, itemId: item.id, answers,
+              finances: { cashMinor: alternativeFinance.cashMinor.toString(), billsMinor: alternativeFinance.billsMinor.toString(),
+                setAsideMinor: alternativeFinance.setAsideMinor.toString() },
+              ...(item.priceMinor === null && priceMinor !== null && priceMinor <= 2_000_000_000n
+                ? { estimatedPriceMinor: Number(priceMinor) } : {}) },
+          });
+          }}
+          onOpenProduct={url => { window.open(url, '_blank', 'noopener,noreferrer'); }}
+        />
+      </>}
+      {context.nextIncomeMinor !== null && <p className="hint">{t('Expected income you entered: {amount}. Costs after that income are not included.', { amount: format(BigInt(context.nextIncomeMinor)) })}</p>}
+      {context.canWait === false && <p className="hint">{t('You said you may need this sooner. Weigh the reason and cost of waiting alongside the money impact above.')}</p>}
+      {context.canWait === true && <p className="hint">{t('You said this can wait, so checking again after your next income is one option.')}</p>}
+      <p className="hint">{t('This is a partial estimate, not a claim that the purchase is safe or affordable.')}</p>
+
+      <details className="decision-section guided-reasons">
+        <summary>{t('Buying reasons (optional)')}</summary>
+        <p className="hint">{t('Complete this reflection only if it helps you decide.')}</p>
+        {questions.map(question => <fieldset key={question} className="guided-reason-question">
+          <legend>{t(prompts[question])}</legend>
+          <div className="answer-buttons screening-answers">
+            <button type="button" aria-pressed={answers[question] === true} onClick={() => setAnswers(current => ({ ...current, [question]: true }))}>{t('Yes')}</button>
+            <button type="button" aria-pressed={answers[question] === false} onClick={() => setAnswers(current => ({ ...current, [question]: false }))}>{t('No')}</button>
+          </div>
+        </fieldset>)}
+        {screening && <p role="status">{t(reasons[screening.outcome as keyof typeof reasons])} {t('This reflection does not decide for you.')}</p>}
+      </details>
+
+      {saveNotice && <p role="status" className="hint">{saveNotice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="actions"><button type="button" onClick={() => setStage(1)}>{t('Edit information')}</button><button type="button" className="primary" onClick={close}>{t('Done')}</button></div>
     </section>}
   </div>;
 }

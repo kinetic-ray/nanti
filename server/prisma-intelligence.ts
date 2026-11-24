@@ -1,6 +1,8 @@
 import { Prisma } from './generated/prisma/client.js';
 import type { PrismaClient } from './generated/prisma/client.js';
-import type { SavedAssessment } from '../shared/intelligence.js';
+import type { SavedAssessment, SavedPurchaseFinanceContext } from '../shared/intelligence.js';
+import type { Currency } from '../shared/wishlist.js';
+import type { PurchaseFinanceContext } from '../shared/purchase-impact.js';
 import { SaveIntentConflict } from './intelligence.js';
 import type { AssessmentScope, FinancialFingerprints, IntelligenceRepository } from './intelligence.js';
 import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
@@ -8,6 +10,11 @@ import { authorizedOwner, lockOwner, prepareOwner } from './prisma-accounts.js';
 const assessment = { id: true, kind: true, version: true, input: true, result: true, snapshot: true, createdAt: true } as const;
 const privateAssessment = { ...assessment, financial: true, requestHash: true } as const;
 const pageSize = 15;
+
+function financeMap(value: Prisma.JsonValue | null): Partial<Record<Currency, SavedPurchaseFinanceContext>> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Record<Currency, SavedPurchaseFinanceContext>> : {};
+}
 
 function assessmentWhere({ actor, ...scope }: AssessmentScope): Prisma.AssessmentWhereInput {
   return { ...scope, wishlist: { dataOwner: authorizedOwner(actor ?? scope.ownerId) } };
@@ -83,17 +90,54 @@ export function prismaIntelligence(db: PrismaClient): IntelligenceRepository {
       });
       return row ?? { coolingOffDays: null };
     },
-    async setPreferences(ownerId, { coolingOffDays }, guest = true) {
-      if (coolingOffDays === null) {
-        await db.intelligencePreference.deleteMany({ where: { ownerId, dataOwner: authorizedOwner(ownerId) } });
-      } else {
-        await db.$transaction(async (tx) => {
-          await prepareOwner(tx, ownerId, guest);
-          await tx.intelligencePreference.upsert({
-            where: { ownerId }, create: { ownerId, coolingOffDays }, update: { coolingOffDays },
-          });
+    async financeContext(ownerId, currency) {
+      const row = await db.intelligencePreference.findFirst({
+        where: { ownerId, dataOwner: authorizedOwner(ownerId) }, select: { financialContexts: true },
+      });
+      return financeMap(row?.financialContexts ?? null)[currency] ?? null;
+    },
+    async setFinanceContext(ownerId, currency, context, guest = true) {
+      await db.$transaction(async (tx) => {
+        await prepareOwner(tx, ownerId, guest);
+        const row = await tx.intelligencePreference.findFirst({
+          where: { ownerId, dataOwner: authorizedOwner(ownerId) },
+          select: { coolingOffDays: true, financialContexts: true },
         });
-      }
+        const contexts = financeMap(row?.financialContexts ?? null);
+        if (context) contexts[currency] = { context, updatedAt: new Date().toISOString() };
+        else delete contexts[currency];
+        if (row?.coolingOffDays == null && !Object.keys(contexts).length) {
+          await tx.intelligencePreference.deleteMany({ where: { ownerId, dataOwner: authorizedOwner(ownerId) } });
+          return;
+        }
+        const financialContexts = Object.keys(contexts).length ? contexts as Prisma.InputJsonValue : Prisma.DbNull;
+        await tx.intelligencePreference.upsert({
+          where: { ownerId },
+          create: { ownerId, coolingOffDays: row?.coolingOffDays ?? null, financialContexts },
+          update: { financialContexts },
+        });
+      });
+    },
+    async setPreferences(ownerId, { coolingOffDays }, guest = true) {
+      await db.$transaction(async (tx) => {
+        await prepareOwner(tx, ownerId, guest);
+        if (coolingOffDays === null) {
+          const row = await tx.intelligencePreference.findFirst({
+            where: { ownerId, dataOwner: authorizedOwner(ownerId) }, select: { financialContexts: true },
+          });
+          if (Object.keys(financeMap(row?.financialContexts ?? null)).length) {
+            await tx.intelligencePreference.updateMany({
+              where: { ownerId, dataOwner: authorizedOwner(ownerId) }, data: { coolingOffDays: null },
+            });
+          } else {
+            await tx.intelligencePreference.deleteMany({ where: { ownerId, dataOwner: authorizedOwner(ownerId) } });
+          }
+          return;
+        }
+        await tx.intelligencePreference.upsert({
+          where: { ownerId }, create: { ownerId, coolingOffDays }, update: { coolingOffDays },
+        });
+      });
     },
     async clear(ownerId) {
       await db.$transaction([

@@ -166,6 +166,7 @@ export function AccountDialog({ status, notice, close, update }: {
             guest: number(account.import.guestLists), account: number(account.import.accountLists),
           })}</p>
           <p>{t('Import adds guest wishlists and saved assessments to your account. Existing account data stays in place.')}</p>
+          <p>{t('If you saved financial details, they will move with the guest data you choose to import.')}</p>
           {account.import.guestPreference && <p>{t('Your guest cooling-off setting is imported if your account has no setting yet.')}</p>}
           <button className="primary" disabled={busy} onClick={() => void run(() => transition('/account/import', 'POST', 'imported'))}>
             {t('Import guest data')}

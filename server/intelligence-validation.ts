@@ -7,6 +7,7 @@ import { readinessAnswers } from '../shared/quick-timing.js';
 import { intelligenceModules } from '../shared/methodology.js';
 import { isCalendarDate, minorPattern } from '../shared/purchase-timing.js';
 import { comparisonLimits, criterionPresets } from '../shared/value-ranker.js';
+import { currencies } from '../shared/wishlist.js';
 
 export const id = z.uuid();
 export const methodologyModule = z.enum(intelligenceModules);
@@ -33,6 +34,18 @@ export const impulseBody = z.strictObject({
 export const preferenceBody = z.strictObject({
   coolingOffDays: z.number().int().min(1).max(impulseRules.maximumCoolingOffDays).nullable(),
 });
+
+const currency = z.enum(currencies);
+export const financeCurrency = currency;
+export const financeContextBody = z.strictObject({
+  cashMinor: z.string().regex(minorPattern).nullable(),
+  essentialExpensesMinor: z.string().regex(minorPattern).nullable(),
+  setAsideMinor: z.string().regex(minorPattern).nullable(),
+  nextIncomeDate: z.string().refine(isCalendarDate).nullable(),
+  nextIncomeMinor: z.string().regex(minorPattern).nullable(),
+  canWait: z.boolean().nullable(),
+}).refine((context) => Object.values(context).some((value) => value !== null),
+  'Enter at least one financial detail to save.');
 
 export const buyingReasonsBody = z.strictObject({
   answers: z.strictObject({

@@ -16,7 +16,7 @@ import { SaveIntentConflict } from './intelligence.js';
 import type { AssessmentScope, FinancialFingerprints, IntelligenceRepository } from './intelligence.js';
 import { assessmentChanges, fingerprintFinances, productSnapshot, saveIntent, timingChanges, validatePlan } from './assessment-review.js';
 import {
-  algorithmVersion, buyingReasonsBody, comparisonBody, historyQuery, id, impulseBody, methodologyModule, preferenceBody,
+  algorithmVersion, buyingReasonsBody, comparisonBody, financeContextBody, financeCurrency, historyQuery, id, impulseBody, methodologyModule, preferenceBody,
   prioritiesBody, quickTimingBody, screeningBody, timingBody,
 } from './intelligence-validation.js';
 import type { ScopedWishlist, WishlistRepository } from './wishlist.js';
@@ -53,6 +53,23 @@ export function intelligenceRoutes(wishlists: WishlistRepository, repository: In
   });
   api.put('/preferences', async (req, res) => {
     await repository.setPreferences(res.locals.ownerId, preferenceBody.parse(req.body), res.locals.guest);
+    res.sendStatus(204);
+  });
+  api.get('/financial-context/:currency', async (req, res) => {
+    const currency = financeCurrency.parse(req.params.currency);
+    if (!repository.financeContext) return res.sendStatus(501);
+    res.json(await repository.financeContext(res.locals.ownerId, currency));
+  });
+  api.put('/financial-context/:currency', async (req, res) => {
+    const currency = financeCurrency.parse(req.params.currency);
+    if (!repository.setFinanceContext) return res.sendStatus(501);
+    await repository.setFinanceContext(res.locals.ownerId, currency, financeContextBody.parse(req.body), res.locals.guest);
+    res.sendStatus(204);
+  });
+  api.delete('/financial-context/:currency', async (req, res) => {
+    const currency = financeCurrency.parse(req.params.currency);
+    if (!repository.setFinanceContext) return res.sendStatus(501);
+    await repository.setFinanceContext(res.locals.ownerId, currency, null, res.locals.guest);
     res.sendStatus(204);
   });
   api.delete('/data', async (_req, res) => {

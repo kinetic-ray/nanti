@@ -1,4 +1,6 @@
-import type { AssessmentKind, AssessmentPage, AssessmentSnapshot, Preferences, SavedAssessment, SavedPayload } from '../shared/intelligence.js';
+import type { AssessmentKind, AssessmentPage, AssessmentSnapshot, Preferences, SavedAssessment, SavedPayload, SavedPurchaseFinanceContext } from '../shared/intelligence.js';
+import type { Currency } from '../shared/wishlist.js';
+import type { PurchaseFinanceContext } from '../shared/purchase-impact.js';
 
 export type AssessmentScope = { ownerId: string; wishlistId: string; itemId: string | null; kind: AssessmentKind; actor?: string };
 export type HistoryCursor = { createdAt: Date; id: string };
@@ -16,6 +18,8 @@ export interface IntelligenceRepository {
   remove(scope: AssessmentScope, id: string): Promise<boolean>;
   preferences(ownerId: string): Promise<Preferences>;
   setPreferences(ownerId: string, preferences: Preferences, guest?: boolean): Promise<void>;
+  financeContext?(ownerId: string, currency: Currency): Promise<SavedPurchaseFinanceContext | null>;
+  setFinanceContext?(ownerId: string, currency: Currency, context: PurchaseFinanceContext | null, guest?: boolean): Promise<void>;
   clear(ownerId: string): Promise<void>;
   prune(before: Date): Promise<void>;
 }

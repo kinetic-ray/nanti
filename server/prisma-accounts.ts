@@ -223,11 +223,11 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
     },
     async importSummary(userId: string, guestId: string) {
       const guest = await db.dataOwner.findFirst({ where: { id: guestId, userId: null },
-        select: { _count: { select: { wishlists: true } }, preference: { select: { ownerId: true } } } });
+        select: { _count: { select: { wishlists: true } }, preference: { select: { ownerId: true, coolingOffDays: true } } } });
       if (!guest || !guest._count.wishlists && !guest.preference) return null;
       return { guestLists: guest._count.wishlists, accountLists: await db.wishlist.count({
         where: { dataOwner: { userId } },
-      }), guestPreference: Boolean(guest.preference) };
+      }), guestPreference: guest.preference?.coolingOffDays != null };
     },
     importGuest(session: UserSession, guestId: string) {
       return db.$transaction(async (tx) => {
@@ -242,10 +242,22 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
         if (!claimed.count) return Boolean(await tx.dataOwner.findFirst({ where: { id: guestId, userId } }));
         const guestPreference = await tx.intelligencePreference.findUnique({ where: { ownerId: guestId } });
         if (guestPreference) {
-          await tx.intelligencePreference.createMany({
-            data: { ownerId: userId, coolingOffDays: guestPreference.coolingOffDays, updatedAt: guestPreference.updatedAt },
-            skipDuplicates: true,
-          });
+          const accountPreference = await tx.intelligencePreference.findUnique({ where: { ownerId: userId } });
+          const contexts = {
+            ...preferenceContexts(guestPreference.financialContexts),
+            ...preferenceContexts(accountPreference?.financialContexts ?? null),
+          };
+          const financialContexts = Object.keys(contexts).length ? contexts : Prisma.DbNull;
+          const coolingOffDays = accountPreference?.coolingOffDays ?? guestPreference.coolingOffDays;
+          const updatedAt = accountPreference && accountPreference.updatedAt > guestPreference.updatedAt
+            ? accountPreference.updatedAt : guestPreference.updatedAt;
+          if (coolingOffDays !== null || Object.keys(contexts).length) {
+            await tx.intelligencePreference.upsert({
+              where: { ownerId: userId },
+              create: { ownerId: userId, coolingOffDays, financialContexts, updatedAt },
+              update: { coolingOffDays, financialContexts, updatedAt },
+            });
+          }
           await tx.intelligencePreference.delete({ where: { ownerId: guestId } });
         }
         return true;
@@ -270,3 +282,7 @@ passwords: passwordAccounts(db, newSession, authToken, tokenHash),
 }
 
 export type Accounts = ReturnType<typeof prismaAccounts>;
+
+function preferenceContexts(value: Prisma.JsonValue | null): Prisma.JsonObject {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Prisma.JsonObject : {};
+}
