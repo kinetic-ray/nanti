@@ -54,7 +54,7 @@ function ExternalLink({ url, children }: { url: string; children: string }) {
   </a>;
 }
 
-const superadminSections = ['overview', 'products', 'creators', 'users', 'storefronts', 'links', 'notifications', 'recommendations', 'audit', 'analytics', 'settings'] as const;
+const superadminSections = ['overview', 'products', 'users', 'storefronts', 'notifications', 'recommendations', 'audit', 'analytics', 'settings'] as const;
 
 function NotificationBell({ href, open }: { href: string; open: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   const [unread, setUnread] = useState(0);
@@ -76,7 +76,11 @@ function NotificationBell({ href, open }: { href: string; open: (event: MouseEve
 }
 
 export function AdminCenter() {
-  const section = useWorkspaceSection(superadminSections, 'overview', url => url.hash.startsWith('#opportunity-') ? 'links' : undefined);
+  const section = useWorkspaceSection(superadminSections, 'overview', url => {
+    if (url.hash.startsWith('#opportunity-') || url.searchParams.get('section') === 'links') return 'products';
+    if (url.searchParams.get('section') === 'creators') return 'users';
+    return undefined;
+  });
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -131,10 +135,8 @@ export function AdminCenter() {
   return <AdminWorkspace name="Superadmin" section={section} account={session.username} items={[
     { id: 'overview', label: 'Ringkasan', icon: LayoutDashboard },
     { id: 'products', label: 'Produk', icon: Package },
-    { id: 'creators', label: 'Kreator', icon: ContactRound },
     { id: 'users', label: 'Pengguna', icon: Users },
     { id: 'storefronts', label: 'Etalase', icon: Store },
-    { id: 'links', label: 'Tautan afiliasi', icon: Link2 },
     { id: 'notifications', label: 'Notifikasi', icon: Bell },
     { id: 'recommendations', label: 'Rekomendasi', icon: ListChecks },
     { id: 'audit', label: 'Aktivitas audit', icon: ClipboardList },
@@ -149,12 +151,12 @@ export function AdminCenter() {
   </>}>
     {error && <p role="alert" className="aw-error">{adminError(error)}</p>}
     {active === 'overview' && <PlatformOverview open={section.open} onExpired={onExpired} />}
-    {(active === 'products' || active === 'creators' || active === 'users' || active === 'storefronts') &&
+    {active === 'products' && <>
+      <PlatformDirectory directory="products" onExpired={onExpired} />
+      <div className="aw-affiliate"><Workspace onExpired={onExpired} /></div>
+    </>}
+    {(active === 'users' || active === 'storefronts') &&
       <PlatformDirectory key={active} directory={active} onExpired={onExpired} />}
-    {active === 'links' && <div className="aw-affiliate">
-      <WorkspaceHeading title="Tautan afiliasi" description="Tinjau kandidat tautan dan kelola pemetaan afiliasi yang terverifikasi." />
-      <Workspace onExpired={onExpired} />
-    </div>}
     {active === 'notifications' && <div className="aw-affiliate">
       <WorkspaceHeading title="Pusat notifikasi" description="Periksa kiriman produk, akun baru, tinjauan afiliasi, dan gangguan yang perlu ditangani." />
       <Workspace onExpired={onExpired} inboxOnly />
@@ -520,6 +522,8 @@ function ReviewDialog({ review, identity, onSubmit, close }: {
           <label>Catatan verifikasi<textarea name="notes" rows={3} required minLength={12} maxLength={2000} /></label>
           <label>URL bukti pendukung <span className="optional">(opsional)</span>
             <input type="url" name="evidenceUrl" maxLength={2048} defaultValue={existing?.evidenceUrl ?? ''} /></label>
+          <label>Alasan konfirmasi lintas marketplace <span className="optional">(wajib jika listing berbeda)</span>
+            <textarea name="overrideReason" rows={2} maxLength={600} defaultValue={existing?.overrideReason ?? ''} /></label>
           <label className="check-label"><input type="checkbox" name="confirmedExact" required />
             Saya sudah memeriksa kedua listing dan memastikan produk dan variannya sama. Tautan ini berasal dari program afiliasi resmi.
           </label>

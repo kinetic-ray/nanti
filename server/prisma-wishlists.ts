@@ -58,7 +58,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
           stage = 'idempotency';
           if (requestId && await tx.item.findUnique({ where: { id: requestId }, select: { id: true } })) return false;
           stage = 'catalog';
-          const identity = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+          const identity = data.url ? await getOrCreateProductIdentity(tx, data.url, data.name) : null;
           stage = 'item';
           const created = await tx.item.create({
             data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId: identity?.id ?? null }, select: { id: true },
@@ -97,7 +97,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
         const current = await lockPriceItem(tx, ownerId, wishlistId, id);
         if (!current) return false;
         const urlChanged = data.url !== current.url;
-        const identity = urlChanged && data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+        const identity = urlChanged && data.url ? await getOrCreateProductIdentity(tx, data.url, data.name) : null;
         if (data.imageKey !== undefined) {
           const existing = await tx.productImage.findUnique({ where: { itemId: id }, select: { id: true } });
           const next = data.imageKey && mysqlImageId(data.imageKey);

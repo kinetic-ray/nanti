@@ -13,6 +13,7 @@ export type VerificationEvidence = {
   notes: string;
   evidenceUrl?: string;
   confirmedExact: true;
+  overrideReason?: string;
 };
 
 export type Opportunity = {
