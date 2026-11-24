@@ -5,6 +5,27 @@ import { classifyProductMatch, identifyProduct, isEligibleAffiliate, normalizePr
 const product = 'https://www.ikea.com/us/en/p/test-lamp-white-12345678/';
 
 describe('product identity', () => {
+  it('recognizes Tokopedia tracking links while keeping unknown parameters and fragments in the identity', () => {
+    const listing = 'https://www.tokopedia.com/store/phone-case';
+    const tracked = listing + '?ref=share&utm_source=share';
+    expect(identifyProduct(tracked)).toMatchObject({ merchant: 'Tokopedia', market: 'id', canonicalUrl: listing });
+    expect(classifyProductMatch(listing, tracked)).toBe('exact');
+    expect(isEligibleAffiliate(listing, tracked)).toBe(false);
+    const blue = identifyProduct(tracked + '&variant=blue');
+    expect(blue?.canonicalUrl).toBe(listing + '?variant=blue');
+    expect(blue?.lookupKey).not.toBe(identifyProduct(listing + '?variant=red')?.lookupKey);
+    expect(identifyProduct(listing + '#bundle')?.lookupKey).not.toBe(identifyProduct(listing)?.lookupKey);
+    expect(classifyProductMatch(listing, listing + '-different')).toBe('mismatch');
+  });
+
+  it('recognizes supported Tokopedia short hosts without treating an opaque redirect as an eligible affiliate', () => {
+    for (const host of ['tokopedia.link', 'www.tokopedia.link', 'tk.tokopedia.com', 'vt.tokopedia.com']) {
+      const link = `https://${host}/fixture?utm_source=partner`;
+      expect(identifyProduct(link)).toMatchObject({ merchant: 'Tokopedia', canonicalUrl: link });
+      expect(isEligibleAffiliate(link, link)).toBe(false);
+    }
+  });
+
   it('identifies the merchant, market and article and ignores only supported attribution parameters', () => {
     const identified = identifyProduct(product)!;
     expect(identified).toMatchObject({ merchant: 'IKEA', market: 'us/en', listingId: '12345678', canonicalUrl: product });

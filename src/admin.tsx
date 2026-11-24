@@ -354,7 +354,7 @@ function Workspace({ onExpired, inboxOnly = false }: { onExpired: () => void; in
           ? <p>Tautan produk yang didukung akan muncul saat disimpan oleh pengguna.</p>
           : <ul className="admin-queue">{opportunities.records.map((row) => <li key={row.id}>
             <button type="button" aria-pressed={row.id === selected} onClick={() => select(row.id)}>
-              <strong>{row.title ?? `${row.merchant} artikel ${row.listingId}`}</strong>
+              <strong>{row.title ?? 'Nama produk belum tersedia'}</strong>
               <span>{row.market.toUpperCase()} · {row.savedCount} kali disimpan · {row.coverage ? 'Ada tautan aktif' : 'Tautan asli'}</span>
               <small>{matches[row.classification]} · Ditinjau {recordedAt(row.reviewedAt)}</small>
             </button>
@@ -369,7 +369,7 @@ function Workspace({ onExpired, inboxOnly = false }: { onExpired: () => void; in
           !selected ? <p>Pilih produk untuk meninjau listing, bukti, dan pemetaan tautannya.</p> :
           !identity ? <p role="status">Memuat produk…</p> :
           <>
-            <h2 ref={heading} tabIndex={-1}>{identity.title ?? `${identity.merchant} artikel ${identity.listingId}`}</h2>
+            <h2 ref={heading} tabIndex={-1}>{identity.title ?? 'Nama produk belum tersedia'}</h2>
             <dl className="admin-facts">
               <div><dt>Toko</dt><dd>{identity.merchant}</dd></div>
               <div><dt>Pasar</dt><dd>{identity.market.toUpperCase()}</dd></div>
@@ -385,6 +385,10 @@ function Workspace({ onExpired, inboxOnly = false }: { onExpired: () => void; in
               {Object.entries(identity.variants ?? {}).map(([key, value]) => <div key={key}><dt className="variant-label">{variants[key] ?? key}</dt><dd>{value}</dd></div>)}
             </dl>
             <p><ExternalLink url={identity.canonicalUrl}>Buka listing asli</ExternalLink></p>
+            {identity.title && <div className="aw-actions">
+              <ExternalLink url={`https://shopee.co.id/search?${new URLSearchParams({ keyword: identity.title })}`}>Cari di Shopee</ExternalLink>
+              <ExternalLink url={`https://www.tokopedia.com/search?${new URLSearchParams({ q: identity.title })}`}>Cari di Tokopedia</ExternalLink>
+            </div>}
             <CandidateForm key={identity.id} busy={busy} onCandidate={(url) => run(
               () => api(`${path}/mappings`, { method: 'POST', data: { url } }), 'Kandidat disimpan untuk ditinjau.',
             )} />

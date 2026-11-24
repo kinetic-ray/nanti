@@ -83,8 +83,8 @@ function SubmissionQueue({ onExpired, revision }: { onExpired: OnExpired; revisi
         const status = product.submissionStatus === 'affiliate_link_assigned' ? 'Tautan afiliasi ditetapkan' :
           product.submissionStatus === 'reviewed' ? 'Sudah ditinjau' : 'Menunggu tinjauan';
         return <li key={product.id}>
-          <div className="aw-submission-copy"><strong>{product.title ?? `${product.merchant} · ${product.listingId}`}</strong>
-            <span>{product.market.toUpperCase()} · {product.savedCount} kali disimpan</span>
+          <div className="aw-submission-copy"><strong>{product.title ?? 'Nama produk belum tersedia'}</strong>
+            <span>{product.merchant === 'Other' ? 'Marketplace belum diketahui' : product.merchant} · {product.savedCount} kali disimpan</span>
             <span className="aw-badge" data-live={product.submissionStatus === 'affiliate_link_assigned'}>{status}</span>
           </div>
           <div className="aw-actions">

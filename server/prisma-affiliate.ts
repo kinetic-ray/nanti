@@ -49,7 +49,11 @@ function candidateClassification(original: string, candidate: string): MatchClas
 }
 
 function catalogUrl(value: string, merchant: string) {
-  return merchant === 'Other' ? `${new URL(value).origin}/` : value;
+  if (merchant !== 'Other' && merchant !== 'Tokopedia') return value;
+  const url = new URL(value);
+  return merchant === 'Tokopedia' && url.hostname === 'www.tokopedia.com'
+    ? url.origin + url.pathname
+    : `${url.origin}/`;
 }
 
 function mappingView(row: Prisma.AffiliateMappingGetPayload<{ select: typeof mappingFields }>): Mapping {
@@ -78,7 +82,7 @@ function opportunityView(row: Prisma.ProductIdentityGetPayload<{ select: typeof 
 
 function auditView(row: Prisma.AffiliateAuditGetPayload<{ select: typeof auditFields }>): AuditEvent {
   const details = row.details as Record<string, unknown>;
-  if (row.identity.merchant === 'Other' && typeof details.originalUrl === 'string') {
+  if (typeof details.originalUrl === 'string') {
     details.originalUrl = catalogUrl(details.originalUrl, row.identity.merchant);
   }
   return { ...row, details, createdAt: row.createdAt.toISOString() };
