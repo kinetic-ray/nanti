@@ -9,6 +9,7 @@ const pageSize = 25;
 const mappingFields = {
   id: true, identityId: true, activeIdentityId: true, originalUrl: true, affiliateUrl: true, status: true,
   classification: true, evidence: true, approvedBy: true, approvedAt: true, validatedAt: true, createdAt: true, revision: true,
+  identity: { select: { merchant: true } },
 } as const;
 const identityFields = {
   id: true, merchant: true, market: true, listingId: true, canonicalUrl: true, title: true, reviewedAt: true,
@@ -16,7 +17,8 @@ const identityFields = {
   activeMapping: { select: { id: true, classification: true, status: true, affiliateUrl: true, originalUrl: true } },
   mappings: { select: { classification: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 },
 } satisfies Prisma.ProductIdentitySelect;
-const auditFields = { id: true, mappingId: true, actor: true, action: true, details: true, createdAt: true } as const;
+const auditFields = { id: true, mappingId: true, actor: true, action: true, details: true, createdAt: true,
+  identity: { select: { merchant: true } } } as const;
 const recent = [{ createdAt: 'desc' }, { id: 'desc' }] as const;
 
 export type ReviewAction =
@@ -46,9 +48,13 @@ function candidateClassification(original: string, candidate: string): MatchClas
   return match === 'exact' ? 'potential' : match;
 }
 
+function catalogUrl(value: string, merchant: string) {
+  return merchant === 'Other' ? `${new URL(value).origin}/` : value;
+}
+
 function mappingView(row: Prisma.AffiliateMappingGetPayload<{ select: typeof mappingFields }>): Mapping {
   return {
-    id: row.id, originalUrl: row.originalUrl, affiliateUrl: row.affiliateUrl, status: row.status,
+    id: row.id, originalUrl: catalogUrl(row.originalUrl, row.identity.merchant), affiliateUrl: row.affiliateUrl, status: row.status,
     classification: row.classification, evidence: row.evidence as VerificationEvidence | null, approvedBy: row.approvedBy,
     approvedAt: row.approvedAt?.toISOString() ?? null, validatedAt: row.validatedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(), active: row.activeIdentityId !== null,
@@ -61,7 +67,8 @@ function opportunityView(row: Prisma.ProductIdentityGetPayload<{ select: typeof 
   const coverage = Boolean(active && active.status === 'approved' && active.classification === 'verified_exact' &&
     isEligibleAffiliate(row.canonicalUrl, active.affiliateUrl));
   return {
-    id: row.id, merchant: row.merchant, market: row.market, listingId: row.listingId, canonicalUrl: row.canonicalUrl,
+    id: row.id, merchant: row.merchant, market: row.market, listingId: row.listingId,
+    canonicalUrl: catalogUrl(row.canonicalUrl, row.merchant),
     title: row.title, savedCount: row._count.items, coverage,
     classification: coverage ? 'verified_exact' : row.mappings[0]?.classification ?? 'insufficient',
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
@@ -70,7 +77,11 @@ function opportunityView(row: Prisma.ProductIdentityGetPayload<{ select: typeof 
 }
 
 function auditView(row: Prisma.AffiliateAuditGetPayload<{ select: typeof auditFields }>): AuditEvent {
-  return { ...row, details: row.details as Record<string, unknown>, createdAt: row.createdAt.toISOString() };
+  const details = row.details as Record<string, unknown>;
+  if (row.identity.merchant === 'Other' && typeof details.originalUrl === 'string') {
+    details.originalUrl = catalogUrl(details.originalUrl, row.identity.merchant);
+  }
+  return { ...row, details, createdAt: row.createdAt.toISOString() };
 }
 
 function evidenceConflicts(

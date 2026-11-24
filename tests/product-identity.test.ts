@@ -20,7 +20,7 @@ describe('product identity', () => {
     expect(classifyProductMatch(product, product.replace('12345678', '12345679'))).toBe('mismatch');
     expect(classifyProductMatch(product, product.replace('white', 'light'))).toBe('potential');
     expect(classifyProductMatch(product, product.replace('/us/en/', '/ca/en/'))).toBe('potential');
-    expect(classifyProductMatch(product, 'https://example.test/test-lamp-white')).toBe('mismatch');
+    expect(classifyProductMatch(product, 'https://example.test/test-lamp-white')).toBe('insufficient');
     expect(normalizeProductTitle('  Ｔｅｓｔ   Lamp   White ')).toBe('test lamp white');
   });
 

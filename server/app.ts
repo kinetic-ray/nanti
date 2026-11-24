@@ -302,7 +302,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     }).parse(req.body);
     const owner = res.locals.ownerId as string;
     const requestId = req.get('Idempotency-Key') ? uuid.parse(req.get('Idempotency-Key')) : undefined;
-    if ((saveMarketplaceImage || saveTokopediaImage) && !requestId) {
+    if ((saveMarketplaceImage || saveTokopediaImage) && !input.imageKey && !requestId) {
       return res.status(400).json({ error: 'This product save expired. Check the details and submit it again.' });
     }
     const list = await repository.find(owner, listId);

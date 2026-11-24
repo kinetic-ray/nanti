@@ -77,7 +77,10 @@ export function classifyProductMatch(original: string, candidate: string) {
   const source = identifyProduct(original);
   const destination = identifyProduct(candidate);
   if (!source || !destination) return 'insufficient';
-  if (source.merchant !== destination.merchant || source.listingId !== destination.listingId) return 'mismatch';
+  if (source.merchant !== destination.merchant) {
+    return source.merchant === 'Other' || destination.merchant === 'Other' ? 'insufficient' : 'mismatch';
+  }
+  if (source.listingId !== destination.listingId) return 'mismatch';
   if (source.lookupKey !== destination.lookupKey || source.market !== destination.market || source.merchant !== destination.merchant) return 'potential';
   return 'exact';
 }

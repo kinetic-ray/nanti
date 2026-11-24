@@ -203,6 +203,7 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
       const path = `${adminPath}/opportunities/${identity.id}`;
       const candidate = await admin.agent.post(`${path}/mappings`).set(mutation).send({ url: affiliateUrl }).expect(201);
       expect(candidate.body.eligible).toBe(true);
+      expect(candidate.body.originalUrl).toBe(`${new URL(original).origin}/`);
       await admin.agent.patch(`${path}/mappings/${candidate.body.id}`).set(mutation).send({ action: 'approve', revision: 0, evidence }).expect(200);
       const purchase = await owner.agent.get(`${owner.path}/items/${item.id}/purchase`).expect(200);
       await owner.agent.get(purchase.body.affiliatePath).expect('Location', affiliateUrl).expect(302);
