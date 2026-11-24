@@ -1,3 +1,5 @@
+import { accountMailUrl, resolveAccountMailOrigin } from './account-mail-links.js';
+
 const copy = {
   verify: ['Verify your Nanti email', 'Verify your email to finish creating your Nanti account.', 'This link expires in 30 minutes.'],
   reset: ['Reset your Nanti password', 'Use this link to choose a new password for your Nanti account.', 'This link expires in 15 minutes.'],
@@ -12,9 +14,9 @@ export function transactionalAccountMail(env: NodeJS.ProcessEnv = process.env) {
   const key = env.RESEND_API_KEY?.trim() || env.NANTI_ACCOUNT_MAIL_API_KEY?.trim();
   const from = env.NANTI_ACCOUNT_MAIL_FROM?.trim() || 'onboarding@resend.dev';
   if (!key) return null;
-  const origin = URL.parse(env.AUTH_PUBLIC_ORIGIN ?? '');
+  const origin = resolveAccountMailOrigin(env);
   if (!key || !from || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/u.test(from) ||
-    !origin || origin.protocol !== 'https:' || origin.href !== origin.origin + '/') {
+    origin.protocol !== 'https:') {
     throw new Error('Account email requires an API key, a sender address, and an HTTPS public origin.');
   }
 
@@ -35,12 +37,9 @@ export function transactionalAccountMail(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('Account email could not be submitted.');
   }
   return Object.assign(async (email: string, kind: keyof typeof copy, token: string, creator: boolean) => {
-    const link = new URL('/account', origin);
-    link.searchParams.set('recovery', kind);
-    if (creator) link.searchParams.set('next', 'creator');
-    link.hash = new URLSearchParams({ mode: kind, token }).toString();
     const [subject, action, expiration] = copy[kind];
-    const text = `Nanti\n\n${action}\n\n${link.href}\n\n${expiration}\n\nIf you did not request this email, you can ignore it.`;
+    const link = accountMailUrl(kind, token, creator, env);
+    const text = `Nanti\n\n${action}\n\n${link}\n\n${expiration}\n\nIf you did not request this email, you can ignore it.`;
     await send(email, subject, text);
   }, {
     async notice(email: string, kind: keyof typeof notices) {
