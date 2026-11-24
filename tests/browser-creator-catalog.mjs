@@ -296,9 +296,12 @@ try {
   await button(pullProduct, 'Tarik publikasi').click();
   await visitor.getByText('Publikasi produk ditarik.').waitFor();
   await select('Pengguna');
-  await visitor.getByRole('row').filter({ hasText: 'Studio Browser' }).waitFor();
-  await select('Kreator');
-  await visitor.getByText('Updated Browser Storefront', { exact: true }).last().waitFor();
+  const studioUser = visitor.getByRole('row').filter({ hasText: 'Studio Browser' });
+  await studioUser.waitFor();
+  await studioUser.getByRole('button', { name: 'Studio Browser', exact: true }).click();
+  const userDetail = visitor.getByRole('dialog', { name: 'Detail pengguna' });
+  await userDetail.getByText(/Browser Storefront.*@/u).waitFor();
+  await visitor.getByRole('button', { name: 'Tutup', exact: true }).click();
   await select('Etalase');
   await button(visitor, 'Tarik etalase Updated Browser Storefront').click();
   const offline = visitor.getByRole('dialog', { name: 'Tarik publikasi etalase?' });
