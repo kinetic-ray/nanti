@@ -4,6 +4,7 @@ import { expect, it, vi } from 'vitest';
 import { createApp } from '../server/app.js';
 import { connectDatabase } from '../server/database.js';
 import { prismaAccounts, tokenHash } from '../server/prisma-accounts.js';
+import { prismaIntelligence } from '../server/prisma-intelligence.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
 
 const outbox = vi.hoisted(() => new Map<string, string>());
@@ -18,7 +19,7 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
   const password = '12345678';
   const replacement = 'abcdefgh';
   const newEmail = `changed-${randomUUID()}@example.test`;
-  const app = createApp({ repository: prismaWishlists(db), consumer: { accounts, providers: {} },
+  const app = createApp({ repository: prismaWishlists(db), intelligence: prismaIntelligence(db), consumer: { accounts, providers: {} },
     preview: async () => null, secureCookies: false, trustedProxy: 'loopback', secret: randomBytes(32).toString('hex') });
   const http = request.agent(app);
   const other = request(app);
@@ -48,6 +49,12 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await http.post('/api/session').set('X-Nanti-Request', '1').send({}).expect(200);
     const { body: guestList } = await http.post('/api/wishlists').set('X-Nanti-Request', '1')
       .send({ name: 'Password guest fixture', currency: 'IDR' }).expect(201);
+    const guestFinanceContext = {
+      cashMinor: '750000', essentialExpensesMinor: '300000', setAsideMinor: '100000',
+      nextIncomeDate: '2026-12-01', nextIncomeMinor: '5000000', canWait: true,
+    };
+    await http.put('/api/intelligence/financial-context/IDR').set('X-Nanti-Request', '1')
+      .send(guestFinanceContext).expect(204);
     await post('/password/login', { email, password }).expect(204);
     await http.get('/api/account').expect(200).expect(response => {
       expect(response.body.account).toMatchObject({ email, emailVerified: true, hasPassword: true });
@@ -58,6 +65,9 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await post('/import', { confirm: true }).expect(204);
     await http.get(wishlist).expect(200).expect(({ body }) => {
       expect(body).toMatchObject({ id: guestList.id, name: 'Password guest fixture' });
+    });
+    await http.get('/api/intelligence/financial-context/IDR').expect(200).expect(({ body }) => {
+      expect(body.context).toEqual(guestFinanceContext);
     });
     await http.get('/api/account/admin').expect(403);
     await other.get('/api/account/creator').expect(401);

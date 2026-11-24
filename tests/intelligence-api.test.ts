@@ -31,6 +31,7 @@ describe('Purchase intelligence HTTP validation', () => {
   const repository: IntelligenceRepository = {
     history: vi.fn(), save: vi.fn(), remove: vi.fn(), preferences: vi.fn(), setPreferences: vi.fn(),
     find: vi.fn(), findRequest: vi.fn(), clear: vi.fn(), prune: vi.fn(),
+    financeContext: vi.fn().mockResolvedValue(null), setFinanceContext: vi.fn(),
   };
   const app = application(wishlists, repository);
 
@@ -43,6 +44,27 @@ describe('Purchase intelligence HTTP validation', () => {
     await agent.post('/api/session').set(mutation).send({}).expect(200);
     await agent.post(`${itemPath}/impulse`).send({}).expect(403);
     await agent.post(`${path}/timing`).send({}).expect(403);
+  });
+
+  it('validates optional financial context and scopes it to the signed owner and currency', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/session').set(mutation).send({}).expect(200);
+    const context = {
+      cashMinor: '50000', essentialExpensesMinor: '20000', setAsideMinor: '5000',
+      nextIncomeDate: '2026-12-01', nextIncomeMinor: '30000', canWait: true,
+    };
+    await agent.get(`${intelligence}/financial-context/IDR`).expect(200, null);
+    await agent.put(`${intelligence}/financial-context/IDR`).send(context).expect(403);
+    await agent.put(`${intelligence}/financial-context/XXX`).set(mutation).send(context).expect(400);
+    await agent.put(`${intelligence}/financial-context/IDR`).set(mutation).send({ ...context, cashMinor: '-1' }).expect(400);
+    await agent.put(`${intelligence}/financial-context/IDR`).set(mutation).send({ ...context, nextIncomeDate: '2026-02-29' }).expect(400);
+    await agent.put(`${intelligence}/financial-context/IDR`).set(mutation).send({ ...context, extra: true }).expect(400);
+    await agent.put(`${intelligence}/financial-context/IDR`).set(mutation)
+      .send(Object.fromEntries(Object.keys(context).map((key) => [key, null]))).expect(400);
+    await agent.put(`${intelligence}/financial-context/IDR`).set(mutation).send(context).expect(204);
+    expect(repository.setFinanceContext).toHaveBeenCalledWith(expect.any(String), 'IDR', context, true);
+    await agent.delete(`${intelligence}/financial-context/IDR`).set(mutation).send({}).expect(204);
+    expect(repository.setFinanceContext).toHaveBeenLastCalledWith(expect.any(String), 'IDR', null, true);
   });
 
   it('rejects malformed inputs and invented ownership, pricing, and ranking fields', async () => {
@@ -147,6 +169,31 @@ describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', ()
       { ...prior.body, review: [{ kind: 'methodology' }] },
     ]));
     await other.agent.get(endpoint).expect(404);
+  });
+
+  it('persists optional finance context by owner and currency and clears it through privacy controls', async () => {
+    const first = await session();
+    const second = await session();
+    const idr = `${intelligence}/financial-context/IDR`;
+    const usd = `${intelligence}/financial-context/USD`;
+    const firstContext = {
+      cashMinor: '500000', essentialExpensesMinor: '180000', setAsideMinor: '50000',
+      nextIncomeDate: '2026-12-01', nextIncomeMinor: '1000000', canWait: true,
+    };
+    const otherCurrency = { ...firstContext, cashMinor: '20000' };
+    await first.agent.get(idr).expect(200, null);
+    await first.agent.put(idr).set(mutation).send(firstContext).expect(204);
+    await first.agent.put(usd).set(mutation).send(otherCurrency).expect(204);
+    await second.agent.get(idr).expect(200, null);
+    await first.agent.get(idr).expect(200).expect(({ body }) => expect(body).toMatchObject({ context: firstContext }));
+    await first.agent.get(usd).expect(200).expect(({ body }) => expect(body).toMatchObject({ context: otherCurrency }));
+
+    await first.agent.delete(idr).set(mutation).send({}).expect(204);
+    await first.agent.get(idr).expect(200, null);
+    await first.agent.get(usd).expect(200).expect(({ body }) => expect(body).toMatchObject({ context: otherCurrency }));
+    await first.agent.delete(`${intelligence}/data`).set(mutation).send({}).expect(204);
+    await first.agent.get(usd).expect(200, null);
+    await second.agent.get(idr).expect(200, null);
   });
 
   it('saves quick readiness without financial inputs and preserves the old result when a price changes', async () => {
