@@ -234,18 +234,6 @@ export function prismaAffiliate(db: PrismaClient) {
             details = { ...details, reason: review.reason, status: status[review.action] };
           }
 
-          if ('evidence' in review && update.activeIdentityId) {
-            const displaced = await tx.affiliateMapping.findMany({
-              where: { identityId, activeIdentityId: identityId, id: { not: mappingId }, status: 'approved' },
-              select: { id: true, revision: true, affiliateUrl: true },
-            });
-            for (const previous of displaced) {
-              await tx.affiliateMapping.update({ where: { id: previous.id },
-                data: { activeIdentityId: null, status: 'disabled', revision: previous.revision + 1 } });
-              await tx.affiliateAudit.create({ data: { identityId, mappingId: previous.id, actor,
-                action: 'replaced', details: { replacement: mappingId, affiliateUrl: previous.affiliateUrl } } });
-            }
-          }
           const updated = await tx.affiliateMapping.updateMany({ where: { id: mappingId, revision: row.revision },
             data: { ...update, revision },
           });
