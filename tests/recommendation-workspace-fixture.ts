@@ -38,12 +38,18 @@ export async function recommendationFixture(databaseUrl: string, enabled = true)
   const curation = { title, category: 'sneakers', color: 'white', style: 'Retro', useCase: 'Sehari-hari', description: null };
   return { db, app, listing, missing, source, title, curation, secret, password, username: admin.username,
     async close() {
-      await db.workspaceAudit.deleteMany({ where: { actor: admin.username } });
-      await db.adminSession.deleteMany({ where: { credentialScope: adminCredentialScope(admin, secret) } });
-      await db.curatedRecommendation.deleteMany({ where: { url: { startsWith: listing } } });
-      await db.affiliateMapping.deleteMany({ where: { identity: { lookupKey: { in: lookupKeys } } } });
-      await db.productIdentity.deleteMany({ where: { lookupKey: { in: lookupKeys } } });
-      await db.$disconnect();
+      const identity = { lookupKey: { in: lookupKeys } };
+      try {
+        await db.workspaceAudit.deleteMany({ where: { actor: admin.username } });
+        await db.adminSession.deleteMany({ where: { credentialScope: adminCredentialScope(admin, secret) } });
+        await db.curatedRecommendation.deleteMany({ where: { url: { startsWith: listing } } });
+        await db.adminNotification.deleteMany({ where: { identity } });
+        await db.affiliateAudit.deleteMany({ where: { identity } });
+        await db.affiliateMapping.deleteMany({ where: { identity } });
+        await db.productIdentity.deleteMany({ where: identity });
+      } finally {
+        await db.$disconnect();
+      }
     },
   };
 }

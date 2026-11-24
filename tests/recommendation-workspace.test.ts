@@ -40,9 +40,11 @@ it.skipIf(!databaseUrl)('curates marketplace metadata and keeps identity, public
         wishlistId: sessionWishlist.id, ownerId: sessionWishlist.ownerId, productIdentityId: identity!.id,
         name: 'New Balance 540 White Private label', url: listing, priceMinor: 100000000, quantity: 1, imageKey: 'private-image',
       } });
+      const sourceIdentity = await db.$transaction(tx => getOrCreateProductIdentity(tx, fixture.source));
+      expect(sourceIdentity).not.toBeNull();
       const source = await db.item.create({ data: {
         wishlistId: sessionWishlist.id, ownerId: sessionWishlist.ownerId, name: fixture.title,
-        url: fixture.source, priceMinor: 100000000, quantity: 1,
+        url: fixture.source, priceMinor: 100000000, quantity: 1, productIdentityId: sourceIdentity!.id,
       } });
       const alternative = (itemId: string) => consumer.post('/api/recommendations/alternatives').send({
         itemId, wishlistId: sessionWishlist.id,
