@@ -356,8 +356,8 @@
   .aw-drawer::backdrop { animation: aw-backdrop-in 200ms ease-out both; }
   .aw-drawer[open] .aw-drawer-content { animation: aw-drawer-in 220ms cubic-bezier(.2,.7,.2,1) both; }
   @keyframes aw-enter {
-    from { opacity: .55; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { transform: translateY(5px); }
+    to { transform: translateY(0); }
   }
   @keyframes aw-backdrop-in {
     from { opacity: 0; }

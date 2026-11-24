@@ -106,12 +106,64 @@ test('uses the referenced PDP gallery when the captured social image is absent',
   assert.equal(result?.imageUrl, 'https://images.tokopedia.net/fixtures/live-single-gallery.jpg');
 });
 
-test('withholds an exact price when social and hydrated amounts disagree', async () => {
+test('prefers the PDP selling price over stale social price metadata', async () => {
   const url = 'https://www.tokopedia.com/lenovo-authorized-surabaya/charger-innergie-by-delta-180w-gaming-adaptor-laptop-universal-t18';
   const body = fixture('live-single').replace('property="product:price:amount" content="1735000"', 'property="product:price:amount" content="999"');
   const result = await extractTokopediaMetadata(url, async () =>
     new Response(body, { headers: { 'content-type': 'text/html' } }));
   assert.equal(result?.storeName, 'Lenovo Authorized Surabaya');
+  assert.deepEqual(result?.price, { amount: 1735000, currency: 'IDR' });
+});
+
+test('uses the rendered product price only from a dedicated, visible price element', async () => {
+  const body = '<html><head><link rel="canonical" href="' + product + '">' +
+    '<meta property="og:title" content="Lamp"></head><body>' +
+    '<div data-testid="lblPDPDetailProductPrice">Rp&nbsp;12.500.000</div>' +
+    '<div data-testid="installment-price">Rp 250.000</div>' +
+    '<div class="product-price-original">Rp 18.000.000</div>' +
+    '<div data-testid="cashback">Rp 500.000</div></body></html>';
+  const result = await extractTokopediaMetadata(product, async () =>
+    new Response(body, { headers: { 'content-type': 'text/html' } }));
+  assert.deepEqual(result?.price, { amount: 12500000, currency: 'IDR' });
+});
+
+test('treats Tokopedia Rp metadata as IDR when no hydration cache is present', async () => {
+  const body = '<html><head><link rel="canonical" href="' + product + '">' +
+    '<meta property="og:title" content="Lamp">' +
+    '<meta property="product:price:amount" content="12500000">' +
+    '<meta property="product:price:currency" content="Rp"></head></html>';
+  const result = await extractTokopediaMetadata(product, async () =>
+    new Response(body, { headers: { 'content-type': 'text/html' } }));
+  assert.deepEqual(result?.price, { amount: 12500000, currency: 'IDR' });
+});
+
+test('uses the selling price and ignores the crossed-out original price and discount labels', async () => {
+  const body = fixture('live-single')
+    .replace('content="1735000"', 'content="15000000"')
+    .replace('"value":1735000', '"value":12500000')
+    .replace('"priceFmt":"Rp1.735.000"', '"priceFmt":"Rp12.500.000"')
+    .replace('"slashPriceFmt":""', '"slashPriceFmt":"Rp15.000.000"')
+    .replace('"discPercentage":""', '"discPercentage":"17%"');
+  const url = 'https://www.tokopedia.com/lenovo-authorized-surabaya/charger-innergie-by-delta-180w-gaming-adaptor-laptop-universal-t18';
+  const result = await extractTokopediaMetadata(url, async () =>
+    new Response(body, { headers: { 'content-type': 'text/html' } }));
+  assert.deepEqual(result?.price, { amount: 12500000, currency: 'IDR' });
+});
+
+test('does not treat a price range as one exact price', async () => {
+  const data = { '@type': 'Product', url: product, name: 'Lamp', offers: {
+    '@type': 'AggregateOffer', lowPrice: '10000', highPrice: '25000', priceCurrency: 'IDR',
+  } };
+  const result = await extractTokopediaMetadata(product, async () =>
+    new Response(graphHtml([data]), { headers: { 'content-type': 'text/html' } }));
+  assert.equal(result?.price, null);
+});
+
+test('withholds rendered text prices without a dedicated price marker', async () => {
+  const result = await extractTokopediaMetadata(product, async () =>
+    new Response('<html><head><link rel="canonical" href="' + product + '"><meta property="og:title" content="Lamp"></head><body>' +
+      '<p>Cashback Rp 500.000, ongkir Rp 25.000, cicilan Rp 300.000</p></body></html>',
+    { headers: { 'content-type': 'text/html' } }));
   assert.equal(result?.price, null);
 });
 

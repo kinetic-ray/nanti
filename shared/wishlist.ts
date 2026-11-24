@@ -1,5 +1,7 @@
 export const currencies = ['USD', 'THB', 'EUR', 'GBP', 'CAD', 'AUD', 'SGD', 'MYR', 'IDR'] as const;
 export type Currency = typeof currencies[number];
+// priceMinor is stored as a signed 32-bit integer in Prisma/MySQL.
+export const maxPriceMinor = 2_147_483_647;
 
 export type WishlistSummary = { id: string; name: string; currency: Currency };
 export type ItemInput = { name: string; url: string | null; priceMinor: number | null; quantity: number; imageKey?: string | null; sellerName?: string | null };
@@ -18,9 +20,10 @@ export type Wishlist = WishlistSummary & {
 
 export function parsePrice(value: string): number | null {
   const price = value.trim();
-  if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(price)) return null;
+  if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(price)) return null;
   const [whole, fraction = ''] = price.split('.');
-  return Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  const minor = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  return Number.isSafeInteger(minor) && minor <= maxPriceMinor ? minor : null;
 }
 
 export function formatPrice(minor: number | string, currency: Currency, locale?: string) {

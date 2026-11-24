@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
-import { currencies } from '../shared/wishlist.js';
+import { currencies, maxPriceMinor } from '../shared/wishlist.js';
 import { isIkeaMetadataLink, productMerchant, safeImportUrl } from '../shared/product-import.js';
 import type { ProductImport } from '../shared/product-import.js';
 import type { previewProductMetadata } from './product-preview.js';
@@ -48,7 +48,7 @@ const itemInput = z.strictObject({
   sellerName: z.string().trim().min(1).max(160).nullable().optional(),
   name: z.string().trim().min(1, 'Enter a product name.').max(160),
   url: productLink.transform(({ original }) => original).nullable(),
-  priceMinor: z.number().int().min(0).max(999_999_999).nullable(),
+  priceMinor: z.number().int().min(0).max(maxPriceMinor).nullable(),
   quantity: z.number().int().min(1).max(999),
   imageKey: z.string().max(255).nullable().optional(),
   priceSource: z.literal('imported_unverified').optional(),
@@ -352,11 +352,19 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
             return res.status(201).json({ photoStatus: 'saved' });
           }
         } catch (error) {
+          const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
+          if (saved) return replay(saved);
           if (!(error instanceof ProductImageWriteError)) throw error;
         }
       }
-      if (await repository.addItem(owner, listId, { ...input, imageKey: null }, requestId)) {
-        return res.status(201).json({ photoStatus: 'unavailable' });
+      try {
+        if (await repository.addItem(owner, listId, { ...input, imageKey: null }, requestId)) {
+          return res.status(201).json({ photoStatus: 'unavailable' });
+        }
+      } catch (error) {
+        const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
+        if (saved) return replay(saved);
+        throw error;
       }
       const saved = (await repository.find(owner, listId))?.items.find(item => item.id === requestId);
       return saved ? replay(saved) : notFound(res);

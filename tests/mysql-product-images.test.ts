@@ -135,6 +135,23 @@ describe.skipIf(!databaseUrl)('MySQL product photos', () => {
       expect(await db.productImage.count({ where: { itemId: idempotencyKey } })).toBe(0);
     });
 
+    it('coalesces concurrent saves using the same request key without duplicate image rows', async () => {
+      const { agent, path, itemPath, save, idempotencyKey } = await setup();
+      try {
+        const responses = await Promise.all([save(), save()]);
+        for (const response of responses) {
+          expect(response.status).toBe(201);
+          expect(response.body).toEqual({ photoStatus: 'saved' });
+        }
+        const { body: list } = await agent.get(path).expect(200);
+        expect(list.items.filter((item: { id: string }) => item.id === idempotencyKey)).toHaveLength(1);
+        expect(await db.productImage.count({ where: { itemId: idempotencyKey } })).toBe(1);
+        await agent.get(itemPath + '/uploaded-image').expect(200).expect('Content-Type', /image\/jpeg/);
+      } finally {
+        await agent.delete(path).set(mutation).send({}).expect(204);
+      }
+    });
+
     it.each(['missing', 'blocked', 'redirect', 'bad-content', 'write-failure'] as const)('saves text with %s', async (mode) => {
       const { agent, itemPath, path, idempotencyKey, save, marketplaceImageRequest } = await setup(mode);
       const write = mysqlStorage.writeProductImage;

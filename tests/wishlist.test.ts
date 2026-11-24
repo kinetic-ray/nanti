@@ -153,6 +153,19 @@ function contract(repository: WishlistRepository) {
     await agent.post(`${path}/items`).set(mutation).send(product).expect(201);
     await agent.delete(path).set(mutation).send({}).expect(204);
   });
+
+  it('accepts imported prices up to the Prisma integer limit and rejects overflow', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/session').set(mutation).send({}).expect(200);
+    const list = await agent.post('/api/wishlists').set(mutation)
+      .send({ name: 'High value product', currency: 'IDR' }).expect(201);
+    const path = `/api/wishlists/${list.body.id}/items`;
+    const amount = { ...product, priceMinor: 1_735_000_000 };
+    await agent.post(path).set(mutation).send(amount).expect(201);
+    await expect(agent.get(`/api/wishlists/${list.body.id}`).expect(200))
+      .resolves.toMatchObject({ body: { items: [expect.objectContaining({ priceMinor: 1_735_000_000 })] } });
+    await agent.post(path).set(mutation).send({ ...product, priceMinor: 2_147_483_648 }).expect(400);
+  });
 }
 
 describe('Wishlist API', () => contract(memoryWishlists()));
@@ -171,7 +184,7 @@ describe.skipIf(!databaseUrl)('Wishlist API with MySQL-compatible persistence', 
       lookupMetadata: async () => ({
         title: name, sellerName, image: 'https://images.tokopedia.net/fixture.jpg',
         productUrl: 'https://www.tokopedia.com/shop/helm',
-        price: { priceMinor: 34500000, currency: 'IDR' as const },
+        price: { priceMinor: 1735000000, currency: 'IDR' as const },
       }),
     };
     const app = createApp({ ...options, repository: prismaWishlists(db) });
@@ -182,7 +195,7 @@ describe.skipIf(!databaseUrl)('Wishlist API with MySQL-compatible persistence', 
       .send({ name: 'Helmet save regression', currency: 'IDR' }).expect(201);
     const { body: preview } = await agent.post('/api/products/import').set(mutation).send({ url }).expect(200);
     expect(preview).toMatchObject({ originalUrl: url, name, sellerName,
-      price: { priceMinor: 34500000, currency: 'IDR' }, imagePath: expect.any(String) });
+      price: { priceMinor: 1735000000, currency: 'IDR' }, imagePath: expect.any(String) });
     expect(preview.canSaveImage).toBeUndefined();
     const input = { name: preview.name, url: preview.originalUrl, sellerName: preview.sellerName,
       priceMinor: preview.price.priceMinor, quantity: 1, imageKey: null, priceSource: 'imported_unverified' };
@@ -191,7 +204,7 @@ describe.skipIf(!databaseUrl)('Wishlist API with MySQL-compatible persistence', 
     const fresh = createApp({ ...options, repository: prismaWishlists(db) });
     const { body: reloaded } = await request(fresh).get(listPath).set('Cookie', cookie).expect(200);
     expect(reloaded.items).toEqual([{ id: expect.any(String), name, url, sellerName,
-      priceMinor: 34500000, quantity: 1, imageKey: null }]);
+      priceMinor: 1735000000, quantity: 1, imageKey: null }]);
     const other = request.agent(fresh);
     await other.post('/api/session').set(mutation).send({}).expect(200);
     await other.get(listPath).expect(404);
@@ -329,7 +342,9 @@ describe('price and URL validation', () => {
     expect(parsePrice(' 0.2 ')).toBe(20);
     expect(parsePrice('0')).toBe(0);
     expect(parsePrice('9999999.99')).toBe(999999999);
-    for (const price of ['', '0.001', '1e3', '1,200', '-1', '10000000']) {
+    expect(parsePrice('10000000')).toBe(1000000000);
+    expect(parsePrice('21474836.47')).toBe(2147483647);
+    for (const price of ['', '0.001', '1e3', '1,200', '-1', '21474836.48']) {
       expect(parsePrice(price)).toBeNull();
     }
     const digits = formatPrice('900719925474099501', 'USD').replace(/[^0-9]/g, '');

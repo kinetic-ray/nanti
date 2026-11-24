@@ -72,7 +72,7 @@ try {
       : ['Tap the creator’s name or profile picture.', 'Tap the Nanti link in the creator’s bio.', 'Type "sneakers" in the search field.'];
     const assertGuidance = async step => {
       const visible = guidance.locator('div:not([aria-hidden])');
-      await visible.getByRole('heading', { level: 3 }).waitFor();
+      await visible.locator('.creator-journey-hint').getByText(hints[step - 1], { exact: true }).waitFor();
       assert.equal(await guidance.getByRole('heading', { level: 3 }).count(), 1);
       assert.equal(await visible.locator('.creator-journey-hint').textContent(), hints[step - 1]);
       assert.deepEqual(await guidance.getByRole('status').allTextContents(), [hints[step - 1]]);

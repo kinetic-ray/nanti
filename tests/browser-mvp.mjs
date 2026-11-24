@@ -94,7 +94,7 @@ try {
   const photo = imported.locator('.import-preview img');
   await photo.evaluate(image => image.decode());
   assert.equal(await imported.getByLabel('Nama produk').inputValue(), 'Lampu fixture IKEA');
-  assert.equal(await imported.getByLabel(/Harga satuan/).inputValue(), '15000,50');
+  assert.equal(await imported.getByLabel(/Harga satuan/).inputValue(), '15.000,50');
   await visible(imported.getByText('Dari halaman toko · belum terverifikasi', { exact: true }).first());
   await axis(390);
   if (artifacts) await page.screenshot({ path: join(artifacts, 'import-review-390.png') });
