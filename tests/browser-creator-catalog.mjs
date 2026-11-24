@@ -7,10 +7,12 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import sharp from 'sharp';
 import { adminCredentialScope, hashAdminPassword } from '../server/admin-credentials.ts';
 import { prismaAffiliate } from '../server/prisma-affiliate.ts';
 import { createApp } from '../server/app.ts';
 import { connectDatabase } from '../server/database.ts';
+import { createMysqlImageStorage } from '../server/mysql-image-storage.ts';
 import { prismaAccounts, tokenHash } from '../server/prisma-accounts.ts';
 import { prismaWishlists } from '../server/prisma-wishlists.ts';
 
@@ -25,18 +27,25 @@ const token = randomBytes(32).toString('base64url');
 const password = randomBytes(24).toString('base64url');
 const secret = randomBytes(32).toString('hex');
 const credentials = { username: 'studio-browser-' + userId.slice(0, 8), passwordHash: await hashAdminPassword(password) };
+const creatorShopeeImage = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#7953b0' } })
+  .webp().toBuffer();
 const app = createApp({
   affiliate: prismaAffiliate(db), admin: credentials, recommendationsDb: db,
-  repository: prismaWishlists(db), consumer: { accounts: prismaAccounts(db), providers: {} },
+  repository: prismaWishlists(db), mysqlImages: createMysqlImageStorage(db),
+  consumer: { accounts: prismaAccounts(db), providers: {} },
   preview: async () => null, secret, secureCookies: false,
   // The upstream retailer is controlled. The browser, Express routes, sessions,
   // database writes and anonymous storefront are the real implementations.
   lookupMetadata: async url => url.pathname.endsWith('/fixture') ? {
     title: 'Imported desk lamp', image: null, price: { priceMinor: 8900000, currency: 'IDR' },
-  } : url.pathname === '/fixture-shopee' ? {
+  } : url.pathname === '/fixture-shopee-i.123.456' ? {
     title: 'Imported Shopee product', image: 'https://down-id.img.susercontent.com/file/fixture',
+    productUrl: 'https://shopee.co.id/fixture-shopee-i.123.456',
     price: { priceMinor: 1200000, currency: 'IDR' },
   } : null,
+  marketplaceImageRequest: async url => url.href === 'https://down-id.img.susercontent.com/file/fixture'
+    ? new Response(Uint8Array.from(creatorShopeeImage), { headers: { 'content-type': 'image/webp' } })
+    : new Response(null, { status: 404 }),
   webRoot: fileURLToPath(new URL('../dist/web/', import.meta.url)),
 });
 const server = createServer(app).listen(0, '127.0.0.1');
@@ -142,14 +151,12 @@ try {
   await button(page, 'Save draft').click();
   await page.getByRole('row').filter({ hasText: 'Imported desk lamp' }).waitFor();
 
-  await page.route('**/api/account/creator/catalog/import-photo', route => route.fulfill({
-    contentType: 'image/jpeg', body: Buffer.from(image, 'base64'),
-  }));
   await button(page, 'Add product').click();
-  await page.getByLabel('Product URL').fill('https://shopee.co.id/fixture-shopee');
+  await page.getByLabel('Product URL').fill('https://shopee.co.id/fixture-shopee-i.123.456');
   await button(page, 'Import details').click();
   await page.getByRole('img', { name: 'Product photo', exact: true }).waitFor();
   assert.equal(await page.getByLabel('Product name').inputValue(), 'Imported Shopee product');
+  assert.equal(await page.getByLabel('Price', { exact: true }).inputValue(), '12,000');
   await button(page, 'Save draft').click();
   const shopee = page.getByRole('row').filter({ hasText: 'Imported Shopee product' });
   await shopee.waitFor();
@@ -162,6 +169,9 @@ try {
   assert.equal(await page.locator('tbody tr').count(), 1);
   await shopee.waitFor();
   assert.equal(await shopee.locator('img').evaluate(async img => { await img.decode(); return img.naturalWidth; }), 64);
+  await button(shopee, 'Edit Imported Shopee product').click();
+  assert.equal(await page.getByLabel('Price', { exact: true }).inputValue(), '12,000');
+  await button(page, 'Cancel').click();
   await page.getByLabel('Source', { exact: true }).selectOption('all');
   await tote.locator('img').waitFor();
   assert.equal(await tote.locator('img').evaluate(async img => { await img.decode(); return img.naturalWidth; }), 64);

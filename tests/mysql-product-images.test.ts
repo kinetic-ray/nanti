@@ -13,6 +13,7 @@ import { downloadMarketplaceImage } from '../server/tokopedia-metadata.js';
 import { compressProductImage } from '../server/product-image-jpeg.js';
 import { createRuntime } from '../server/runtime.js';
 import { signTokopediaImage, verifyTokopediaImage } from '../server/tokopedia-image-proof.js';
+import { signShopeeImage, verifyShopeeImage } from '../server/shopee-image-proof.js';
 
 const listings = [
   { merchant: 'tokopedia', url: 'https://www.tokopedia.com/fixture/helmet', host: 'images.tokopedia.net', format: 'jpeg' },
@@ -40,6 +41,22 @@ it('binds a Tokopedia preview image to the session and listing until the proof e
   } finally {
     clock.mockRestore();
   }
+});
+
+it('binds a Shopee preview image to the owner, submitted link, product, and image until expiry', () => {
+  const now = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+  const secret = randomUUID();
+  const binding = { owner: randomUUID(), listing: 'https://s.shopee.co.id/short?campaign=1',
+    product: 'https://shopee.co.id/lamp-i.123.456', image: 'https://cf.shopee.co.id/file/lamp.webp' };
+  try {
+    const proof = signShopeeImage(secret, binding);
+    expect(verifyShopeeImage(secret, binding, proof)).toBe(true);
+    expect(verifyShopeeImage(secret, { ...binding, owner: randomUUID() }, proof)).toBe(false);
+    expect(verifyShopeeImage(secret, { ...binding, image: 'https://cf.shopee.co.id/file/other.webp' }, proof)).toBe(false);
+    clock.mockReturnValue(now + 5 * 60_000);
+    expect(verifyShopeeImage(secret, binding, proof)).toBe(false);
+  } finally { clock.mockRestore(); }
 });
 
 describe.each(listings)('$merchant downloader', ({ merchant, host, format }) => {
@@ -77,6 +94,119 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
 describe.skipIf(!databaseUrl)('MySQL product photos', () => {
   const db = databaseUrl ? connectDatabase(databaseUrl) : undefined!;
   afterAll(async () => { await db?.$disconnect(); });
+
+  it('keeps Shopee preview price, seller, and image bound through save and reload', async () => {
+    const originalUrl = 'https://s.shopee.co.id/fixture?campaign=one';
+    const productUrl = 'https://shopee.co.id/lamp-i.123.456';
+    const imageUrl = 'https://cf.shopee.co.id/file/lamp.webp';
+    const webp = await raster('webp');
+    const html = '<script type="application/ld+json">' + JSON.stringify({
+      '@context': 'https://schema.org', '@type': 'Product', url: 'https://www.shopee.co.id/lamp-i.123.456',
+      name: 'Lamp', image: imageUrl,
+      offers: { '@type': 'Offer', price: '129000', priceCurrency: 'IDR',
+        seller: { '@type': 'Organization', name: 'Lamp Shop' } },
+    }) + '</script>';
+    const metadataRequest: typeof fetch = async target => String(target) === originalUrl
+      ? new Response(null, { status: 302, headers: { location: productUrl } })
+      : new Response(html, { headers: { 'content-type': 'text/html' } });
+    const imageRequest = vi.fn(async target => {
+      expect(target.href).toBe(imageUrl);
+      return new Response(Uint8Array.from(webp), { headers: { 'content-type': 'image/webp' } });
+    });
+    const secret = randomUUID() + randomUUID();
+    const agent = request.agent(createApp({ secret, secureCookies: false, preview: async () => null,
+      repository: prismaWishlists(db), mysqlImages: createMysqlImageStorage(db),
+      lookupMetadata: target => previewProductMetadata(target, metadataRequest), marketplaceImageRequest: imageRequest }));
+    await agent.post('/api/session').set(mutation).send({}).expect(200);
+    const { body: list } = await agent.post('/api/wishlists').set(mutation)
+      .send({ name: 'Shopee preview consistency', currency: 'IDR' }).expect(201);
+    const path = `/api/wishlists/${list.id}`;
+    const id = randomUUID();
+    try {
+      const { body: preview } = await agent.post('/api/products/import').set(mutation).send({ url: originalUrl }).expect(200);
+      expect(preview).toMatchObject({ name: 'Lamp', sellerName: 'Lamp Shop', productUrl,
+        imagePath: imageUrl, canSaveImage: true, shopeeImageProof: expect.any(String),
+        price: { priceMinor: 12_900_000, currency: 'IDR' } });
+      await agent.post(path + '/items').set(mutation).set('Idempotency-Key', id).send({
+        ...input, name: preview.name, url: originalUrl, sellerName: preview.sellerName, priceMinor: preview.price.priceMinor,
+        priceSource: 'imported_unverified', saveMarketplaceImage: true,
+        shopeeProductUrl: preview.productUrl,
+        shopeeImage: { url: preview.imagePath, proof: preview.shopeeImageProof },
+      }).expect(201, { photoStatus: 'saved' });
+      expect(imageRequest).toHaveBeenCalledOnce();
+      const saved = await agent.get(path).expect(200);
+      expect(saved.body.items).toEqual([expect.objectContaining({ id, url: originalUrl,
+        name: 'Lamp', sellerName: 'Lamp Shop', priceMinor: 12_900_000, imageKey: expect.any(String) })]);
+      const photo = await agent.get(`${path}/items/${id}/uploaded-image`).expect(200).expect('Content-Type', /image\/jpeg/u);
+      expect((await sharp(photo.body).metadata()).format).toBe('jpeg');
+      const center = async (bytes: Buffer) => sharp(bytes).resize(1, 1).raw().toBuffer();
+      const [sourcePixel, savedPixel] = await Promise.all([center(webp), center(photo.body)]);
+      for (let channel = 0; channel < 3; channel++) {
+        expect(Math.abs(sourcePixel[channel]! - savedPixel[channel]!)).toBeLessThanOrEqual(12);
+      }
+    } finally {
+      await agent.delete(path).set(mutation).send({}).expect(204);
+    }
+  });
+
+  it('saves a preview-proven Shopee WebP through S3 storage as a private JPEG', async () => {
+    const originalUrl = 'https://s.shopee.co.id/fixture?campaign=s3';
+    const productUrl = 'https://shopee.co.id/lamp-i.123.456';
+    const imageUrl = 'https://down-id.img.susercontent.com/file/lamp.webp';
+    const source = await raster('webp');
+    const storage = createImageStorage({ NANTI_S3_ENDPOINT: 'https://storage.example.com', NANTI_S3_BUCKET: 'nanti-test',
+      NANTI_S3_REGION: 'auto', NANTI_S3_ACCESS_KEY_ID: 'test', NANTI_S3_SECRET_ACCESS_KEY: 'test' })!;
+    let stored: Buffer | null = null;
+    vi.spyOn(storage, 'storeJpeg').mockImplementation(async (owner, bytes, key) => {
+      stored = Buffer.from(bytes);
+      return key ?? storage.createUpload(owner).key;
+    });
+    vi.spyOn(storage, 'exists').mockResolvedValue(true);
+    vi.spyOn(storage, 'readJpeg').mockImplementation(async () => stored ? Buffer.from(stored) : null);
+    const imageRequest = vi.fn(async (target: URL) => {
+      expect(target.href).toBe(imageUrl);
+      return new Response(Uint8Array.from(source), { headers: { 'content-type': 'image/webp' } });
+    });
+    const secret = randomUUID() + randomUUID();
+    const metadata = { title: 'Shopee lamp', image: imageUrl, productUrl,
+      price: { priceMinor: 129000, currency: 'IDR' as const } };
+    const options = { secret, secureCookies: false, preview: async () => null, imageStorage: storage,
+      lookupMetadata: async () => metadata, marketplaceImageRequest: imageRequest };
+    const app = createApp({ ...options, repository: prismaWishlists(db) });
+    const owner = request.agent(app);
+    const session = await owner.post('/api/session').set(mutation).send({}).expect(200);
+    const cookie = session.headers['set-cookie']![0]!.split(';')[0]!;
+    const { body: list } = await owner.post('/api/wishlists').set(mutation)
+      .send({ name: 'Shopee S3 photo', currency: 'IDR' }).expect(201);
+    const listPath = `/api/wishlists/${list.id}`;
+    const id = randomUUID();
+    try {
+      const { body: preview } = await owner.post('/api/products/import').set(mutation).send({ url: originalUrl }).expect(200);
+      expect(preview).toMatchObject({ imagePath: imageUrl, productUrl, canSaveImage: true,
+        shopeeImageProof: expect.any(String), price: { priceMinor: 129000, currency: 'IDR' } });
+      const input = { name: preview.name, url: originalUrl, sellerName: preview.sellerName, priceMinor: preview.price.priceMinor,
+        quantity: 1, priceSource: 'imported_unverified', saveMarketplaceImage: true, shopeeProductUrl: preview.productUrl,
+        shopeeImage: { url: preview.imagePath, proof: preview.shopeeImageProof } };
+      await owner.post(listPath + '/items').set(mutation).set('Idempotency-Key', id).send(input)
+        .expect(201, { photoStatus: 'saved' });
+      await owner.post(listPath + '/items').set(mutation).set('Idempotency-Key', id).send(input)
+        .expect(201, { photoStatus: 'saved' });
+      expect(imageRequest).toHaveBeenCalledOnce();
+      expect(stored).not.toBeNull();
+      expect((await sharp(stored!).metadata()).format).toBe('jpeg');
+      const fresh = createApp({ ...options, repository: prismaWishlists(db) });
+      const { body: reloaded } = await request(fresh).get(listPath).set('Cookie', cookie).expect(200);
+      expect(reloaded.items).toEqual([expect.objectContaining({ id, url: originalUrl, imageKey: expect.stringMatching(/^products\//) })]);
+      const photoPath = `${listPath}/items/${id}/uploaded-image`;
+      const response = await request(fresh).get(photoPath).set('Cookie', cookie).expect(200).expect('Content-Type', /image\/jpeg/u);
+      expect(response.body).toEqual(stored);
+      const stranger = request.agent(fresh);
+      await stranger.post('/api/session').set(mutation).send({}).expect(200);
+      await stranger.get(photoPath).expect(404);
+    } finally {
+      await owner.delete(listPath).set(mutation).send({}).expect(204);
+    }
+  });
 
   describe.each(listings)('$merchant save', ({ url, host, format }) => {
     async function setup(mode: 'valid' | 'missing' | 'blocked' | 'redirect' | 'bad-content' | 'write-failure' = 'valid') {

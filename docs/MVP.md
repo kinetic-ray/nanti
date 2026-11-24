@@ -16,6 +16,7 @@
 | `NODE_ENV`, `NANTI_TRUST_PROXY` | Public environment mode and optional trusted reverse proxy IP. |
 | `NANTI_IKEA_METADATA_PERMISSION` | Leave blank for manual entry. Set `granted` only with explicit permission covering automated retrieval and reuse of titles and photos from the supported `www.ikea.com` listings. |
 | `NANTI_IKEA_PRICE_METADATA_PERMISSION` | Set `granted` only when that permission also covers price and currency. The title and photo permission must also be enabled. Imported prices are unverified and the wishlist currency must match. |
+| `NANTI_SHOPEE_PRICE_METADATA_PERMISSION` | Leave blank unless automated retrieval and reuse of Shopee's published, exact single-offer price is authorized. Set `granted` only after confirming that permission. Shopee prices remain manual by default; variant, range, conflicting, and unsupported values are withheld. |
 | `AUTH_PUBLIC_ORIGIN`, `AUTH_GOOGLE_*`, `AUTH_APPLE_*` | Optional consumer OAuth. See [authentication setup](AUTHENTICATION.md). |
 | `NANTI_ADMIN_USERNAME`, `NANTI_ADMIN_PASSWORD_HASH` | Optional separate affiliate administration. See [Affiliate Center setup](AFFILIATE_CENTER.md). |
 | `TEST_DATABASE_URL` | Disposable migrated MySQL schema for tests. |
@@ -28,7 +29,7 @@ For a loopback MySQL instance that uses `caching_sha2_password` without TLS, poi
 
 | Retailer | Link intake | Automatic price checks |
 | --- | --- | --- |
-| Shopee | Detects supported storefronts and share links. Review the original link and enter details manually. | Unavailable |
+| Shopee | Detects supported storefronts and share links. Uses matching public product metadata when available; otherwise enter details manually. | Exact structured single-offer price only when `NANTI_SHOPEE_PRICE_METADATA_PERMISSION=granted`; no automatic monitoring. |
 | Tokopedia | Detects the storefront and share links. Review the original link and enter details manually. | Unavailable |
 | IKEA | Recognizes `ikea.com` and `ikea.co.id`. With permission, selected `www.ikea.com` product pages can supply a title and photo. Users review and save details themselves. | Unavailable |
 | Other stores | Keeps a valid public listing link and supports manual entry. | Unavailable |

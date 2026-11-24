@@ -12,6 +12,7 @@ export type ProductImport = {
   imagePath?: string;
   canSaveImage?: boolean;
   tokopediaImageProof?: string;
+  shopeeImageProof?: string;
   productUrl?: string;
   sellerName?: string;
   diagnostic?: { code: string; host: string; httpStatus?: number };

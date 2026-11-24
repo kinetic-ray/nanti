@@ -26,6 +26,7 @@ import { boundedJpeg, downloadMarketplaceImage, downloadShopeeImage, downloadTok
 import { type createMysqlImageStorage, mysqlImageId, newMysqlImageKey, ProductImageWriteError } from './mysql-image-storage.js';
 import { compressProductImage } from './product-image-jpeg.js';
 import { signTokopediaImage, verifyTokopediaImage } from './tokopedia-image-proof.js';
+import { signShopeeImage, verifyShopeeImage } from './shopee-image-proof.js';
 import { accountRoutes } from './account-routes.js';
 import type { Accounts } from './prisma-accounts.js';
 import type { OAuthProviders } from './oauth-providers.js';
@@ -86,13 +87,17 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   const app = express();
   const api = express.Router();
   const cookieName = secureCookies ? '__Host-nanti' : 'nanti';
-  const account = consumer && accountRoutes(consumer.accounts, consumer.providers, secureCookies, cookieName, { lookupMetadata, productMedia });
+  const account = consumer && accountRoutes(consumer.accounts, consumer.providers, secureCookies, cookieName, {
+    lookupMetadata, productMedia, marketplaceImageRequest,
+    verifyShopeeImage: (owner, listing, product, image, proof) => verifyShopeeImage(secret,
+      { owner, listing, product, image }, proof),
+  });
   app.disable('x-powered-by');
   if (trustedProxy) app.set('trust proxy', trustedProxy);
   // Public Shopee preview images are hosted on Shopee's image CDN.
   // Keep all other Helmet CSP protections and allow only the known CDN hosts.
   const imageSources = ["'self'", 'data:', 'https://images.unsplash.com', 'https://*.susercontent.com',
-    'https://susercontent.com', 'https://*.shopee.co.id', 'https://shopee.co.id', 'https://*.googleusercontent.com',
+    'https://susercontent.com', 'https://cf.shopee.co.id', 'https://*.googleusercontent.com',
     'https://*.tokopedia.net', 'https://tokopedia.net', 'https://*.tokopedia.com', 'https://tokopedia.com',
     'https://*.tokopedia-static.net', 'https://tokopedia-static.net',
     'https://*.tiktokcdn.com', 'https://tiktokcdn.com', 'https://*.ibytedtos.com', 'https://ibytedtos.com',
@@ -286,10 +291,13 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   });
   api.post('/wishlists/:listId/items', limitMarketplaceSave, async (req, res) => {
     const listId = uuid.parse(req.params.listId);
-    const { saveMarketplaceImage, saveTokopediaImage, tokopediaProductUrl, tokopediaImage, ...input } = itemInput.extend({
+    const { saveMarketplaceImage, saveTokopediaImage, tokopediaProductUrl, tokopediaImage,
+      shopeeProductUrl, shopeeImage, ...input } = itemInput.extend({
       saveMarketplaceImage: z.literal(true).optional(),
       saveTokopediaImage: z.literal(true).optional(), tokopediaProductUrl: z.string().max(2048).optional(),
       tokopediaImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
+      shopeeProductUrl: z.string().max(2048).optional(),
+      shopeeImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
     }).parse(req.body);
     const owner = res.locals.ownerId as string;
     if (input.imageKey && !(mysqlImages && mysqlImageId(input.imageKey)) &&
@@ -335,11 +343,16 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
         const verifiedImage = merchant === 'tokopedia' && tokopediaImage && tokopediaProductUrl &&
           verifyTokopediaImage(secret, { owner, listing: listing.href, product: tokopediaProductUrl, image: tokopediaImage.url },
             tokopediaImage.proof) ? tokopediaImage.url : null;
+        const verifiedShopeeImage = merchant === 'shopee' && shopeeImage && shopeeProductUrl &&
+          verifyShopeeImage(secret, { owner, listing: listing.href, product: shopeeProductUrl, image: shopeeImage.url },
+            shopeeImage.proof) ? shopeeImage.url : null;
         if (verifiedImage) photo = await loadPhoto(verifiedImage);
-        if (!photo) {
+        if (verifiedShopeeImage) photo = await loadPhoto(verifiedShopeeImage);
+        if (!photo && !verifiedShopeeImage && !shopeeImage) {
           const metadata = await lookupMetadata?.(listing);
           if (metadata?.image && metadata.image !== verifiedImage &&
-              (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl)) {
+              (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl) &&
+              (!shopeeProductUrl || metadata.productUrl === shopeeProductUrl)) {
             photo = await loadPhoto(metadata.image);
           }
         }
@@ -379,15 +392,22 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     if (imageStorage && lookupMetadata) {
       let allocatedKey: string | undefined;
       try {
-        // Recheck the original product link. No client-provided CDN URL is fetched.
-        const metadata = await lookupMetadata(listing);
-        const download = merchant === 'tokopedia' ? downloadTokopediaImage : downloadShopeeImage;
-        const bytes = metadata?.image && (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl) &&
-          await download(metadata.image);
-        if (bytes) {
+        const verifiedShopeeImage = merchant === 'shopee' && shopeeImage && shopeeProductUrl &&
+          verifyShopeeImage(secret, { owner, listing: listing.href, product: shopeeProductUrl, image: shopeeImage.url },
+            shopeeImage.proof) ? shopeeImage.url : null;
+        // A Shopee image URL is fetched only when its short-lived server proof matches this owner and listing.
+        const metadata = verifiedShopeeImage || shopeeImage ? null : await lookupMetadata(listing);
+        const metadataMatches = metadata?.image && (!tokopediaProductUrl || metadata.productUrl === tokopediaProductUrl) &&
+          (!shopeeProductUrl || metadata.productUrl === shopeeProductUrl);
+        const imageUrl = verifiedShopeeImage ?? (metadataMatches ? metadata.image : null);
+        const bytes = imageUrl ? merchant === 'shopee'
+          ? await downloadMarketplaceImage('shopee', imageUrl, marketplaceImageRequest)
+          : await downloadTokopediaImage(imageUrl) : null;
+        const photo = bytes && merchant === 'shopee' ? await compressProductImage(bytes, true) : bytes;
+        if (photo) {
           const scope = list.scopeId ?? owner;
           allocatedKey = imageStorage.createUpload(scope).key;
-          imageKey = await imageStorage.storeJpeg(scope, bytes, allocatedKey);
+          imageKey = await imageStorage.storeJpeg(scope, photo, allocatedKey);
         }
       } catch {
         // A store or bucket failure must not block saving the item.
@@ -473,6 +493,12 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
           owner: res.locals.ownerId, listing: url.href, product: meta.productUrl, image: imagePath,
         }),
       }),
+      ...(merchant === 'shopee' && (mysqlImages || imageStorage) && meta?.productUrl && imagePath && {
+        shopeeImageProof: signShopeeImage(secret, {
+          owner: res.locals.ownerId, listing: url.href, product: meta.productUrl, image: imagePath,
+        }),
+      }),
+      ...(merchant === 'shopee' && meta?.productUrl && { productUrl: meta.productUrl }),
       ...(imagePath && { imagePath }),
       ...(meta?.price && { price: meta.price }),
       ...(meta?.sellerName && { sellerName: meta.sellerName }),

@@ -4,6 +4,7 @@ import { isIkeaMetadataLink, productMerchant } from '../shared/product-import.js
 import type { ProductImport } from '../shared/product-import.js';
 import { currencies, parsePrice } from '../shared/wishlist.js';
 import { extractTokopediaMetadata, requestPublicPage } from './tokopedia-metadata.js';
+import { extractShopeeMetadata } from './shopee-metadata.js';
 
 type Diagnostic = (reason: string, host: string, status?: number) => void;
 type ProductPreview = { title: string | null; image: string | null; price: NonNullable<ProductImport['price']> | null; sellerName?: string; productUrl?: string };
@@ -13,7 +14,6 @@ const MAX_BYTES = 512 * 1024;
 export async function previewProduct(url: URL, request?: typeof fetch): Promise<string | null> {
   return (await previewProductMetadata(url, request))?.title ?? null;
 }
-
 export async function previewProductMetadata(url: URL, request?: typeof fetch, onDiagnostic?: Diagnostic): Promise<ProductPreview | null> {
   const merchant = productMerchant(url.hostname);
   if (merchant === 'tokopedia') {
@@ -34,7 +34,11 @@ export async function previewProductMetadata(url: URL, request?: typeof fetch, o
       ...(metadata.storeName && { sellerName: metadata.storeName.slice(0, 160) }),
     };
   }
-  if (merchant === 'shopee') return previewMarketplaceMetadata(url, request, onDiagnostic);
+  if (merchant === 'shopee') return extractShopeeMetadata(url, request, (reason, host, status) => {
+    console.info('[product-import]', { merchant, host: host || url.hostname, reason,
+      ...(status === undefined ? {} : { status }) });
+    onDiagnostic?.(reason, host || url.hostname, status);
+  });
   request ??= fetch;
   if (!isIkeaMetadataLink(url)) {
     onDiagnostic?.('adapter_disabled', url.hostname);
@@ -138,185 +142,4 @@ function productOffers(data: unknown, url: URL): NonNullable<ProductImport['pric
       return price ? [price] : [];
     });
   });
-}
-
-const shopeeHosts = new Set([
-  's.shopee.co.id', 'shopee.co.id', 'shopee.com', 'shopee.sg',
-  'shopee.com.my', 'shopee.co.th', 'shopee.vn', 'shopee.ph',
-  'shopee.com.br', 'shope.ee', 'www.shopee.co.id',
-]);
-function isShopeeHost(host: string) { return shopeeHosts.has(host.toLowerCase().replace(/^www\./u, '')); }
-
-function shopeeListingKey(url: URL): string | null {
-  const match = url.pathname.match(/^\/product\/(\d+)\/(\d+)\/?$/u) ??
-    url.pathname.match(/^\/[^/]*-i\.(\d+)\.(\d+)\/?$/u);
-  return match ? url.hostname.replace(/^www\./u, '') + '/' + match[1] + '/' + match[2] : null;
-}
-
-async function previewMarketplaceMetadata(initial: URL, request: typeof fetch | undefined, onDiagnostic?: (reason: string, host: string, status?: number) => void) {
-  const diagnostic = (reason: string, host: string, status?: number) => {
-    // No full URLs, query strings, affiliate codes or product identifiers in logs.
-    console.info('[product-import]', { merchant: productMerchant(initial.hostname), host, reason, ...(status === undefined ? {} : { status }) });
-    onDiagnostic?.(reason, host, status);
-  };
-  let current = new URL(initial.href);
-  let hop = 0;
-  try {
-    current.hash = '';
-    const allowed = (url: URL) => url.protocol === 'https:' && isShopeeHost(url.hostname) &&
-      !url.username && !url.password && !url.port && url.href.length <= 4096;
-    if (!allowed(current)) { diagnostic('redirect_disallowed', current.hostname); return null; }
-    const visited = new Set<string>();
-    let listing = shopeeListingKey(current);
-    const deadline = AbortSignal.timeout(5000);
-    for (hop = 0; hop < 6; hop++) {
-      visited.add(current.href);
-      const signal = AbortSignal.any([deadline, AbortSignal.timeout(3500)]);
-      const response = request
-        ? await request(current, { redirect: 'manual', signal, headers: { accept: 'text/html' } })
-        : await requestPublicPage(current, signal);
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get('location');
-        await response.body?.cancel();
-        if (!location) { diagnostic('redirect_missing_location', current.hostname, response.status); return null; }
-        const target = URL.parse(location, current);
-        if (!target || !allowed(target)) { diagnostic('redirect_disallowed', current.hostname, response.status); return null; }
-        target.hash = '';
-        if (visited.has(target.href)) { diagnostic('redirect_limit', current.hostname, response.status); return null; }
-        const targetListing = shopeeListingKey(target);
-        if (listing && targetListing !== listing) { diagnostic('redirect_disallowed', current.hostname, response.status); return null; }
-        listing ??= targetListing;
-        current = target;
-        continue;
-      }
-      const mime = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
-      const issue = response.status !== 200 ? 'http_failure' : mime !== 'text/html' ? 'not_html' :
-        !response.body ? 'empty_response' : null;
-      if (issue || !response.body) {
-        diagnostic(issue ?? 'empty_response', current.hostname, response.status);
-        await response.body?.cancel();
-        return null;
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let html = '';
-      let total = 0;
-      try {
-        while (total < MAX_BYTES) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const length = Math.min(value.byteLength, MAX_BYTES - total);
-          total += length;
-          html += decoder.decode(value.subarray(0, length), { stream: true });
-          if (/<\/head\s*>/i.test(html)) break;
-        }
-      } finally { await reader.cancel(); }
-      const document = parse(html + decoder.decode());
-      const root = document.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
-        'tagName' in node && node.tagName === 'html');
-      const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
-        'tagName' in node && node.tagName === 'head');
-      const matchesPage = (value: string) => {
-        const url = URL.parse(value, current);
-        if (!url || !allowed(url)) return false;
-        return listing ? shopeeListingKey(url) === listing :
-          url.origin === current.origin && url.pathname === current.pathname;
-      };
-      const tags = new Map<string, string>();
-      for (const node of head?.childNodes ?? []) {
-        if (!('tagName' in node)) continue;
-        const attr = (name: string) => node.attrs.find(a => a.name === name)?.value;
-        const key = (attr('property') ?? attr('name'))?.toLowerCase();
-        const content = attr('content')?.trim();
-        const canonical = node.tagName === 'link' && attr('rel')?.toLowerCase().split(/\s+/u).includes('canonical')
-          ? attr('href') : node.tagName === 'meta' && key === 'og:url' ? content : undefined;
-        if (canonical && !matchesPage(canonical)) {
-          diagnostic('metadata_missing', current.hostname, response.status);
-          return null;
-        }
-        if (node.tagName === 'meta' && key && content && !tags.has(key)) tags.set(key, content);
-      }
-      // Prefer public social preview tags, then structured Product data if available.
-      let hasProduct = false;
-      let structuredTitle: string | null = null;
-      let structuredImage: string | null = null;
-      const offers: NonNullable<ProductImport['price']>[] = [];
-      let conflictingPrices = false;
-      for (const node of head?.childNodes ?? []) {
-        if (!('tagName' in node) || node.tagName !== 'script' ||
-            !node.attrs.some(a => a.name === 'type' && a.value.toLowerCase() === 'application/ld+json')) continue;
-        const content = node.childNodes[0];
-        if (!content || !('value' in content)) continue;
-        try {
-          const parsed: unknown = JSON.parse(content.value);
-          const entries: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
-          for (const entry of entries) {
-            if (!entry || typeof entry !== 'object') continue;
-            const graph = '@graph' in entry && Array.isArray(entry['@graph']) ? entry['@graph'] : [];
-            for (const value of [entry, ...graph]) {
-              if (!value || typeof value !== 'object' || !('@type' in value)) continue;
-              const kind = value['@type'];
-              if (kind !== 'Product' && !(Array.isArray(kind) && kind.includes('Product'))) continue;
-              const reference = 'url' in value ? value.url : '@id' in value ? value['@id'] : undefined;
-              if (reference !== undefined && (typeof reference !== 'string' || !matchesPage(reference))) continue;
-              if (!listing && !reference) continue;
-              hasProduct = true;
-              if ('name' in value && typeof value.name === 'string') structuredTitle ??= value.name;
-              const photos = 'image' in value ? value.image : null;
-              const photo = Array.isArray(photos) ? photos[0] : photos;
-              if (typeof photo === 'string') structuredImage ??= photo;
-              else if (photo && typeof photo === 'object' && 'url' in photo && typeof photo.url === 'string') structuredImage ??= photo.url;
-              // Only trust an explicit single Product Offer for the current listing.
-              // Aggregate/variant price ranges must not become a fabricated exact price.
-              const rawOffers = 'offers' in value ? value.offers : null;
-              const singleOffer = Array.isArray(rawOffers) ? (rawOffers.length === 1 ? rawOffers[0] : null) : rawOffers;
-              if (singleOffer && typeof singleOffer === 'object' &&
-                  '@type' in singleOffer && singleOffer['@type'] === 'Offer' &&
-                  'price' in singleOffer && 'priceCurrency' in singleOffer) {
-                const offer = parseOffer(singleOffer.price, singleOffer.priceCurrency);
-                if (offer) offers.push(offer);
-              }
-            }
-          }
-        } catch { /* Ignore malformed structured data. */ }
-      }
-      if (!listing && !hasProduct) {
-        diagnostic('metadata_missing', current.hostname, response.status);
-        return null;
-      }
-      const socialOffer = parseOffer(tags.get('product:price:amount'), tags.get('product:price:currency'));
-      if (socialOffer) offers.push(socialOffer);
-      const firstOffer = offers[0];
-      conflictingPrices = offers.some(offer => firstOffer &&
-        (offer.priceMinor !== firstOffer.priceMinor || offer.currency !== firstOffer.currency));
-      const price = !conflictingPrices && firstOffer ? firstOffer : null;
-      const title = (tags.get('og:title') ?? tags.get('twitter:title') ??
-        structuredTitle ?? '').slice(0, 160) || null;
-      const candidates = [tags.get('og:image'), tags.get('og:image:secure_url'),
-        tags.get('twitter:image'), tags.get('twitter:image:src'), structuredImage];
-      let image: string | null = null;
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        try {
-          const parsed = new URL(candidate, current);
-          // Only publicly hosted Shopee image-CDN URLs; no arbitrary image fetching.
-          const host = parsed.hostname.toLowerCase();
-          if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port && parsed.href.length <= 2048 &&
-              (host === 'susercontent.com' || host.endsWith('.susercontent.com') ||
-               host === 'shopee.co.id' || host.endsWith('.shopee.co.id'))) {
-            image = parsed.href;
-            break;
-          }
-        } catch { /* Invalid image URL. */ }
-      }
-      if (!title && !image && !price) diagnostic('metadata_missing', current.hostname, response.status);
-      return title || image || price ? { title, image, price } : null;
-    }
-    diagnostic('redirect_limit', current.hostname);
-    return null;
-  } catch (error) {
-    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
-    diagnostic(timeout ? (hop > 0 ? 'destination_timeout' : 'timeout') : 'request_error', current.hostname);
-    return null;
-  }
 }

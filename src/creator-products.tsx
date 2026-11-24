@@ -323,7 +323,8 @@ function ProductEditor({ entry, collections, close, saved }: {
       const canImportPhoto = (photo === null && !item?.image) || photo === 'import';
       if (result.imagePath && canImportPhoto) {
         try {
-          setImportedPhoto(await retailerPhoto(result.productUrl ?? url.trim(), result.imagePath));
+          setImportedPhoto(await retailerPhoto(url.trim(), result.imagePath,
+            result.productUrl, result.shopeeImageProof));
           setPhoto('import');
         } catch {
           setImportNotice(l('Detail diimpor. Foto belum tersedia dan bisa kamu unggah sendiri.', 'Details were imported. You can upload a photo.'));
@@ -489,7 +490,7 @@ async function photoBase64(blob: Blob) {
   return encoded;
 }
 
-async function retailerPhoto(url: string, preview: string) {
+async function retailerPhoto(url: string, preview: string, productUrl?: string, proof?: string) {
   if (preview.startsWith('/api/products/import/image?')) {
     const response = await fetch(preview, { redirect: 'error' });
     if (response.ok) {
@@ -499,7 +500,7 @@ async function retailerPhoto(url: string, preview: string) {
   }
   const response = await fetch('/api/account/creator/catalog/import-photo', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nanti-Request': '1' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, ...(productUrl && proof && { productUrl, imageUrl: preview, proof }) }),
   });
   if (response.status === 401) throw new Error('Sign in to continue.');
   if (!response.ok) throw new Error('Retailer photo unavailable');

@@ -24,6 +24,7 @@ const runtimeConfig = z.object({
   NANTI_TRUST_PROXY: z.string().refine(value => !value || isIP(value) !== 0).default(''),
   NANTI_IKEA_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
   NANTI_IKEA_PRICE_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
+  NANTI_SHOPEE_PRICE_METADATA_PERMISSION: z.enum(['', 'granted']).default(''),
   NANTI_ADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
   NANTI_ADMIN_PASSWORD_HASH: z.string().regex(adminHashPattern).or(z.literal('')).default(''),
   NANTI_RECOMMENDATION_SUPERADMIN_USERNAME: z.string().regex(adminUsernamePattern).or(z.literal('')).default(''),
@@ -32,6 +33,12 @@ const runtimeConfig = z.object({
 });
 const poolLimit = z.coerce.number().int().min(2).max(10).default(3);
 const cronSecret = z.string().regex(/^[A-Za-z0-9_-]{16,}$/u);
+
+export function marketplacePriceAllowed(merchant: string, permissions: Pick<NodeJS.ProcessEnv,
+  'NANTI_IKEA_PRICE_METADATA_PERMISSION' | 'NANTI_SHOPEE_PRICE_METADATA_PERMISSION'>): boolean {
+  return merchant === 'tokopedia' || (merchant === 'ikea' && permissions.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted') ||
+    (merchant === 'shopee' && permissions.NANTI_SHOPEE_PRICE_METADATA_PERMISSION === 'granted');
+}
 
 export async function createRuntime(environment: NodeJS.ProcessEnv, options: { vercel?: boolean; webRoot?: string }) {
   const config = runtimeConfig.safeParse(environment);
@@ -111,8 +118,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
       const merchant = productMerchant(url.hostname);
       if (!ikeaMetadataAllowed && merchant !== 'shopee' && merchant !== 'tokopedia') return null;
       const metadata = await previewProductMetadata(url, request, onDiagnostic);
-      return metadata && { ...metadata, price: merchant === 'tokopedia' || (merchant === 'ikea' &&
-        env.NANTI_IKEA_PRICE_METADATA_PERMISSION === 'granted') ? metadata.price : null };
+      return metadata && { ...metadata, price: marketplacePriceAllowed(merchant, env) ? metadata.price : null };
     },
     productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,
     imageStorage: createImageStorage(environment),

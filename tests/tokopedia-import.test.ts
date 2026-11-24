@@ -110,7 +110,7 @@ it('revalidates the resolved listing and issues only an owner-scoped stored phot
 
 describe.each([
   { short: 'https://s.shopee.co.id/114aBAsydf', product: 'https://www.shopee.co.id/lamp-i.123.456',
-    blocked: 'http_failure', gone: 'http_failure' },
+    blocked: 'access_blocked', gone: 'listing_unavailable' },
   { short: 'https://tk.tokopedia.com/ZSp76BWQL/', product: listing,
     blocked: 'access_blocked', gone: 'listing_unavailable' },
 ])('marketplace short-link fallback for $short', ({ short, product, blocked, gone }) => {
