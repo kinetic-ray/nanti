@@ -70,7 +70,7 @@ function collectProducts(json: unknown): Record<string, unknown>[] {
   });
 }
 
-function readHead(html: string, current: URL, key: string | null, status: number,
+function readProductPage(html: string, current: URL, key: string | null, status: number,
   onDiagnostic: Diagnostic | undefined, requireProductIdentity = false): ShopeeMetadata | null {
   const document = parse(html);
   const root = document.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
@@ -78,7 +78,12 @@ function readHead(html: string, current: URL, key: string | null, status: number
   const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
     'tagName' in node && node.tagName === 'head');
   const tags = new Map<string, string>();
-  const scripts: string[] = [];
+  const scripts: { source: string; requireReference: boolean }[] = [];
+  const readScript = (node: DefaultTreeAdapterTypes.Element, requireReference: boolean) => {
+    if (node.tagName !== 'script' || node.attrs.find(attr => attr.name === 'type')?.value.toLowerCase() !== 'application/ld+json') return;
+    const text = node.childNodes.find(child => 'value' in child);
+    if (text && 'value' in text) scripts.push({ source: text.value, requireReference });
+  };
   for (const node of head?.childNodes ?? []) {
     if (!('tagName' in node)) continue;
     const attr = (name: string) => node.attrs.find(entry => entry.name === name)?.value;
@@ -91,10 +96,17 @@ function readHead(html: string, current: URL, key: string | null, status: number
       return null;
     }
     if (node.tagName === 'meta' && name && content && !tags.has(name)) tags.set(name, content);
-    if (node.tagName === 'script' && attr('type')?.toLowerCase() === 'application/ld+json') {
-      const text = node.childNodes.find(child => 'value' in child);
-      if (text && 'value' in text) scripts.push(text.value);
-    }
+    readScript(node, false);
+  }
+  const body = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => 'tagName' in node && node.tagName === 'body');
+  const bodyNodes = [...body?.childNodes ?? []];
+  let appShell = false;
+  while (bodyNodes.length) {
+    const node = bodyNodes.pop()!;
+    if (!('tagName' in node)) continue;
+    if (!node.childNodes.length && node.attrs.some(attr => attr.name === 'id' && attr.value === 'main')) appShell = true;
+    readScript(node, true);
+    for (const child of node.childNodes) bodyNodes.push(child);
   }
 
   let title: string | null = null;
@@ -103,7 +115,7 @@ function readHead(html: string, current: URL, key: string | null, status: number
   let hasVariantSignal = false;
   const offers: NonNullable<ProductImport['price']>[] = [];
   const sellers = new Set<string>();
-  for (const source of scripts) {
+  for (const { source, requireReference } of scripts) {
     let decoded: unknown;
     try { decoded = JSON.parse(source); } catch { continue; }
     for (const value of collectProducts(decoded)) {
@@ -111,7 +123,7 @@ function readHead(html: string, current: URL, key: string | null, status: number
       if (!hasType(value['@type'], 'Product')) continue;
       const reference = value.url ?? value['@id'];
       if (reference !== undefined && !identityMatches(reference, current, key)) continue;
-      if (reference === undefined && !key) continue;
+      if (reference === undefined && (!key || requireReference)) continue;
       products.push(value);
       if (typeof value.name === 'string' && !title) title = value.name.trim().slice(0, 160) || null;
       if ('hasVariant' in value || 'isVariantOf' in value || 'isAccessoryOrSparePartFor' in value) hasVariantSignal = true;
@@ -160,7 +172,7 @@ function readHead(html: string, current: URL, key: string | null, status: number
   const price = !hasVariantSignal && products.length === 1 && offers.length === 1 && first &&
     offers.every(row => row.priceMinor === first.priceMinor && row.currency === first.currency) ? first : null;
   if (!title && !safeImage && !price && sellers.size !== 1) {
-    onDiagnostic?.('metadata_missing', current.hostname, status);
+    onDiagnostic?.(appShell ? 'storefront_shell' : 'metadata_missing', current.hostname, status);
     return null;
   }
   const productUrl = new URL(current.href);
@@ -231,7 +243,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
           const length = Math.min(value.byteLength, maxBytes - total);
           total += length;
           html += decoder.decode(value.subarray(0, length), { stream: true });
-          if (/<\/head\s*>/iu.test(html)) break;
+          if (/<\/html\s*>/iu.test(html)) break;
         }
       } finally { await reader.cancel(); }
       html += decoder.decode();
@@ -239,7 +251,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         diagnostic('captcha_required', response.status);
         return null;
       }
-      return readHead(html, current, key, response.status, onDiagnostic,
+      return readProductPage(html, current, key, response.status, onDiagnostic,
         key === null);
     }
     diagnostic('redirect_limit');

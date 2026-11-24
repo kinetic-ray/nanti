@@ -290,7 +290,17 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     skip: req => !req.body?.saveMarketplaceImage && !req.body?.saveTokopediaImage,
     message: { error: 'Too many store photo requests. Try again shortly.' },
   });
-  api.post('/wishlists/:listId/items', limitMarketplaceSave, async (req, res) => {
+  api.post('/wishlists/:listId/items', (req, res, next) => {
+    const requestId = randomUUID();
+    const started = performance.now();
+    res.locals.productSaveRequestId = requestId;
+    res.set('X-Nanti-Request-Id', requestId);
+    res.once('finish', () => console.info('Product save response', {
+      requestId, status: res.statusCode, elapsedMs: Math.round(performance.now() - started),
+      code: res.locals.productSaveCode,
+    }));
+    next();
+  }, limitMarketplaceSave, async (req, res) => {
     const listId = uuid.parse(req.params.listId);
     const { saveMarketplaceImage, saveTokopediaImage, tokopediaProductUrl, tokopediaImage,
       shopeeProductUrl, shopeeImage, ...input } = itemInput.extend({
@@ -301,7 +311,13 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       shopeeImage: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
     }).parse(req.body);
     const owner = res.locals.ownerId as string;
-    const requestId = req.get('Idempotency-Key') ? uuid.parse(req.get('Idempotency-Key')) : undefined;
+    const key = req.get('Idempotency-Key');
+    const parsedKey = key ? uuid.safeParse(key) : undefined;
+    if (parsedKey && !parsedKey.success) {
+      res.locals.productSaveCode = 'invalid_save_key';
+      return res.status(400).json({ code: 'invalid_save_key', error: 'Reopen the product form to start a new save.' });
+    }
+    const requestId = parsedKey?.data;
     if ((saveMarketplaceImage || saveTokopediaImage) && !input.imageKey && !requestId) {
       return res.status(400).json({ error: 'This product save expired. Check the details and submit it again.' });
     }
@@ -319,7 +335,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const findSaved = async () => requestId
       ? (await repository.find(owner, listId))?.items.find(item => item.id === requestId)
       : undefined;
-    const existing = await findSaved();
+    const existing = requestId ? list.items.find(item => item.id === requestId) : undefined;
     if (existing) return replay(existing);
     if (input.imageKey && !(mysqlImages && mysqlImageId(input.imageKey)) &&
       (mysqlImages || !imageStorage?.validKey(owner, input.imageKey) || !await imageStorage.exists(input.imageKey))) {
@@ -571,6 +587,18 @@ const handleError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
     return;
   }
   if (error instanceof z.ZodError) {
+    if (res.locals.productSaveRequestId) {
+      const issue = error.issues[0];
+      const field = issue?.path[0];
+      const message = field === 'name' ? 'Enter a product name up to 160 characters.' :
+        field === 'quantity' ? 'Enter a whole number from 1 to 999.' :
+        field === 'priceMinor' ? 'Check the product price and try again.' :
+        field === 'url' ? 'Enter a valid HTTP or HTTPS product link, or leave it blank.' :
+        'Check the product details. If the problem continues, reopen the form.';
+      res.locals.productSaveCode = 'invalid_product_details';
+      res.status(400).json({ code: 'invalid_product_details', error: message });
+      return;
+    }
     res.status(400).json({ error: error.issues[0]?.message ?? 'Check the details you entered.' });
     return;
   }
@@ -581,6 +609,12 @@ const handleError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
   }
   if (status === 400 || status === 413 || status === 415) {
     res.status(status).json({ error: 'The request body is invalid or too large.' });
+    return;
+  }
+  if (res.locals.productSaveFailed && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028') {
+    res.locals.productSaveCode = 'product_save_transaction_unavailable';
+    console.error('Product save failed', { requestId: res.locals.productSaveRequestId, code: error.code, status: 503 });
+    res.status(503).json({ code: res.locals.productSaveCode, error: 'Saving took too long. Your details are still here. Wait a moment and try saving again.' });
     return;
   }
   if (res.locals.productSaveFailed && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

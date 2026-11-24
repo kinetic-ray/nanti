@@ -424,6 +424,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
               not_html: ['Toko tidak mengembalikan halaman HTML.', 'The store did not return an HTML page.'],
               empty_response: ['Toko mengembalikan respons tanpa isi halaman.', 'The store returned an empty page response.'],
               metadata_missing: ['Halaman terbuka, tetapi metadata produk tidak ditemukan.', 'The page loaded, but no product metadata was found.'],
+              storefront_shell: ['Shopee belum menampilkan detail produk. Kamu bisa isi detailnya secara manual.', 'Shopee did not provide product details. You can enter them manually.'],
               adapter_disabled: ['Pengambilan metadata otomatis belum tersedia untuk format tautan ini.', 'Automatic metadata lookup is not available for this link format.'],
               unsupported_url: ['Toko dikenali, tetapi preview otomatis belum didukung untuk tautan ini.', 'The store was recognized, but automatic preview is not supported for this link.'],
               metadata_unavailable: ['Adapter tidak menghasilkan detail maupun alasan spesifik.', 'The adapter returned no details or specific failure reason.'],

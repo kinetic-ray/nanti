@@ -46,32 +46,49 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
       return (await db.wishlist.deleteMany({ where: { id, dataOwner: authorizedOwner(ownerId) } })).count > 0;
     },
     async addItem(ownerId, wishlistId, { priceSource, ...data }, requestId, photo) {
+      const started = performance.now();
+      let stage = 'begin';
       try {
         const result = await db.$transaction(async (tx) => {
+          stage = 'ownership';
           const list = await tx.wishlist.findFirst({
             where: { id: wishlistId, dataOwner: authorizedOwner(ownerId) }, select: { ownerId: true, currency: true },
           });
           if (!list || !await lockOwner(tx, list.ownerId, ownerId)) return false;
+          stage = 'idempotency';
           if (requestId && await tx.item.findUnique({ where: { id: requestId }, select: { id: true } })) return false;
+          stage = 'catalog';
           const identity = data.url ? await getOrCreateProductIdentity(tx, data.url) : null;
+          stage = 'item';
           const created = await tx.item.create({
             data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId: identity?.id ?? null }, select: { id: true },
           });
           if (data.imageKey && mysqlImageId(data.imageKey)) {
+            stage = 'image';
             if (photo) await writeProductImage(tx, data.imageKey, list.ownerId, photo, created.id);
             else await attachProductImage(tx, data.imageKey, ownerId, created.id);
           }
           if (data.priceMinor !== null) {
-            await recordObservation(tx, { ownerId: list.ownerId, wishlistId, itemId: created.id }, data.priceMinor, list.currency,
-              priceSource ?? 'manual');
+            stage = 'price';
+            // A new item has no observations or target to look up.
+            await tx.priceObservation.createMany({ data: [{ ownerId: list.ownerId, wishlistId, itemId: created.id,
+              priceMinor: data.priceMinor, currency: list.currency, source: priceSource ?? 'manual' }] });
           }
+          stage = 'commit';
           return { identity };
-        }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, maxWait: 8_000, timeout: 15_000 });
         if (!result) return false;
         await notifyNewProduct(db, result.identity);
         return true;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') return false;
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2003') return false;
+          if (error.code === 'P2028') console.error('Product save transaction failed', {
+            stage, elapsedMs: Math.round(performance.now() - started),
+            reason: /expired transaction/iu.test(error.message) ? 'expired' :
+              /unable to start/iu.test(error.message) ? 'start_timeout' : 'unknown',
+          });
+        }
         throw error;
       }
     },

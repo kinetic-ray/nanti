@@ -1,4 +1,5 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { adminCredentialScope, digest, hashAdminPassword } from '../server/admin-credentials.js';
@@ -166,6 +167,30 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     expect(purchase.headers['cache-control']).toBe('no-store');
     await second.agent.get(`${first.path}/items/${item.id}/purchase`).expect(404);
   });
+
+  it('saves on the first attempt when the ownership lock exceeds the default transaction deadline', async () => {
+    const fixture = await wishlist();
+    const { canonical, key } = listing();
+    let resolve!: () => void;
+    const locked = new Promise<void>(ready => { resolve = ready; });
+    const hold = db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM DataOwner WHERE id = ${fixture.ownerId} FOR UPDATE`;
+      resolve();
+      await delay(5_700);
+    }, { timeout: 12_000 });
+    const input = { name: 'Slow database fixture', url: canonical, priceMinor: 5000, quantity: 1 };
+    const id = randomUUID();
+    try {
+      await Promise.race([locked, hold]);
+      await fixture.agent.post(`${fixture.path}/items`).set(mutation).set('Idempotency-Key', id).send(input).expect(201);
+      const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: key }, select: { id: true } });
+      expect(await db.item.findUnique({ where: { id } })).toMatchObject({ productIdentityId: identity.id, url: canonical });
+      expect(await db.priceObservation.count({ where: { itemId: id, priceMinor: 5000 } })).toBe(1);
+      expect(await db.adminNotification.count({ where: { eventKey: `opportunity:${identity.id}` } })).toBe(1);
+    } finally {
+      await hold;
+    }
+  }, 20_000);
 
   it('commits a product save when the review notification write fails', async () => {
     const { canonical, key } = listing();

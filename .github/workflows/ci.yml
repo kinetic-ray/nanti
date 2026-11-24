@@ -123,3 +123,41 @@ jobs:
           path: test-results/
           if-no-files-found: warn
           retention-days: 14
+
+  tidb-product-submission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: mysql://root@127.0.0.1:4000/nanti_product_test
+      TEST_DATABASE_URL: mysql://root@127.0.0.1:4000/nanti_product_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Start disposable TiDB
+        run: |
+          docker run -d --name nanti-tidb -p 127.0.0.1:4000:4000 --entrypoint /tidb-server \
+            pingcap/tidb:v8.5.8 --host=0.0.0.0 --store=unistore --path=/tmp/nanti-tidb
+          node --input-type=module <<'NODE'
+          import { createConnection } from 'mariadb';
+          import { setTimeout } from 'node:timers/promises';
+          for (let attempt = 0; ; attempt++) {
+            try {
+              const db = await createConnection({ host: '127.0.0.1', port: 4000, user: 'root', connectTimeout: 1000 });
+              try {
+                await db.query('CREATE DATABASE IF NOT EXISTS nanti_product_test');
+              } finally {
+                await db.end();
+              }
+              break;
+            } catch (error) {
+              if (attempt === 30) throw error;
+              await setTimeout(1000);
+            }
+          }
+          NODE
+      - run: npm run db:migrate
+      - run: npm test -- tests/affiliate-api.test.ts tests/mysql-product-images.test.ts
