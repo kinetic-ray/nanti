@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { Prisma } from './generated/prisma/client.js';
 import type { AccountTokenKind, PrismaClient, UserSession } from './generated/prisma/client.js';
+import { notifyNewRegisteredUser } from './admin-notifications.js';
 
 const pattern = /^scrypt-v1:([a-f0-9]{32}):([a-f0-9]{64})$/u;
 const dummy = 'scrypt-v1:' + '0'.repeat(32) + ':' + '0'.repeat(64);
@@ -40,6 +41,7 @@ export function passwordAccounts(db: PrismaClient, session: (tx: Transaction, id
         const id = randomUUID();
         await db.user.create({ data: { id, dataOwners: { create: { id } },
           password: { create: { email, passwordHash } } } });
+        await notifyNewRegisteredUser(db, id);
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
       }

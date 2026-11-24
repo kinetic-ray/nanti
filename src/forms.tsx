@@ -166,6 +166,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
   const pastePending = useRef(false);
   const submitting = useRef(false);
   const saveRequestKey = useRef<string | null>(null);
+  const saveFingerprint = useRef<string | null>(null);
 
   async function chooseImage(file?: File) {
     if (!file) return;
@@ -307,6 +308,15 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
     submitting.current = true;
     setBusy(true);
     try {
+      const fingerprintFor = (key: string | null, hasUpload: boolean) => JSON.stringify({ listId, name: name.trim(), url: originalUrl,
+        priceMinor, quantity: Number(quantity), sellerName: sellerName ?? null, imageKey: key, hasUploadedImage: hasUpload,
+        saveMarketplaceImage, marketplaceImage: saveMarketplaceImage ? preview?.imagePath ?? null : null });
+      const fingerprint = fingerprintFor(imageKey, Boolean(uploadedImage));
+      if (!item && saveFingerprint.current !== fingerprint) {
+        saveFingerprint.current = fingerprint;
+        saveRequestKey.current = crypto.randomUUID();
+      }
+      const requestKey = item ? undefined : saveRequestKey.current ?? (saveRequestKey.current = crypto.randomUUID());
       if (uploadedImage) {
         const blob = await (await fetch(uploadedImage)).blob();
         if (blob.size > 195_000) throw new Error('Image is too large after compression.');
@@ -318,11 +328,11 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
         const { key } = upload;
         setUploadedImage(null);
         setImageKey(key);
+        saveFingerprint.current = fingerprintFor(key, false);
         await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey: key, sellerName,
-          ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) });
+          ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) }, requestKey);
         return;
       }
-      if (saveMarketplaceImage) saveRequestKey.current ??= crypto.randomUUID();
       await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey, sellerName,
         ...(saveMarketplaceImage && { saveMarketplaceImage: true, tokopediaProductUrl: preview?.productUrl,
           ...(preview?.tokopediaImageProof && preview.imagePath && {
@@ -332,8 +342,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
             shopeeProductUrl: preview.productUrl,
             shopeeImage: { url: preview.imagePath, proof: preview.shopeeImageProof },
           }) }),
-        ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) },
-        saveMarketplaceImage ? saveRequestKey.current ?? undefined : undefined);
+          ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) }, requestKey);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {

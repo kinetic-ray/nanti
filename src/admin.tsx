@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import { variantFields } from '../shared/affiliate.js';
 import type {
   AdminNotice, AdminPage, AuditEvent, Mapping, MatchClassification, NoticeKind, Opportunity, OpportunityDetail, VerificationEvidence,
@@ -9,25 +9,26 @@ import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
 import { RecommendationAdminPanel } from './RecommendationAdminPanel.js';
 
-import { BarChart3, ClipboardList, ContactRound, Home, LayoutDashboard, Link2, ListChecks, LogOut, Package, Settings, Store, Users } from 'lucide-react';
+import { BarChart3, Bell, ClipboardList, ContactRound, Home, LayoutDashboard, Link2, ListChecks, LogOut, Package, Settings, Store, Users } from 'lucide-react';
 import { AdminWorkspace, WorkspaceAnalytics, WorkspaceHeading, useWorkspaceSection } from './admin-workspace.js';
 import { PlatformActivity, PlatformDirectory, PlatformOverview, PlatformSettings, affiliateActions } from './platform-workspace.js';
 
 const admin = '/admin';
 type Session = { username: string };
 type Inbox = AdminPage<AdminNotice> & { unread: number };
-type Review = { mapping: Mapping; action: 'approve' | 'revalidate' | 'reject' | 'disable' | 'revoke' | 'invalid' };
+type Review = { mapping: Mapping; action: 'approve' | 'revalidate' | 'restore' | 'reject' | 'disable' | 'revoke' | 'invalid' };
 
 const matches: Record<MatchClassification, string> = {
   verified_exact: 'Produk dan varian terverifikasi', potential: 'Kemungkinan cocok, perlu ditinjau',
   mismatch: 'Tidak cocok', insufficient: 'Informasi belum cukup',
 };
 const notices: Record<NoticeKind, string> = {
-  new_opportunity: 'Peluang afiliasi baru', candidate_review: 'Kandidat menunggu ditinjau',
+  new_opportunity: 'Produk baru menunggu ditinjau', candidate_review: 'Kandidat menunggu ditinjau',
   mapping_revoked: 'Pemetaan dicabut', mapping_invalid: 'Pemetaan ditandai tidak valid',
+  new_user: 'Pengguna baru terdaftar', system_failure: 'Gangguan sistem perlu ditinjau',
 };
 const actions: Record<Review['action'], string> = {
-  approve: 'Verifikasi dan setujui', revalidate: 'Verifikasi ulang', reject: 'Tolak', disable: 'Nonaktifkan',
+  approve: 'Verifikasi dan setujui', revalidate: 'Verifikasi ulang', restore: 'Pulihkan tautan', reject: 'Tolak', disable: 'Nonaktifkan',
   revoke: 'Cabut', invalid: 'Tandai tidak valid',
 };
 const variants: Record<string, string> = { color: 'Warna', size: 'Ukuran', capacity: 'Kapasitas', configuration: 'Konfigurasi', other: 'Lainnya' };
@@ -53,7 +54,26 @@ function ExternalLink({ url, children }: { url: string; children: string }) {
   </a>;
 }
 
-const superadminSections = ['overview', 'products', 'creators', 'users', 'storefronts', 'links', 'recommendations', 'audit', 'analytics', 'settings'] as const;
+const superadminSections = ['overview', 'products', 'creators', 'users', 'storefronts', 'links', 'notifications', 'recommendations', 'audit', 'analytics', 'settings'] as const;
+
+function NotificationBell({ href, open }: { href: string; open: (event: MouseEvent<HTMLAnchorElement>) => void }) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const load = () => api<Inbox>(`${admin}/notifications`).then(value => {
+      if (active) setUnread(value.unread);
+    }, () => undefined);
+    const refresh = () => void load();
+    void load();
+    const timer = window.setInterval(() => void load(), 45_000);
+    window.addEventListener('nanti-admin-notifications-change', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('nanti-admin-notifications-change', refresh); };
+  }, []);
+  const label = unread ? `Notifikasi, ${unread} belum dibaca` : 'Notifikasi';
+  return <a className="aw-icon-button aw-notification-link" href={href} onClick={open} aria-label={label} title={label}>
+    <Bell size={19} aria-hidden="true" />{unread > 0 && <span className="aw-notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+  </a>;
+}
 
 export function AdminCenter() {
   const section = useWorkspaceSection(superadminSections, 'overview', url => url.hash.startsWith('#opportunity-') ? 'links' : undefined);
@@ -115,11 +135,15 @@ export function AdminCenter() {
     { id: 'users', label: 'Pengguna', icon: Users },
     { id: 'storefronts', label: 'Etalase', icon: Store },
     { id: 'links', label: 'Tautan afiliasi', icon: Link2 },
+    { id: 'notifications', label: 'Notifikasi', icon: Bell },
     { id: 'recommendations', label: 'Rekomendasi', icon: ListChecks },
     { id: 'audit', label: 'Aktivitas audit', icon: ClipboardList },
     { id: 'analytics', label: 'Analitik', icon: BarChart3 },
     { id: 'settings', label: 'Pengaturan', icon: Settings },
-  ]} accountActions={<>
+  ]} secondaryActions={<NotificationBell href={section.href('notifications')} open={event => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); section.open('notifications');
+  }} />} accountActions={<>
     <a href="/"><Home size={16} aria-hidden="true" />Beranda Nanti</a>
     <button type="button" disabled={busy} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />Keluar</button>
   </>}>
@@ -130,6 +154,10 @@ export function AdminCenter() {
     {active === 'links' && <div className="aw-affiliate">
       <WorkspaceHeading title="Tautan afiliasi" description="Tinjau kandidat tautan dan kelola pemetaan afiliasi yang terverifikasi." />
       <Workspace onExpired={onExpired} />
+    </div>}
+    {active === 'notifications' && <div className="aw-affiliate">
+      <WorkspaceHeading title="Pusat notifikasi" description="Periksa kiriman produk, akun baru, tinjauan afiliasi, dan gangguan yang perlu ditangani." />
+      <Workspace onExpired={onExpired} inboxOnly />
     </div>}
     {active === 'recommendations' && <>
       <WorkspaceHeading title="Rekomendasi" />
@@ -186,7 +214,7 @@ function SignIn({ error, onRetry, onSignIn }: {
 }
 
 
-function Workspace({ onExpired }: { onExpired: () => void }) {
+function Workspace({ onExpired, inboxOnly = false }: { onExpired: () => void; inboxOnly?: boolean }) {
   const [opportunities, setOpportunities] = useState<AdminPage<Opportunity> | null>(null);
   const [inbox, setInbox] = useState<Inbox | null>(null);
   const [selected, setSelected] = useState(opportunityFromLocation);
@@ -262,6 +290,7 @@ function Workspace({ onExpired }: { onExpired: () => void }) {
   async function updateNotice(notice: AdminNotice, action: 'read' | 'unread' | 'dismiss') {
     await run(async () => {
       await api(`${admin}/notifications/${notice.id}`, { method: 'PATCH', data: { action } });
+      window.dispatchEvent(new Event('nanti-admin-notifications-change'));
       setInbox((current) => current && ({
         ...current,
         unread: Math.max(0, current.unread + (action === 'unread' && notice.readAt ? 1 : !notice.readAt && action !== 'unread' ? -1 : 0)),
@@ -271,27 +300,43 @@ function Workspace({ onExpired }: { onExpired: () => void }) {
     });
   }
 
+  async function markAllRead() {
+    await run(async () => {
+      await api(`${admin}/notifications/read-all`, { method: 'POST' });
+      window.dispatchEvent(new Event('nanti-admin-notifications-change'));
+      setInbox(current => current ? { ...current, unread: 0,
+        records: current.records.map(row => ({ ...row, readAt: row.readAt ?? new Date().toISOString() })) } : current);
+    });
+  }
+
   return <>
-    <div className="actions admin-tabs" role="group" aria-label="Bagian tautan afiliasi">
+    {!inboxOnly && <div className="actions admin-tabs" role="group" aria-label="Bagian tautan afiliasi">
       <button type="button" aria-pressed={panel === 'opportunities'} onClick={() => setPanel('opportunities')}>Peluang</button>
       <button type="button" aria-pressed={panel === 'inbox'} onClick={() => setPanel('inbox')}>Kotak masuk{inbox?.unread ? ` (${inbox.unread})` : ''}</button>
       <button type="button" disabled={busy} onClick={() => { setError(''); setDetailError(''); refresh(); }}>Muat ulang</button>
-    </div>
+    </div>}
     {error && <p className="error" role="alert">{adminError(error)}</p>}
     <p className="decision-status" role="status">{feedback}</p>
-    {panel === 'inbox' ? <section className="admin-panel">
-      <h2>Notifikasi afiliasi</h2>
+    {inboxOnly || panel === 'inbox' ? <section className="admin-panel">
+      <header className="aw-card-header"><h2>Notifikasi</h2><div className="aw-actions">
+        <button type="button" disabled={busy || !inbox?.unread} onClick={() => void markAllRead()}>Tandai semua dibaca</button>
+        {!inboxOnly && <button type="button" disabled={busy} onClick={() => { setError(''); refresh(); }}>Muat ulang</button>}
+      </div></header>
       {!inbox ? <p role="status">Memuat notifikasi…</p> : inbox.records.length === 0 ? <p>Belum ada notifikasi.</p> :
         <ul className="admin-records">{inbox.records.map((notice) => <li key={notice.id}>
-          <div><strong>{notices[notice.kind]}</strong>
-            <p>{notice.title ?? notice.listingId}</p>
+          <div><strong>{notices[notice.kind] ?? 'Notifikasi sistem'}</strong>
+            <p>{notice.title ?? notice.listingId ?? 'Ada aktivitas baru yang perlu diperiksa.'}</p>
             <small>{notice.readAt ? 'Sudah dibaca' : 'Belum dibaca'} · {recordedAt(notice.createdAt)}</small></div>
           <div className="actions">
-            <a className="buy-original" href={notice.identityId ? opportunityHash(notice.identityId) : '#'} onClick={(event) => {
+            <a className="buy-original" href={notice.targetPath} onClick={event => {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
-              if (notice.identityId) select(notice.identityId);
-            }}>Buka produk</a>
+              event.stopPropagation();
+              const target = new URL(notice.targetPath, window.location.origin);
+              history.pushState(null, '', target.pathname + target.search + target.hash);
+              window.dispatchEvent(new PopStateEvent('popstate'));
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            }}>Buka</a>
             <button type="button" disabled={busy} onClick={() => void updateNotice(notice, notice.readAt ? 'unread' : 'read')}>
               {notice.readAt ? 'Tandai belum dibaca' : 'Tandai sudah dibaca'}
             </button>
@@ -396,7 +441,8 @@ function CandidateForm({ busy, onCandidate }: { busy: boolean; onCandidate: (url
 
 function MappingCard({ mapping, busy, onReview }: { mapping: Mapping; busy: boolean; onReview: (action: Review['action']) => void }) {
   const steps: Review['action'][] = [];
-  if ((mapping.status === 'pending' || mapping.status === 'disabled') && mapping.eligible) steps.push('approve');
+  if (mapping.status === 'pending' && mapping.eligible) steps.push('approve');
+  if (['disabled', 'revoked', 'invalid'].includes(mapping.status) && mapping.eligible) steps.push('restore');
   if (mapping.status === 'pending') steps.push('reject');
   if (mapping.status === 'approved' && mapping.eligible) steps.push('revalidate', 'disable');
   if (mapping.status === 'approved' || mapping.status === 'disabled') steps.push('revoke', 'invalid');
@@ -430,7 +476,7 @@ function ReviewDialog({ review, identity, onSubmit, close }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const isVerification = review.action === 'approve' || review.action === 'revalidate';
+  const isVerification = review.action === 'approve' || review.action === 'revalidate' || review.action === 'restore';
   const existing = review.mapping.evidence;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

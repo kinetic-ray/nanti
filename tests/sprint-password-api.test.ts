@@ -35,6 +35,8 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     const duplicateRegistration = await post('/password/register', { email: email.toUpperCase(), password: replacement }).expect(202);
     expect(duplicateRegistration.status).toBe(202);
     expect(await db.passwordCredential.count({ where: { email } })).toBe(1);
+    const registered = await db.passwordCredential.findUniqueOrThrow({ where: { email }, select: { userId: true } });
+    expect(await db.adminNotification.count({ where: { eventKey: `user:${registered.userId}`, kind: 'new_user' } })).toBe(1);
     await post('/password/login', { email, password }).expect(401);
     await db.accountToken.updateMany({ where: { kind: 'verify', user: { password: { email } } }, data: { expiresAt: new Date(0) } });
     await post('/password/verify', { code: outbox.get('verify'), password }).expect(400);
@@ -162,8 +164,10 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await http.get(wishlist).expect(200);
     await db.user.delete({ where: { id: user.userId } });
   } finally {
-    await db.user.deleteMany({ where: { OR: [{ password: { email: { in: [email, newEmail] } } },
-      { identities: { some: { subjectHash: tokenHash(subject) } } }] } });
+    const ownedUsers = await db.user.findMany({ where: { OR: [{ password: { email: { in: [email, newEmail] } } },
+      { identities: { some: { subjectHash: tokenHash(subject) } } }] }, select: { id: true } });
+    await db.adminNotification.deleteMany({ where: { eventKey: { in: ownedUsers.map(({ id }) => `user:${id}`) } } });
+    await db.user.deleteMany({ where: { id: { in: ownedUsers.map(({ id }) => id) } } });
     await db.$disconnect();
   }
 }, 25_000);

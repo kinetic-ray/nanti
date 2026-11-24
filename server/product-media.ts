@@ -51,7 +51,7 @@ export function createProductMedia(request = fetch) {
 
   return (url: string | null) => {
     const listing = identifyProduct(url);
-    if (!listing) return Promise.resolve(null);
+    if (!listing || listing.merchant !== 'IKEA') return Promise.resolve(null);
     const key = listing.canonicalUrl;
     const previous = cache.get(key);
     if (previous && previous.expires > Date.now()) return previous.image;
