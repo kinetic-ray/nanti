@@ -77,6 +77,41 @@ describe('Marketplace shortlink redirects', () => {
     await expect(previewProductMetadata(new URL('https://s.shopee.co.id/abcd'), fetcher)).resolves.toBeNull();
     expect(fetcher).toHaveBeenCalledOnce();
   });
+
+  it('validates Shopee affiliate opaanlp destinations against the canonical listing identity', async () => {
+    const listing = 'https://shopee.co.id/product/123/456';
+    const body = `<html><head>
+      <link rel="canonical" href="${listing}">
+      <meta property="og:url" content="${listing}">
+      <meta property="og:title" content="Example chair">
+      <script type="application/ld+json">${JSON.stringify({
+        '@type': 'Product', url: listing, name: 'Example chair',
+        offers: { '@type': 'Offer', price: '129000', priceCurrency: 'IDR' },
+      })}</script>
+    </head></html>`;
+    const fetcher = vi.fn<typeof fetch>(async (url) => String(url).startsWith('https://s.shopee.co.id/')
+      ? new Response(null, { status: 301, headers: { location: 'https://shopee.co.id/opaanlp/123/456?utm_source=affiliate' } })
+      : new Response(body, { headers: { 'content-type': 'text/html' } }));
+
+    await expect(previewProductMetadata(new URL('https://s.shopee.co.id/short-code'), fetcher))
+      .resolves.toMatchObject({
+        title: 'Example chair',
+        price: { priceMinor: 12900000, currency: 'IDR' },
+      });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an opaanlp destination whose canonical metadata identifies another listing', async () => {
+    const report = vi.fn();
+    const fetcher = vi.fn<typeof fetch>(async (url) => String(url).startsWith('https://s.shopee.co.id/')
+      ? new Response(null, { status: 301, headers: { location: 'https://shopee.co.id/opaanlp/123/456' } })
+      : new Response('<html><head><link rel="canonical" href="/product/123/789"></head></html>',
+        { headers: { 'content-type': 'text/html' } }));
+
+    await expect(previewProductMetadata(new URL('https://s.shopee.co.id/short-code'), fetcher, report))
+      .resolves.toBeNull();
+    expect(report).toHaveBeenCalledWith('metadata_mismatch', 'shopee.co.id', 200);
+  });
 });
 
 describe('Tokopedia redirect diagnostics', () => {

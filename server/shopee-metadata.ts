@@ -24,7 +24,8 @@ const allowed = (url: URL) => url.protocol === 'https:' &&
 
 function listingKey(url: URL): string | null {
   const match = url.pathname.match(/^\/product\/(\d+)\/(\d+)\/?$/u) ??
-    url.pathname.match(/^\/[^/]*-i\.(\d+)\.(\d+)\/?$/u);
+    url.pathname.match(/^\/[^/]*-i\.(\d+)\.(\d+)\/?$/u) ??
+    url.pathname.match(/^\/opaanlp\/(\d+)\/(\d+)\/?$/u);
   // Shopee's www and non-www hosts describe the same shop/item identity.
   return match ? match[1] + '/' + match[2] : null;
 }
