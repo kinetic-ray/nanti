@@ -6,6 +6,7 @@ export type PlatformProduct = {
   priceMinor: number | null; currency: Currency | null; creator: string;
 };
 export type PlatformUser = { id: string; displayName: string | null; role: 'admin' | 'member'; creator: string | null; createdAt: string };
+export type PlatformUserDetail = PlatformUser & { email: string | null; creatorProfile: { name: string; handle: string; products: number } | null };
 export type PlatformStorefront = { id: string; name: string; handle: string; published: boolean; products: number };
 export type PlatformCreator = { id: string; name: string; user: string | null; products: number; createdAt: string };
 export type PlatformAudit = {

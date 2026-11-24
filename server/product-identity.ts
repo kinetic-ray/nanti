@@ -5,6 +5,8 @@ const ikeaOrigin = 'https://www.ikea.com';
 const attribution = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id',
   'aff_id', 'affiliate_id', 'gclid', 'fbclid']);
 const passiveAdvertising = new Set(['gclid', 'fbclid']);
+const tokopediaTracking = new Set([...attribution, 'ref']);
+const tokopediaShortHosts = new Set(['tokopedia.link', 'tk.tokopedia.com', 'vt.tokopedia.com']);
 const shopeeMarkets: Record<string, string> = {
   'shopee.co.id': 'id', 'shopee.sg': 'sg', 'shopee.com.my': 'my', 'shopee.co.th': 'th',
   'shopee.vn': 'vn', 'shopee.ph': 'ph', 'shopee.com.br': 'br', 'shopee.com': 'global',
@@ -41,12 +43,24 @@ export function identifyProduct(value: string | null) {
       listingId: `${shop}.${item}`, canonicalUrl, hasAttribution: hasAttribution(url) };
   }
 
-  if ((host === 'tokopedia.com') && /^\/[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_-]*\/?$/iu.test(url.pathname) &&
-      !url.hash && supportedAttribution(url)) {
+  if (host === 'tokopedia.com' && /^\/[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_-]*\/?$/iu.test(url.pathname)) {
     const path = url.pathname.replace(/\/$/u, '');
-    const canonicalUrl = `https://www.tokopedia.com${path}`;
+    const canonical = new URL(`https://www.tokopedia.com${path}`);
+    for (const [key, parameter] of url.searchParams) {
+      if (!tokopediaTracking.has(key)) canonical.searchParams.append(key, parameter);
+    }
+    canonical.searchParams.sort();
+    canonical.hash = url.hash;
+    const canonicalUrl = canonical.href;
     return { lookupKey: productKey(canonicalUrl), merchant: 'Tokopedia', market: 'id',
-      listingId: productKey(path).slice(0, 24), canonicalUrl, hasAttribution: hasAttribution(url) };
+      listingId: productKey(path).slice(0, 24), canonicalUrl, hasAttribution: supportedAttribution(url) && hasAttribution(url) };
+  }
+
+  if (tokopediaShortHosts.has(host) && /^\/[a-z0-9_-]+\/?$/iu.test(url.pathname)) {
+    // Until resolved by the marketplace importer, the short link is opaque.
+    const canonicalUrl = url.href;
+    return { lookupKey: productKey(canonicalUrl), merchant: 'Tokopedia', market: 'id',
+      listingId: productKey(canonicalUrl).slice(0, 24), canonicalUrl, hasAttribution: false };
   }
 
   // Keep a shared identity for every other safe product URL. Unknown query

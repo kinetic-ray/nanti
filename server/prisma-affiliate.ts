@@ -3,7 +3,7 @@ import type { PrismaClient } from './generated/prisma/client.js';
 import type {
   AdminNotice, AdminPage, AuditEvent, Mapping, MatchClassification, NoticeKind, Opportunity, OpportunityDetail, VerificationEvidence,
 } from '../shared/affiliate.js';
-import { classifyProductMatch, isEligibleAffiliate, normalizeProductTitle, productKey } from './product-identity.js';
+import { classifyProductMatch, isEligibleAffiliate, normalizeProductTitle, productKey, safeAdminUrl } from './product-identity.js';
 
 const pageSize = 25;
 const mappingFields = {
@@ -49,7 +49,11 @@ function candidateClassification(original: string, candidate: string): MatchClas
 }
 
 function catalogUrl(value: string, merchant: string) {
-  return merchant === 'Other' ? `${new URL(value).origin}/` : value;
+  if (merchant !== 'Other' && merchant !== 'Tokopedia') return value;
+  const url = new URL(value);
+  return merchant === 'Tokopedia' && url.hostname === 'www.tokopedia.com'
+    ? url.origin + url.pathname
+    : `${url.origin}/`;
 }
 
 function mappingView(row: Prisma.AffiliateMappingGetPayload<{ select: typeof mappingFields }>): Mapping {
@@ -78,7 +82,7 @@ function opportunityView(row: Prisma.ProductIdentityGetPayload<{ select: typeof 
 
 function auditView(row: Prisma.AffiliateAuditGetPayload<{ select: typeof auditFields }>): AuditEvent {
   const details = row.details as Record<string, unknown>;
-  if (row.identity.merchant === 'Other' && typeof details.originalUrl === 'string') {
+  if (typeof details.originalUrl === 'string') {
     details.originalUrl = catalogUrl(details.originalUrl, row.identity.merchant);
   }
   return { ...row, details, createdAt: row.createdAt.toISOString() };
@@ -114,10 +118,20 @@ export function prismaAffiliate(db: PrismaClient) {
   }
 
   return {
-    async listOpportunities(after?: string) {
+    async listOpportunities(after?: string, filters: { q?: string; merchant?: string; reviewed?: boolean; active?: boolean } = {}) {
+      const q = filters.q?.trim();
+      const where: Prisma.ProductIdentityWhereInput = {
+        AND: [
+          { OR: [{ items: { some: {} } }, { mappings: { some: {} } }] },
+          ...(q ? [{ OR: [{ title: { contains: q } }, { sellerId: { contains: q } }, { listingId: { contains: q } }] }] : []),
+          ...(filters.merchant ? [{ merchant: filters.merchant }] : []),
+          ...(filters.reviewed === undefined ? [] : [filters.reviewed ? { reviewedAt: { not: null } } : { reviewedAt: null }]),
+          ...(filters.active === undefined ? [] : [filters.active ? { activeMapping: { is: { status: 'approved' as const } } } : { activeMapping: null }]),
+        ],
+      };
       const rows = await db.productIdentity.findMany({
         ...windowAfter(after), select: identityFields,
-        where: { OR: [{ items: { some: {} } }, { mappings: { some: {} } }] },
+        where,
       });
       return paginate(rows, opportunityView);
     },
@@ -188,17 +202,21 @@ export function prismaAffiliate(db: PrismaClient) {
               action === 'restore' ? row.status === 'disabled' || row.status === 'revoked' || row.status === 'invalid' :
               row.status === 'approved';
             if (!allowed) throw conflict('This mapping cannot be approved or validated in its current state.');
-            if (!isEligibleAffiliate(row.identity.canonicalUrl, row.affiliateUrl)) {
+            const { evidence } = review;
+            const eligible = isEligibleAffiliate(row.identity.canonicalUrl, row.affiliateUrl);
+            const override = typeof evidence.overrideReason === 'string' && evidence.overrideReason.length >= 12 &&
+              safeAdminUrl(row.identity.canonicalUrl)?.protocol === 'https:' && safeAdminUrl(row.affiliateUrl)?.protocol === 'https:';
+            if (!eligible && !override) {
               throw new AffiliateProblem(400, 'Approval requires the same product, variant, market, and a direct attributed link.');
             }
-            const { evidence } = review;
             if (evidenceConflicts(row.identity, evidence)) throw conflict('The proposed evidence conflicts with verified product attributes.');
             update = {
               activeIdentityId: identityId, status: 'approved', classification: 'verified_exact', validatedAt: now,
               evidence,
               ...((action === 'approve' || action === 'restore') && { approvedBy: actor, approvedAt: now }),
             };
-            details = { ...details, evidence, originalUrl: row.originalUrl, affiliateUrl: row.affiliateUrl, status: 'approved' };
+            details = { ...details, evidence, originalUrl: row.originalUrl, affiliateUrl: row.affiliateUrl, status: 'approved',
+              ...(override && { override: true, overrideReason: evidence.overrideReason }) };
             identityData = {
               title: evidence.title, normalizedTitle: normalizeProductTitle(evidence.title).slice(0, 220),
               brand: evidence.brand, model: evidence.model, sellerId: evidence.sellerId,
@@ -216,6 +234,18 @@ export function prismaAffiliate(db: PrismaClient) {
             details = { ...details, reason: review.reason, status: status[review.action] };
           }
 
+          if ('evidence' in review && update.activeIdentityId) {
+            const displaced = await tx.affiliateMapping.findMany({
+              where: { identityId, activeIdentityId: identityId, id: { not: mappingId }, status: 'approved' },
+              select: { id: true, revision: true, affiliateUrl: true },
+            });
+            for (const previous of displaced) {
+              await tx.affiliateMapping.update({ where: { id: previous.id },
+                data: { activeIdentityId: null, status: 'disabled', revision: previous.revision + 1 } });
+              await tx.affiliateAudit.create({ data: { identityId, mappingId: previous.id, actor,
+                action: 'replaced', details: { replacement: mappingId, affiliateUrl: previous.affiliateUrl } } });
+            }
+          }
           const updated = await tx.affiliateMapping.updateMany({ where: { id: mappingId, revision: row.revision },
             data: { ...update, revision },
           });

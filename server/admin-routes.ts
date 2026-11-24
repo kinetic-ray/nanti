@@ -13,6 +13,8 @@ import { safeAdminUrl } from './product-identity.js';
 
 const id = z.uuid();
 const page = z.strictObject({ after: id.optional() });
+const opportunityQuery = page.extend({ q: z.string().trim().max(160).optional(), merchant: z.string().trim().max(64).optional(),
+  reviewed: z.enum(['true', 'false']).optional(), active: z.enum(['true', 'false']).optional() });
 const login = z.strictObject({ username: z.string().min(1).max(64), password: z.string().min(1).max(256) });
 const httpsUrl = z.string().trim().max(2048).transform((value, context) => {
   const url = safeAdminUrl(value);
@@ -28,6 +30,7 @@ const evidence = z.strictObject({
     other: z.string().trim().min(1).max(240).optional(),
   }),
   notes: z.string().trim().min(12).max(2000),
+  overrideReason: z.string().trim().min(12).max(600).optional(),
   evidenceUrl: httpsUrl.transform((url) => url.href).optional(),
   confirmedExact: z.literal(true),
 });
@@ -95,7 +98,12 @@ export function adminRoutes(affiliate: AffiliateRepository, credentials: AdminCr
   if (recommendationsDb && recommendationSuperadminEnabled) router.use('/recommendations', recommendationAdminRoutes(recommendationsDb));
 
   router.get('/opportunities', async (req, res) => {
-    res.json(await affiliate.listOpportunities(page.parse(req.query).after));
+    const input = opportunityQuery.parse(req.query);
+    res.json(await affiliate.listOpportunities(input.after, {
+      q: input.q, merchant: input.merchant,
+      reviewed: input.reviewed === undefined ? undefined : input.reviewed === 'true',
+      active: input.active === undefined ? undefined : input.active === 'true',
+    }));
   });
   router.get('/opportunities/:identityId', async (req, res) => {
     const opportunity = await affiliate.detail(id.parse(req.params.identityId));

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { CircleCheck, ClipboardList, ExternalLink, Link2, Package, Search, Store, UserRound, Users } from 'lucide-react';
-import type { PlatformAudit, PlatformCreator, PlatformPage, PlatformProduct, PlatformSettingsStatus, PlatformStorefront, PlatformSummary, PlatformUser } from '../shared/admin-workspace.js';
+import type { PlatformAudit, PlatformCreator, PlatformPage, PlatformProduct, PlatformSettingsStatus, PlatformStorefront, PlatformSummary, PlatformUser, PlatformUserDetail } from '../shared/admin-workspace.js';
 import type { AdminPage, Opportunity } from '../shared/affiliate.js';
 import { safeImportUrl } from '../shared/product-import.js';
 import { formatPrice } from '../shared/wishlist.js';
 import { api, errorMessage } from './api.js';
+import { Dialog } from './forms.js';
 import { WorkspaceEmpty, WorkspaceHeading, WorkspaceLoading, WorkspacePagination, WorkspaceStats, WorkspaceThumbnail } from './admin-workspace.js';
 import { productSource, productSources } from './workspace-product-source.js';
 
@@ -83,8 +84,8 @@ function SubmissionQueue({ onExpired, revision }: { onExpired: OnExpired; revisi
         const status = product.submissionStatus === 'affiliate_link_assigned' ? 'Tautan afiliasi ditetapkan' :
           product.submissionStatus === 'reviewed' ? 'Sudah ditinjau' : 'Menunggu tinjauan';
         return <li key={product.id}>
-          <div className="aw-submission-copy"><strong>{product.title ?? `${product.merchant} · ${product.listingId}`}</strong>
-            <span>{product.market.toUpperCase()} · {product.savedCount} kali disimpan</span>
+          <div className="aw-submission-copy"><strong>{product.title ?? 'Nama produk belum tersedia'}</strong>
+            <span>{product.merchant === 'Other' ? 'Marketplace belum diketahui' : product.merchant} · {product.savedCount} kali disimpan</span>
             <span className="aw-badge" data-live={product.submissionStatus === 'affiliate_link_assigned'}>{status}</span>
           </div>
           <div className="aw-actions">
@@ -185,6 +186,7 @@ export function PlatformDirectory({ directory, onExpired }: { directory: Directo
   const [action, setAction] = useState<Action | null>(null);
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
+  const [userDetail, setUserDetail] = useState<PlatformUserDetail | null>(null);
   function finished(message: string) {
     setAction(null);
     setNotice(message);
@@ -211,7 +213,11 @@ export function PlatformDirectory({ directory, onExpired }: { directory: Directo
     ]} />
     </>}
     {directory === 'users' && <PlatformTable<PlatformUser> directory={directory} onExpired={onExpired} revision={revision} notice={notice} columns={[
-      { label: 'Pengguna', className: 'aw-product-cell', cell: row => <div><strong>{row.displayName || 'Akun tanpa nama'}</strong><br /><code>{row.id}</code></div> },
+      { label: 'Pengguna', className: 'aw-product-cell', cell: row => <button type="button" onClick={() => {
+        api<PlatformUserDetail>(`${base}/users/${row.id}`).then(setUserDetail, failure => {
+          if (errorMessage(failure) === 'Administrator sign-in is required.') onExpired();
+        });
+      }}><strong>{row.displayName || 'Akun tanpa nama'}</strong></button> },
       { label: 'Peran akun', cell: row => row.role === 'admin' ? 'Administrator' : 'Anggota' },
       { label: 'Profil kreator', cell: row => row.creator ?? '—' },
       { label: 'Terdaftar', className: 'aw-nowrap', cell: row => <Time value={row.createdAt} /> },
@@ -234,6 +240,15 @@ export function PlatformDirectory({ directory, onExpired }: { directory: Directo
     ]} />}
     {action && <PlatformAction action={action} onExpired={onExpired} cancel={() => setAction(null)} finished={finished}
       stale={() => { setAction(null); setRevision(value => value + 1); }} />}
+    {userDetail && <Dialog title="Detail pengguna" busy={false} close={() => setUserDetail(null)} focusHeading>
+      <dl className="admin-facts">
+        <div><dt>Nama</dt><dd>{userDetail.displayName || 'Akun tanpa nama'}</dd></div>
+        <div><dt>Peran</dt><dd>{userDetail.role === 'admin' ? 'Administrator' : 'Anggota'}</dd></div>
+        <div><dt>Email</dt><dd>{userDetail.email ?? 'Tidak tersedia'}</dd></div>
+        <div><dt>Terdaftar</dt><dd><Time value={userDetail.createdAt} /></dd></div>
+        {userDetail.creatorProfile && <div><dt>Kreator</dt><dd>{userDetail.creatorProfile.name} · @{userDetail.creatorProfile.handle} · {userDetail.creatorProfile.products} produk</dd></div>}
+      </dl>
+    </Dialog>}
   </>;
 }
 

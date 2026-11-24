@@ -26,7 +26,8 @@ async function activeAffiliate(affiliate: AffiliateRepository | undefined, origi
       mapping.approvedAt && mapping.validatedAt && mapping.approvedBy &&
       (mapping.evidence as { confirmedExact?: boolean } | null)?.confirmedExact === true &&
       record.canonicalUrl === identity.canonicalUrl && mapping.originalUrl === identity.canonicalUrl &&
-      isEligibleAffiliate(originalUrl, mapping.affiliateUrl)) {
+      (isEligibleAffiliate(originalUrl, mapping.affiliateUrl) ||
+        Boolean((mapping.evidence as { overrideReason?: string } | null)?.overrideReason))) {
     return mapping;
   }
   try {
