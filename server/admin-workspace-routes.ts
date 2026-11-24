@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { accountMailConfigured } from './transactional-account-mail.js';
 import { safeImportUrl } from '../shared/product-import.js';
 import { Prisma } from './generated/prisma/client.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -39,7 +40,7 @@ export function adminWorkspaceRoutes(db: PrismaClient, actor: string, runtimeChe
         administratorLoginConfigured,
         googleSignInConfigured: allConfigured('AUTH_PUBLIC_ORIGIN', 'AUTH_GOOGLE_CLIENT_ID', 'AUTH_GOOGLE_CLIENT_SECRET'),
         appleSignInConfigured: allConfigured('AUTH_PUBLIC_ORIGIN', 'AUTH_APPLE_CLIENT_ID', 'AUTH_APPLE_TEAM_ID', 'AUTH_APPLE_KEY_ID', 'AUTH_APPLE_PRIVATE_KEY_BASE64'),
-        accountRecoveryConfigured: allConfigured('AUTH_PUBLIC_ORIGIN', 'NANTI_ACCOUNT_MAIL_API_KEY', 'NANTI_ACCOUNT_MAIL_FROM'),
+        accountRecoveryConfigured: configured('AUTH_PUBLIC_ORIGIN') && accountMailConfigured(),
         imageStorageConfigured: runtimeChecks.databaseConfigured ?? configured('DATABASE_URL'),
         recommendationManagementEnabled: runtimeChecks.recommendationManagementEnabled ?? (administratorLoginConfigured &&
           configured('NANTI_RECOMMENDATION_SUPERADMIN_USERNAME') &&

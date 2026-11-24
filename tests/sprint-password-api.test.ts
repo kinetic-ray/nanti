@@ -32,7 +32,8 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await post('/password/register', { email, password, role: 'admin' }).expect(400);
     await post('/password/register', { email, password: '1234567' }).expect(400);
     await post('/password/register', { email, password }).expect(202);
-    await post('/password/register', { email: email.toUpperCase(), password: replacement }).expect(202);
+    const duplicateRegistration = await post('/password/register', { email: email.toUpperCase(), password: replacement }).expect(202);
+    expect(duplicateRegistration.status).toBe(202);
     expect(await db.passwordCredential.count({ where: { email } })).toBe(1);
     await post('/password/login', { email, password }).expect(401);
     await db.accountToken.updateMany({ where: { kind: 'verify', user: { password: { email } } }, data: { expiresAt: new Date(0) } });
@@ -88,7 +89,10 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await http.get('/api/account/creator/design').expect(200).expect(response => {
       expect(response.body.design.theme).toBe('gallery');
     });
-    await post('/password/forgot', { email }).expect(202);
+    const knownAddressRecovery = await post('/password/forgot', { email }).expect(202);
+    const unknownAddressRecovery = await post('/password/forgot', { email: `missing-${randomUUID()}@example.test` }).expect(202);
+    expect(unknownAddressRecovery.status).toBe(knownAddressRecovery.status);
+    expect(unknownAddressRecovery.body).toEqual(knownAddressRecovery.body);
     await db.accountToken.updateMany({ where: { userId: user.userId, kind: 'reset' }, data: { expiresAt: new Date(0) } });
     await post('/password/reset', { code: outbox.get('reset'), password: replacement }).expect(400);
     await post('/password/forgot', { email }).expect(202);
@@ -124,6 +128,12 @@ it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes s
     await http.delete('/api/account/sessions/' + otherSession.id).set('X-Nanti-Request', '1').send({}).expect(204);
     await other.get('/api/account/creator').set('Cookie', remoteCookie).expect(401);
     await http.get('/api/account/creator').expect(200);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await http.post('/api/account/password/forgot').set('X-Nanti-Request', '1')
+        .set('X-Forwarded-For', '198.51.100.10').send({ email: `limited-${randomUUID()}@example.test` }).expect(202);
+    }
+    await http.post('/api/account/password/forgot').set('X-Nanti-Request', '1')
+      .set('X-Forwarded-For', '198.51.100.10').send({ email }).expect(429);
     const third = await other.post('/api/account/password/login').set('X-Nanti-Request', '1')
       .send({ email, password }).expect(204);
     const thirdCookie = third.get('set-cookie')![0]!.split(';')[0]!;
