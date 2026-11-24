@@ -127,6 +127,18 @@ export function adminWorkspaceRoutes(db: PrismaClient, actor: string, runtimeChe
     }));
   });
 
+  router.get('/users/:id', async (req, res) => {
+    const row = await db.user.findUnique({ where: { id: identifier.parse(req.params.id) }, select: {
+      id: true, displayName: true, role: true, createdAt: true,
+      creatorProfile: { select: { name: true, handle: true, _count: { select: { products: true } } } },
+    } });
+    if (!row) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+    res.json({ id: row.id, displayName: row.displayName, role: row.role, email: null, createdAt: row.createdAt,
+      creator: row.creatorProfile?.name ?? null,
+      creatorProfile: row.creatorProfile ? { name: row.creatorProfile.name, handle: row.creatorProfile.handle,
+        products: row.creatorProfile._count.products } : null });
+  });
+
   router.get('/creators', async (req, res) => {
     const { page: requested, q } = listing.parse(req.query);
     const where = q ? { name: { contains: q } } : {};
