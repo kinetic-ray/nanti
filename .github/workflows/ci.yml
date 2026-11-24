@@ -40,7 +40,7 @@ jobs:
     env:
       DATABASE_URL: mysql://root:test-root-only@127.0.0.1:3306/nanti_migration_test
       TEST_DATABASE_URL: mysql://root:test-root-only@127.0.0.1:3306/nanti_migration_test
-      NANTI_BROWSER_PATH: /usr/bin/google-chrome
+      SESSION_SECRET: disposable-github-actions-test-secret-only-32bytes
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,22 +48,62 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Create test artifact directory
+        run: mkdir -p test-results/browser
+      - name: Install Playwright Chromium
+        run: |
+          set -o pipefail
+          npx --yes playwright@1.65.1 install --with-deps chromium 2>&1 | tee test-results/playwright-install.log
+          node --input-type=module -e 'import { chromium } from "playwright-core"; console.log(`NANTI_BROWSER_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
       - run: npx prisma validate
       - run: npm run db:migrate
       - run: npx prisma migrate status
       - run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
-      - run: npm test
+      - name: Run full unit and MySQL integration suite
+        run: set -o pipefail && npm test 2>&1 | tee test-results/vitest.log
       - run: node --import tsx scripts/test-recommendation-mysql.ts
       - run: npm run build
+      - name: Run Tokopedia preview-to-wishlist browser E2E
+        run: |
+          set -o pipefail
+          node --import tsx tests/browser-tokopedia-import-server.ts > test-results/tokopedia-server.log 2>&1 &
+          fixture_server=$!
+          trap 'kill "$fixture_server" 2>/dev/null || true' EXIT
+          curl --fail --silent --retry 20 --retry-connrefused http://127.0.0.1:3000/api/health >/dev/null
+          NANTI_BROWSER_BASE_URL=http://127.0.0.1:3000 \
+            NANTI_BROWSER_ARTIFACTS=test-results/browser \
+            node tests/browser-tokopedia-import.mjs 2>&1 | tee test-results/tokopedia-browser.log
+      - name: Run MVP browser regression against disposable MySQL
+        run: |
+          set -o pipefail
+          npm start > test-results/mvp-server.log 2>&1 &
+          app_server=$!
+          trap 'kill "$app_server" 2>/dev/null || true' EXIT
+          curl --fail --silent --retry 20 --retry-connrefused http://127.0.0.1:3000/api/health >/dev/null
+          NANTI_BROWSER_BASE_URL=http://127.0.0.1:3000 \
+            NANTI_BROWSER_ARTIFACTS=test-results/browser \
+            npm run test:browser:mvp 2>&1 | tee test-results/browser-mvp.log
       - name: Test public navigation and recommendation inbox
         run: |
+          set -o pipefail
           npm exec -- vite preview --host 127.0.0.1 --port 4173 --strictPort &
           preview=$!
           trap 'kill "$preview" 2>/dev/null || true' EXIT
           curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:4173/ >/dev/null
           export NANTI_BROWSER_BASE_URL=http://127.0.0.1:4173
-          node tests/browser-header.mjs
-          node tests/browser-navigation-journey.mjs
-      - run: npm run test:browser:accounts
-      - run: npm run test:browser:creator
-      - run: npm run test:browser:creator-design
+          node tests/browser-header.mjs 2>&1 | tee test-results/browser-header.log
+          node tests/browser-navigation-journey.mjs 2>&1 | tee test-results/browser-navigation-journey.log
+      - name: Run account, creator, and design browser suites
+        run: |
+          set -o pipefail
+          npm run test:browser:accounts 2>&1 | tee test-results/browser-accounts.log
+          npm run test:browser:creator 2>&1 | tee test-results/browser-creator.log
+          npm run test:browser:creator-design 2>&1 | tee test-results/browser-creator-design.log
+      - name: Upload test logs and browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanti-ci-diagnostics-${{ github.run_id }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 14
