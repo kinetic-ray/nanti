@@ -46,10 +46,7 @@ function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
         <p className="hint">{t('Qty {n}', { n: number(item.quantity) })}
           {item.priceMinor !== null && item.quantity > 1 &&
             ` · ${t('{price} each', { price: money(item.priceMinor, list.currency) })}`}</p>
-        {merchant && <a href={merchant.href} className="merchant" target="_blank" rel="noopener noreferrer">
-          {merchant.hostname.replace(/^www\./u, '')}
-          <span className="sr-only"> ({t('opens in a new tab')})</span>
-        </a>}
+        {merchant && <span className="merchant">{merchant.hostname.replace(/^www\./u, '')}</span>}
       </div>
     </div>
     <BuyLink key={item.url ?? item.id} listId={list.id} item={item} />

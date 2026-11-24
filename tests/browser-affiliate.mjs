@@ -145,6 +145,8 @@ try {
   await show(chooser.getByText(/komisi/u));
   const link = chooser.getByRole('link', { name: /^Beli produk/u });
   await show(link);
+  assert.equal(await chooser.getByRole('link').count(), 1);
+  assert.equal(await chooser.getByRole('link', { name: /^Buka link produk asli/u }).count(), 0);
   const activeHref = await link.getAttribute('href');
   const redirected = await shopper.request.get(activeHref, { maxRedirects: 0 });
   assert.equal(redirected.status(), 302);
@@ -161,7 +163,17 @@ try {
   await show(row.getByText('Belum diganti'));
   await screenshot('admin-products-restored.png');
   const restored = await shopper.request.get(activeHref, { maxRedirects: 0 });
+  assert.equal(restored.status(), 302);
   assert.equal(restored.headers().location, original);
+  await shopper.keyboard.press('Escape');
+  await chooser.waitFor({ state: 'hidden' });
+  await button(shopper, 'Bantu putuskan untuk ' + title).click();
+  await show(link);
+  assert.equal(await chooser.getByRole('link').count(), 1);
+  assert.equal(await link.getAttribute('href'), original);
+  assert.equal(await chooser.getByText(/komisi/u).count(), 0);
+  const savedItem = (await (await shopper.request.get('/api/wishlists/' + list.id)).json()).items[0];
+  assert.equal(savedItem.url, original);
   console.log('PASS registered import, admin metadata, notification, replacement, disclosure, restoration, responsive layout, and accessibility');
 } finally {
   const identity = await db.productIdentity.findFirst({ where: { canonicalUrl: original } });
