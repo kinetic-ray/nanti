@@ -296,7 +296,7 @@ try {
   await button(pullProduct, 'Tarik publikasi').click();
   await visitor.getByText('Publikasi produk ditarik.').waitFor();
   await select('Pengguna');
-  await visitor.getByRole('row').filter({ hasText: userId }).waitFor();
+  await visitor.getByRole('row').filter({ hasText: 'Studio Browser' }).waitFor();
   await select('Kreator');
   await visitor.getByText('Updated Browser Storefront', { exact: true }).last().waitFor();
   await select('Etalase');
