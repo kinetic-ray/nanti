@@ -165,7 +165,7 @@ try {
     await show(event);
     await button(admin, 'Tandai semua dibaca').click();
     await show(admin.getByRole('link', { name: 'Notifikasi', exact: true }));
-    const recordLink = event.getByRole('link', { name: 'Buka produk' });
+    const recordLink = event.getByRole('link', { name: 'Buka' });
     const recordPath = await recordLink.getAttribute('href');
     const recordTarget = new URL(recordPath, baseURL);
     assert.equal(recordTarget.pathname, '/admin');
