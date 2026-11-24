@@ -162,7 +162,7 @@ try {
 
     await admin.setViewportSize({ width: 390, height: 844 });
     await admin.getByRole('button', { name: /^Kotak masuk/u }).click();
-    const event = admin.getByRole('listitem').filter({ hasText: 'Pemetaan dicabut' });
+    const event = admin.getByRole('listitem').filter({ hasText: 'Pemetaan dicabut' }).filter({ hasText: title });
     await show(event);
     await button(admin, 'Tandai semua dibaca').click();
     await show(admin.getByRole('link', { name: 'Notifikasi', exact: true }));
