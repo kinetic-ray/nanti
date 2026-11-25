@@ -342,7 +342,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       owner, url: publicUrl.href, title: '', price,
     }, publicPriceProof);
     const listingUrl = verifiedListing && publicUrl && verifyPublicTitle(secret, {
-      owner, url: publicUrl.href, title: 'resolved-listing:' + verifiedListing.url,
+      owner: 'resolved-listing:' + owner, url: publicUrl.href, title: verifiedListing.url,
     }, verifiedListing.proof) ? verifiedListing.url : undefined;
     const publicMetadata = { title: verifiedTitle, priceCurrency: priceVerified ? list.currency : undefined, listingUrl };
     const replay = (saved: (typeof list.items)[number]) => {
@@ -554,7 +554,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       ...(meta?.productUrl && meta.productUrl.length <= 2048 && recommendationListing(meta.productUrl) &&
         /^(?:www\.)?(?:s\.shopee\.co\.id|shopee\.ee|tokopedia\.link|tk\.tokopedia\.com|vt\.tokopedia\.com)$/u.test(url.hostname) &&
         { listingProof: signPublicTitle(secret, {
-          owner: res.locals.ownerId, url: url.href, title: 'resolved-listing:' + meta.productUrl,
+          owner: 'resolved-listing:' + res.locals.ownerId, url: url.href, title: meta.productUrl,
         }) }),
       ...(meta?.title && meta.title.length <= 160 && { publicTitleProof: signPublicTitle(secret, {
         owner: res.locals.ownerId, url: url.href, title: meta.title,
