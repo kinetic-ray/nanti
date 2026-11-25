@@ -114,6 +114,15 @@ try {
   await button(access, 'Try again').click();
   await heading(access, 'Create a creator profile').waitFor();
   assert.equal(accountChecks, 2, 'the slow account check can be retried');
+  await access.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+  assert.equal(await access.evaluate(() => document.documentElement.classList.contains('session-suspended')), true);
+  const restoredAccount = access.waitForResponse(response => response.url().endsWith('/api/account/creator'));
+  await access.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  await restoredAccount;
+  await heading(access, 'Create a creator profile').waitFor();
+  assert.equal(await heading(access, 'Checking your creator account…').count(), 0, 'restored onboarding shows one account state at a time');
+  await access.waitForFunction(() => document.documentElement.classList.contains('session-suspended') === false);
+  assert.equal(accountChecks, 3, 'restoring the creator workspace reloads its account state');
   await accessContext.close();
 
   await page.goto('/creator/studio');

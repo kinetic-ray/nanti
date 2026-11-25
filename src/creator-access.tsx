@@ -85,12 +85,9 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
       setRevision(value => value + 1);
     }
     function storage(event: StorageEvent) { if (event.key === authChangeKey) refresh(); }
-    function restored(event: PageTransitionEvent) { if (event.persisted) refresh(); }
     window.addEventListener('storage', storage);
-    window.addEventListener('pageshow', restored);
     return () => {
       window.removeEventListener('storage', storage);
-      window.removeEventListener('pageshow', restored);
     };
   }, []);
 
