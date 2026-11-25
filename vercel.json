@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "git": { "deploymentEnabled": { "feat/sprint4-shopee-embedded-state": false, "feat/sprint4-shopee-short-links": false } },
   "framework": "vite",
   "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build",

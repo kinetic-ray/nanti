@@ -1,0 +1,823 @@
+{
+  "observedOn": "2026-11-25",
+  "listings": [
+    {
+      "inputUrl": "https://s.shopee.co.id/9pTH0oaUaG",
+      "documentStatuses": [
+        301,
+        200,
+        200
+      ],
+      "decodedHtmlBytes": 791795,
+      "canonicalUrl": "https://shopee.co.id/Acaraki-Golden-Sparkling-Paket-Karton-isi-24pcs-i.315438066.10919010280",
+      "shopItemIds": "315438066/10919010280",
+      "openGraphTitle": "Jual Acaraki Golden Sparkling Paket Karton isi 24pcs | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/d5218c1ce06b5df4acfee48565fbd5a6",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 505610,
+        "endByte": 766339
+      },
+      "productTitle": "Acaraki Golden Sparkling Paket Karton isi 24pcs",
+      "verifiedShopNames": [],
+      "galleryCount": 5,
+      "tiers": [],
+      "models": [
+        {
+          "name": "",
+          "id": "56471456350"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://s.shopee.co.id/1qOV3sqP6F",
+      "documentStatuses": [
+        301,
+        200,
+        200
+      ],
+      "decodedHtmlBytes": 807726,
+      "canonicalUrl": "https://shopee.co.id/Grinder-Kopi-Elektrik-Guerrero-GR-02-Single-Dose-Coffee-Grinder-Hypernova-Titanium-Plasma-Burr-i.87506461.29325976113",
+      "shopItemIds": "87506461/29325976113",
+      "openGraphTitle": "Jual Grinder Kopi Elektrik Guerrero GR 02 Single Dose Coffee Grinder Hypernova Titanium Plasma Burr | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/id-11134207-7rbk3-m65j9udzdg8y50",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 506492,
+        "endByte": 782270
+      },
+      "productTitle": "Grinder Kopi Elektrik Guerrero GR 02 Single Dose Coffee Grinder Hypernova Titanium Plasma Burr",
+      "verifiedShopNames": [],
+      "galleryCount": 9,
+      "tiers": [],
+      "models": [
+        {
+          "name": "",
+          "id": "166962766699"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://s.shopee.co.id/1VvkmRGQgz",
+      "documentStatuses": [
+        301,
+        200,
+        200
+      ],
+      "decodedHtmlBytes": 1023812,
+      "canonicalUrl": "https://shopee.co.id/Bisa-COD-Tas-ZR-Kids-Tas-Backpack-ZR-Tas-ransel-anak-perempuan-tas-sekolah-TK-PAUD-NGAJI-motif-kartun-backpack-mini-i.2637287.23082544058",
+      "shopItemIds": "2637287/23082544058",
+      "openGraphTitle": "Jual Bisa COD Tas ZR Kids Tas Backpack ZR Tas ransel anak perempuan tas sekolah TK PAUD NGAJI motif kartun backpack mini | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/id-11134207-81ztg-mrbgha1lob9dfb",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 559719,
+        "endByte": 998356
+      },
+      "productTitle": "Bisa COD Tas ZR Kids Tas Backpack ZR Tas ransel anak perempuan tas sekolah TK PAUD NGAJI motif kartun backpack mini",
+      "verifiedShopNames": [
+        "ChubbyGlory"
+      ],
+      "galleryCount": 9,
+      "tiers": [
+        {
+          "name": "Warna",
+          "options": [
+            "BA2351 KREM",
+            "BA2351 KUNING",
+            "BABC55 T PINK KECIL",
+            "BABC55 T PUT BESAR",
+            "BABC55 T PUT KECIL",
+            "MEILI BABF16",
+            "BAB424 BIRU",
+            "BA2106 MICKEY",
+            "BABC71 LOVE",
+            "BABC52",
+            "BAB413 UNGU",
+            "BA2348 HITAM",
+            "BA2342 KREM",
+            "BAB423 HIJAU",
+            "BA2112 MICKEY HITAM",
+            "BAB415 UNGU",
+            "BA2323 DINO",
+            "BAB405 MERAH",
+            "BAB404 STITCH",
+            "BA2349",
+            "BAB408 MICKEY",
+            "BAB439R BIRU",
+            "BAB506 UNGU",
+            "BAB507 HELLO KITTY",
+            "BAB502 LOTSO",
+            "BAB525 LOVE",
+            "BAB525 LOVE HOTPINK",
+            "BAB525 FLOWER HOTPIN",
+            "BAB525 FLOWER SOFTPI",
+            "BAB526 MELODY",
+            "BAB256 CAPTAIN AM",
+            "BAB526 KUROMI",
+            "BAB526 SPIDERMAN",
+            "BAB534",
+            "BAB534 Biru",
+            "BAB534 Hitam",
+            "BAB534 Lavender",
+            "BAB535 COKLAT",
+            "BAB537 MICKEY",
+            "BAB538 BIRU",
+            "BAB539 BIRU",
+            "BAB539",
+            "BAB435 BIRU",
+            "BAB529",
+            "BAB402 HITAM",
+            "BA2339 KUROMI UNGU",
+            "BAB549 MERAH",
+            "BAB548 BIRU",
+            "BAB548 MERAH",
+            "BAB548",
+            "BAB548 PUTIH",
+            "BAB553 PUTIH",
+            "BAB554R STITCH",
+            "BAB557 UNGU",
+            "BAB560 PINKY",
+            "BABF06 HELLO KITY",
+            "BABF05 PUTIH",
+            "BAB438 UNGU",
+            "BAB438 HITAM",
+            "BABF12 ungu",
+            "BABF12 hijau",
+            "BABF12 pink",
+            "BABF12 biru",
+            "BABF12 pink tua",
+            "BABF12 merah",
+            "BABF12 oren",
+            "BABF12 biru tua",
+            "SNOP-BABF17",
+            "JERO-BABF15"
+          ]
+        }
+      ],
+      "models": [
+        {
+          "name": "BAB502 LOTSO",
+          "id": "257485946636"
+        },
+        {
+          "name": "BAB529",
+          "id": "271509046775"
+        },
+        {
+          "name": "BABF12 hijau",
+          "id": "360821583873"
+        },
+        {
+          "name": "BAB413 UNGU",
+          "id": "168294114026"
+        },
+        {
+          "name": "BAB525 FLOWER SOFTPI",
+          "id": "270498620196"
+        },
+        {
+          "name": "BA2342 KREM",
+          "id": "168294114031"
+        },
+        {
+          "name": "BAB526 SPIDERMAN",
+          "id": "300544359717"
+        },
+        {
+          "name": "BAB534 Hitam",
+          "id": "280606834837"
+        },
+        {
+          "name": "MEILI BABF16",
+          "id": "360821583880"
+        },
+        {
+          "name": "JERO-BABF15",
+          "id": "360821583882"
+        },
+        {
+          "name": "BAB424 BIRU",
+          "id": "241463671096"
+        },
+        {
+          "name": "BAB534 Biru",
+          "id": "280606834836"
+        },
+        {
+          "name": "BAB553 PUTIH",
+          "id": "405266355042"
+        },
+        {
+          "name": "BAB435 BIRU",
+          "id": "271509046774"
+        },
+        {
+          "name": "BAB554R STITCH",
+          "id": "405266355043"
+        },
+        {
+          "name": "BAB548 MERAH",
+          "id": "405041889632"
+        },
+        {
+          "name": "BAB402 HITAM",
+          "id": "296939035809"
+        },
+        {
+          "name": "BAB526 MELODY",
+          "id": "300544359713"
+        },
+        {
+          "name": "BABC55 T PINK KECIL",
+          "id": "168294114022"
+        },
+        {
+          "name": "BAB534",
+          "id": "280606834835"
+        },
+        {
+          "name": "BAB537 MICKEY",
+          "id": "296241033739"
+        },
+        {
+          "name": "BA2348 HITAM",
+          "id": "168294114030"
+        },
+        {
+          "name": "BAB408 MICKEY",
+          "id": "251229868740"
+        },
+        {
+          "name": "BAB560 PINKY",
+          "id": "405266355046"
+        },
+        {
+          "name": "BAB438 HITAM",
+          "id": "415821579529"
+        },
+        {
+          "name": "BABF12 pink tua",
+          "id": "360821583876"
+        },
+        {
+          "name": "BABF12 merah",
+          "id": "360821583877"
+        },
+        {
+          "name": "BAB506 UNGU",
+          "id": "257485946634"
+        },
+        {
+          "name": "BABC55 T PUT BESAR",
+          "id": "415821579524"
+        },
+        {
+          "name": "BAB423 HIJAU",
+          "id": "241463671095"
+        },
+        {
+          "name": "BABF05 PUTIH",
+          "id": "415821579527"
+        },
+        {
+          "name": "BAB439R BIRU",
+          "id": "257485946632"
+        },
+        {
+          "name": "BAB538 BIRU",
+          "id": "281272277218"
+        },
+        {
+          "name": "BABF12 pink",
+          "id": "360821583874"
+        },
+        {
+          "name": "BABF12 biru tua",
+          "id": "360821583879"
+        },
+        {
+          "name": "BAB557 UNGU",
+          "id": "405266355044"
+        },
+        {
+          "name": "BAB548 PUTIH",
+          "id": "405041889634"
+        },
+        {
+          "name": "BA2339 KUROMI UNGU",
+          "id": "296939035810"
+        },
+        {
+          "name": "BAB438 UNGU",
+          "id": "415821579528"
+        },
+        {
+          "name": "BAB404 STITCH",
+          "id": "207661695079"
+        },
+        {
+          "name": "BAB526 KUROMI",
+          "id": "300544359715"
+        },
+        {
+          "name": "BAB507 HELLO KITTY",
+          "id": "257485946635"
+        },
+        {
+          "name": "BAB549 MERAH",
+          "id": "405041889627"
+        },
+        {
+          "name": "BABC55 T PUT KECIL",
+          "id": "415821579525"
+        },
+        {
+          "name": "BABF12 ungu",
+          "id": "360821583872"
+        },
+        {
+          "name": "BABF12 biru",
+          "id": "360821583875"
+        },
+        {
+          "name": "BAB548 BIRU",
+          "id": "405041889631"
+        },
+        {
+          "name": "BABF06 HELLO KITY",
+          "id": "415821579526"
+        },
+        {
+          "name": "BAB539",
+          "id": "281272277225"
+        },
+        {
+          "name": "BA2351 KUNING",
+          "id": "390567554993"
+        },
+        {
+          "name": "BA2323 DINO",
+          "id": "168294114025"
+        },
+        {
+          "name": "BAB534 Lavender",
+          "id": "280606834838"
+        },
+        {
+          "name": "BAB548",
+          "id": "405041889633"
+        },
+        {
+          "name": "BA2106 MICKEY",
+          "id": "207687473700"
+        },
+        {
+          "name": "BAB535 COKLAT",
+          "id": "296241033737"
+        },
+        {
+          "name": "BAB415 UNGU",
+          "id": "241188711355"
+        },
+        {
+          "name": "SNOP-BABF17",
+          "id": "360821583881"
+        },
+        {
+          "name": "BAB256 CAPTAIN AM",
+          "id": "300544359714"
+        },
+        {
+          "name": "BAB405 MERAH",
+          "id": "168294114023"
+        },
+        {
+          "name": "BABC71 LOVE",
+          "id": "234436719328"
+        },
+        {
+          "name": "BAB525 LOVE",
+          "id": "270498620193"
+        },
+        {
+          "name": "BA2349",
+          "id": "207661695082"
+        },
+        {
+          "name": "BABC52",
+          "id": "241217900591"
+        },
+        {
+          "name": "BA2351 KREM",
+          "id": "158393724668"
+        },
+        {
+          "name": "BAB525 LOVE HOTPINK",
+          "id": "270498620194"
+        },
+        {
+          "name": "BAB525 FLOWER HOTPIN",
+          "id": "270498620195"
+        },
+        {
+          "name": "BAB539 BIRU",
+          "id": "281272277224"
+        },
+        {
+          "name": "BA2112 MICKEY HITAM",
+          "id": "207687473701"
+        },
+        {
+          "name": "BABF12 oren",
+          "id": "360821583878"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/product/919692407/51864967214",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 914338,
+      "canonicalUrl": "https://shopee.co.id/-BEST-SELLER-ADVAN-V11-Tablet-AI-Gemini-11-FHD-IPS-RAM-6-6GB-ROM-128GB-Keyboard-Detachable-4G-LTE-Dual-SIM-Baterai-7200mAh-i.919692407.51864967214",
+      "shopItemIds": "919692407/51864967214",
+      "openGraphTitle": "Jual [BEST SELLER] ADVAN V11 Tablet AI Gemini 11\" FHD IPS | RAM 6+6GB ROM 128GB | Keyboard Detachable | 4G LTE Dual SIM | Baterai 7200mAh | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/id-11134207-81ztc-mvrcph4zjtoh9d",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 520055,
+        "endByte": 888882
+      },
+      "productTitle": "[BEST SELLER] ADVAN V11 Tablet AI Gemini 11\" FHD IPS | RAM 6+6GB ROM 128GB | Keyboard Detachable | 4G LTE Dual SIM | Baterai 7200mAh",
+      "verifiedShopNames": [
+        "Advan Notebook Official Store "
+      ],
+      "galleryCount": 9,
+      "tiers": [
+        {
+          "name": "Unit",
+          "options": [
+            "TABLET ONLY",
+            "TAB+KEYBOARD"
+          ]
+        }
+      ],
+      "models": [
+        {
+          "name": "TAB+KEYBOARD",
+          "id": "273032452298"
+        },
+        {
+          "name": "TABLET ONLY",
+          "id": "326286000094"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/product/241308147/25992970267",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 916015,
+      "canonicalUrl": "https://shopee.co.id/Apple-iPhone-16-i.241308147.25992970267",
+      "shopItemIds": "241308147/25992970267",
+      "openGraphTitle": "Jual Apple iPhone 16 | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/id-11134207-7ra0k-mdr81gak2hlafb",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 512690,
+        "endByte": 890559
+      },
+      "productTitle": "Apple iPhone 16",
+      "verifiedShopNames": [],
+      "galleryCount": 10,
+      "tiers": [
+        {
+          "name": "Warna",
+          "options": [
+            "Black",
+            "White",
+            "Pink",
+            "Ultramarine",
+            "Teal"
+          ]
+        },
+        {
+          "name": "Kapasitas",
+          "options": [
+            "128GB",
+            "256GB",
+            "512GB"
+          ]
+        }
+      ],
+      "models": [
+        {
+          "name": "Teal,256GB",
+          "id": "242956083360"
+        },
+        {
+          "name": "Ultramarine,512GB",
+          "id": "242956083358"
+        },
+        {
+          "name": "Teal,128GB",
+          "id": "242956083359"
+        },
+        {
+          "name": "Ultramarine,256GB",
+          "id": "242956083357"
+        },
+        {
+          "name": "White,128GB",
+          "id": "242956083350"
+        },
+        {
+          "name": "Pink,128GB",
+          "id": "242956083353"
+        },
+        {
+          "name": "White,512GB",
+          "id": "242956083352"
+        },
+        {
+          "name": "White,256GB",
+          "id": "242956083351"
+        },
+        {
+          "name": "Black,128GB",
+          "id": "242956083347"
+        },
+        {
+          "name": "Black,256GB",
+          "id": "242956083348"
+        },
+        {
+          "name": "Pink,256GB",
+          "id": "242956083354"
+        },
+        {
+          "name": "Teal,512GB",
+          "id": "242956083361"
+        },
+        {
+          "name": "Pink,512GB",
+          "id": "242956083355"
+        },
+        {
+          "name": "Black,512GB",
+          "id": "242956083349"
+        },
+        {
+          "name": "Ultramarine,128GB",
+          "id": "242956083356"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/product/1540838996/44301519243",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 805089,
+      "canonicalUrl": "https://shopee.co.id/CANCIMEN-Cuanki-Ramen-Extra-Pedas-Instan-i.1540838996.44301519243",
+      "shopItemIds": "1540838996/44301519243",
+      "openGraphTitle": "Jual CANCIMEN - Cuanki Ramen Extra Pedas Instan | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/id-11134207-81zth-mt7so99ch1539e",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 503094,
+        "endByte": 779633
+      },
+      "productTitle": "CANCIMEN - Cuanki Ramen Extra Pedas Instan",
+      "verifiedShopNames": [],
+      "galleryCount": 5,
+      "tiers": [],
+      "models": [
+        {
+          "name": "",
+          "id": "168935804519"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/product/93014939/1881883105",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 798975,
+      "canonicalUrl": "https://shopee.co.id/Tinta-Epson-664-T664-Original-(L120-L121-L1300)-i.93014939.1881883105",
+      "shopItemIds": "93014939/1881883105",
+      "openGraphTitle": "Jual Tinta Epson 664 / T664 Original (L120 L121 L1300) | Shopee Indonesia",
+      "primaryImage": "https://down-id.img.susercontent.com/file/5668e3a147faedccb38836a5e1984acc",
+      "jsonLdTypes": [
+        "WebSite",
+        "BreadcrumbList"
+      ],
+      "embeddedData": {
+        "matched": true,
+        "startByte": 510739,
+        "endByte": 773519
+      },
+      "productTitle": "Tinta Epson 664 / T664 Original (L120 L121 L1300)",
+      "verifiedShopNames": [],
+      "galleryCount": 9,
+      "tiers": [
+        {
+          "name": "Epson 664",
+          "options": [
+            "Black (T6641)",
+            "Cyan (T6642)",
+            "Magenta (T6643)",
+            "Yellow (T6644)"
+          ]
+        }
+      ],
+      "models": [
+        {
+          "name": "Black (T6641)",
+          "id": "3236230061"
+        },
+        {
+          "name": "Cyan (T6642)",
+          "id": "3236230062"
+        },
+        {
+          "name": "Magenta (T6643)",
+          "id": "3236230063"
+        },
+        {
+          "name": "Yellow (T6644)",
+          "id": "3236230064"
+        }
+      ],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/product/22816723/19791107773",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 722661,
+      "canonicalUrl": null,
+      "shopItemIds": "22816723/19791107773",
+      "openGraphTitle": "Shopee Indonesia | Situs Belanja Online Terlengkap & Terpercaya",
+      "primaryImage": null,
+      "jsonLdTypes": [
+        "WebSite"
+      ],
+      "embeddedData": {
+        "matched": false,
+        "startByte": 476628,
+        "endByte": 697205
+      },
+      "productTitle": null,
+      "verifiedShopNames": [],
+      "galleryCount": null,
+      "tiers": [],
+      "models": [],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/HOPPLOS-Telenan-Putih-Estetik-Chopping-Board-Ikea-i.463043920.10219155670",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 722710,
+      "canonicalUrl": null,
+      "shopItemIds": "463043920/10219155670",
+      "openGraphTitle": "Shopee Indonesia | Situs Belanja Online Terlengkap & Terpercaya",
+      "primaryImage": null,
+      "jsonLdTypes": [
+        "WebSite"
+      ],
+      "embeddedData": {
+        "matched": false,
+        "startByte": 476628,
+        "endByte": 697254
+      },
+      "productTitle": null,
+      "verifiedShopNames": [],
+      "galleryCount": null,
+      "tiers": [],
+      "models": [],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    },
+    {
+      "inputUrl": "https://shopee.co.id/adidas-TENNIS-Sepatu-Grand-Court-Pria-Abu-abu-H04547-i.270510657.17534267612",
+      "documentStatuses": [
+        200
+      ],
+      "decodedHtmlBytes": 722713,
+      "canonicalUrl": null,
+      "shopItemIds": "270510657/17534267612",
+      "openGraphTitle": "Shopee Indonesia | Situs Belanja Online Terlengkap & Terpercaya",
+      "primaryImage": null,
+      "jsonLdTypes": [
+        "WebSite"
+      ],
+      "embeddedData": {
+        "matched": false,
+        "startByte": 476628,
+        "endByte": 697257
+      },
+      "productTitle": null,
+      "verifiedShopNames": [],
+      "galleryCount": null,
+      "tiers": [],
+      "models": [],
+      "priceAvailable": false,
+      "productApi": {
+        "httpStatus": 200,
+        "errorCode": 90309999,
+        "hasProductPayload": false
+      },
+      "browserOutcome": "login_required"
+    }
+  ]
+}

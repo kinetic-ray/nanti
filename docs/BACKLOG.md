@@ -17,7 +17,25 @@ GitHub Issues are the source of truth for remaining work. Before opening a PR, s
 6. **P2 — Creator validation**: #16 — test creator demand and minimal lookbook before implementation.
 7. **P2 — Monetization**: #17 — decide pricing and subscriptions after creator validation.
 
-## Progress snapshot — 18 Nov 2026
+## Sprint handoff — 25 Nov 2026
+
+| Sprint | Status | References |
+| --- | --- | --- |
+| 1 — Affiliate Management | Completed | [#85](https://github.com/kinetic-ray/nanti/pull/85), [#87](https://github.com/kinetic-ray/nanti/pull/87) |
+| 2 — Recommendation Management | Completed | [#88](https://github.com/kinetic-ray/nanti/pull/88) |
+| 3 — Catalog and Marketplace Hardening | Completed | [#90](https://github.com/kinetic-ray/nanti/pull/90) |
+| 4 Phase 1 — Shopee Embedded State Extraction | Deployed | [#91](https://github.com/kinetic-ray/nanti/pull/91), [CI](https://github.com/kinetic-ray/nanti/actions/runs/45528343068) |
+| 4 Phase 2 — Shopee Short-Link Resolution | Deployed | [#92](https://github.com/kinetic-ray/nanti/pull/92), [CI](https://github.com/kinetic-ray/nanti/actions/runs/45530693073) |
+| 4 Phase 3 — Authorized Price Extraction | Research complete. Blocked pending Shopee Affiliate Open API approval. | [Research and access requirements](SHOPEE_RESEARCH.md) |
+| 4 Phase 4 — Integration Validation | Next available task | Verify direct and short links, blocked-listing manual fallback, catalog deduplication, purchase links, and saved images. Use fixtures or authorized public checks and keep Shopee price extraction disabled. |
+| 5 — Production Reliability | Postponed | Resume after the next sprint decision. |
+| 6 — Recommendation Engine | Postponed | Resume after the next sprint decision. |
+
+Phase 2 validation included 113 targeted tests with `nanti_dev`, typecheck, and three passing consolidated CI jobs. Phase 4 should reuse those results and cover gaps in deployment and integration behavior without changing production data.
+
+PR [#32](https://github.com/kinetic-ray/nanti/pull/32) remains blocked pending authorized provider validation. Drafts [#66](https://github.com/kinetic-ray/nanti/pull/66) and [#79](https://github.com/kinetic-ray/nanti/pull/79) were superseded by #67 and #92, respectively. Their branches are retained, alongside the creator design experiment and Tokopedia redirect investigation.
+
+## Historical progress snapshot — 18 Nov 2026
 - **#11 P0 — PARTIAL / R2 PAUSED BY USER**: PRs #19–#24 merged, including object-storage image references, Android JPEG compression, CSP and CI checks. User reports the TiDB SQL Editor migration query ran successfully against `nanti`; actual `imageKey` column and `_prisma_migrations` checksum consistency still require independent verification. R2 bucket, credentials, CORS, Vercel configuration, redeploy, Android end-to-end QA and image persistence checks remain pending. **Do not run a second ALTER TABLE blindly.** Resume R2 only when user requests it.
 - **#12 P0 — PARTIAL**: PR #25 merged and CI passed. Shopee/Tokopedia preview is no longer incorrectly gated on IKEA permission. Real-world shortlink, redirect, blocked-page and fallback acceptance still pending.
 - **#13 P1 — OPEN**: official affiliate integration and conversion attribution pending.

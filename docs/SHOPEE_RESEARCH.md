@@ -1,0 +1,15 @@
+﻿# Shopee Indonesia research handoff
+
+The importer uses the same verified shop and item identity for direct links and resolved short links. It retains the submitted URL for purchases. In the three observed short-link chains a 301 led to an affiliate landing page, then the browser opened the matching product route. The importer constructs that product URL from the validated landing path and requires the product document to confirm the canonical identity. It neither executes landing-page scripts nor treats a landing page as product metadata.
+
+The product parser accepts complete embedded JSON from `text/mfe-initial-data` only when the canonical URL, route context, cache key, and item IDs agree. It reads up to 2 MiB of decoded HTML and 512 KiB per metadata script. It uses verified Open Graph or JSON-LD fallback metadata when appropriate. Catalog deduplication and owner-bound primary-image persistence are covered by integration tests. Gallery and model data remain preview metadata.
+
+## Captured evidence
+
+The [sanitized ten-listing sample](shopee-listing-evidence.json) preserves public listing references, response sizes, script offsets, image availability, and 93 model IDs. It omits raw payloads, cookies, tracking parameters, and session identifiers. Seven documents contained matching embedded state, two contained verified shop names, and none returned a listing or model price. All ten settled on a login-required screen. Product API responses used HTTP 200 with application error 90309999 and supplied no product payload. An earlier iPhone 16 baseline also returned models and a verified shop without prices. These samples establish behavior for the observed routes only.
+
+## Price extraction decision
+
+Phase 3 research is complete. Production price extraction is **NO-GO** pending approved Shopee Indonesia Affiliate Open API access. The [Affiliate Explorer](https://open-api.affiliate.shopee.co.id/explorer/v2#productOfferV2) documents an offer amount, min/max range, and discount rate. It does not establish exact model prices, stable arbitrary-listing coverage, or whether an offer amount is the current exact price for a multi-variant item. The [Open Platform model endpoint](https://open.shopee.com/documents/v2/v2.product.get_model_list?module=89&type=1) documents current and original model prices for seller-authorized shops. No documented third-party consumer Mobile API path was found.
+
+To resume Phase 3, obtain an approved Indonesia Affiliate Open API App ID and Secret through Shopee and provision them server-side. Confirm permission to display and retain prices in wishlists and price history, plus applicable quotas, fees, and refresh rules. Verify authorized responses for single-model, multi-model, and out-of-program listings before implementation. An exact variant price via Open Platform requires an approved product-read app and authorization from the participating seller. Keep the permission flag disabled until explicitly approved. Keep exact amounts, original prices, and variant ranges separate and retain manual entry when an exact amount cannot be verified.
