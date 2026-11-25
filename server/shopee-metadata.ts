@@ -26,7 +26,9 @@ function listingKey(url: URL): string | null {
   const match = url.pathname.match(/^\/product\/(\d+)\/(\d+)\/?$/u) ??
     url.pathname.match(/^\/[^/]*-i\.(\d+)\.(\d+)\/?$/u);
   // Shopee's www and non-www hosts describe the same shop/item identity.
-  return match ? match[1] + '/' + match[2] : null;
+  const host = url.hostname.replace(/^www\./u, '');
+  return match && host !== 's.shopee.co.id' && host !== 'shopee.ee'
+    ? host + '/' + match[1] + '/' + match[2] : null;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -176,7 +178,7 @@ function readProductPage(html: string, current: URL, key: string | null, status:
     return null;
   }
   const productUrl = new URL(current.href);
-  productUrl.search = '';
+  for (const parameter of ['sp_atk', 'xptdk']) productUrl.searchParams.delete(parameter);
   productUrl.hash = '';
   return {
     title, image: safeImage, price,

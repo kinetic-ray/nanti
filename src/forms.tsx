@@ -307,6 +307,8 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
       (preview.canSaveImage === true || preview.merchant === 'tokopedia');
     const publicTitle = !item && preview?.originalUrl === originalUrl && preview?.name && preview.publicTitleProof
       ? { title: preview.name, proof: preview.publicTitleProof } : undefined;
+    const verifiedListing = !item && preview?.originalUrl === originalUrl && preview.productUrl && preview.listingProof
+      ? { url: preview.productUrl, proof: preview.listingProof } : undefined;
     const publicPriceProof = !item && preview?.originalUrl === originalUrl && preview?.price?.priceMinor === priceMinor &&
       preview.price.currency === currency ? preview.publicPriceProof : undefined;
     submitting.current = true;
@@ -335,12 +337,14 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
         saveFingerprint.current = fingerprintFor(key, false);
         await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey: key, sellerName,
           ...(publicTitle && { publicTitle }),
+          ...(verifiedListing && { verifiedListing }),
           ...(publicPriceProof && { publicPriceProof }),
           ...(importedPrice && priceMinor !== null && { priceSource: 'imported_unverified' }) }, requestKey);
         return;
       }
       await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey, sellerName,
         ...(publicTitle && { publicTitle }),
+        ...(verifiedListing && { verifiedListing }),
         ...(publicPriceProof && { publicPriceProof }),
         ...(saveMarketplaceImage && { saveMarketplaceImage: true, tokopediaProductUrl: preview?.productUrl,
           ...(preview?.tokopediaImageProof && preview.imagePath && {

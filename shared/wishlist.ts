@@ -9,6 +9,7 @@ export type ItemWriteInput = ItemInput & { priceSource?: 'imported_unverified' }
 export type ItemSaveInput = ItemWriteInput & {
   publicTitle?: { title: string; proof: string };
   publicPriceProof?: string;
+  verifiedListing?: { url: string; proof: string };
   saveMarketplaceImage?: true;
   tokopediaProductUrl?: string;
   tokopediaImage?: { url: string; proof: string };

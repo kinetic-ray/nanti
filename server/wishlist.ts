@@ -9,7 +9,7 @@ export interface WishlistRepository {
   rename(ownerId: string, id: string, name: string): Promise<boolean>;
   remove(ownerId: string, id: string): Promise<boolean>;
   addItem(ownerId: string, listId: string, data: ItemWriteInput, requestId?: string, photo?: Buffer,
-    publicMetadata?: { title?: string; priceCurrency?: Currency; marketplacePhoto?: boolean }): Promise<boolean>;
+    publicMetadata?: { title?: string; priceCurrency?: Currency; marketplacePhoto?: boolean; listingUrl?: string }): Promise<boolean>;
   updateItem(ownerId: string, listId: string, id: string, data: ItemWriteInput): Promise<boolean>;
   removeItem(ownerId: string, listId: string, id: string): Promise<boolean>;
 }

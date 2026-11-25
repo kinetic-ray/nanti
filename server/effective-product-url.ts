@@ -1,5 +1,5 @@
 import { safeImportUrl } from '../shared/product-import.js';
-import { isEligibleAffiliate } from './product-identity.js';
+import { identifyProduct, isEligibleAffiliate } from './product-identity.js';
 import { lookup } from 'node:dns/promises';
 import { BlockList } from 'node:net';
 import { isPublicIpv4 } from './tokopedia-metadata.js';
@@ -22,7 +22,7 @@ export function replacementUrl(value: string) {
 }
 
 export function catalogUrl(value: string, merchant: string) {
-  if (merchant !== 'Other' && merchant !== 'Tokopedia') return value;
+  if ((merchant === 'IKEA' || merchant === 'Shopee') && identifyProduct(value)?.merchant === merchant) return value;
   const url = new URL(value);
   return merchant === 'Tokopedia' && url.hostname === 'www.tokopedia.com'
     ? url.origin + url.pathname

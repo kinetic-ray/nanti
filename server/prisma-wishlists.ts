@@ -59,7 +59,7 @@ export function prismaWishlists(db: PrismaClient): WishlistRepository {
           stage = 'idempotency';
           if (requestId && await tx.item.findUnique({ where: { id: requestId }, select: { id: true } })) return false;
           stage = 'catalog';
-          const identity = data.url ? await getOrCreateProductIdentity(tx, data.url, publicMetadata?.title) : null;
+          const identity = data.url ? await getOrCreateProductIdentity(tx, publicMetadata?.listingUrl ?? data.url, publicMetadata?.title) : null;
           stage = 'item';
           const created = await tx.item.create({
             data: { ...(requestId && { id: requestId }), ownerId: list.ownerId, wishlistId, ...data, productIdentityId: identity?.id ?? null }, select: { id: true },

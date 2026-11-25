@@ -5,7 +5,7 @@ import type { RecommendationImport, RecommendationWorkspaceProduct } from '../sh
 import { currencies } from '../shared/wishlist.js';
 import { getOrCreateProductIdentity } from './catalog-ingestion.js';
 import { Prisma, type CuratedRecommendation, type PrismaClient } from './generated/prisma/client.js';
-import { identifyProduct } from './product-identity.js';
+import { identifyCatalogProduct, identifyProduct } from './product-identity.js';
 import { signPublicTitle, verifyPublicTitle } from './product-title-proof.js';
 import { safeHttpsUrl } from './recommendation-matching.js';
 
@@ -44,8 +44,9 @@ function evidence(owner: string, metadata: RecommendationImport) {
 
 export function recommendationListing(url: string) {
   if (!safeHttpsUrl(url) || !safeImportUrl(url)) return null;
-  const listing = identifyProduct(url);
-  if (!listing || listing.merchant === 'Other' || !safeHttpsUrl(listing.canonicalUrl)) return null;
+  const listing = identifyCatalogProduct(url);
+  if (!listing || !safeHttpsUrl(listing.canonicalUrl) ||
+      identifyProduct(listing.canonicalUrl)?.merchant !== listing.merchant || listing.merchant === 'Other') return null;
   if (listing.merchant === 'Tokopedia' && new URL(listing.canonicalUrl).hostname !== 'www.tokopedia.com') return null;
   return listing;
 }
@@ -122,7 +123,7 @@ export function recommendationWorkspaceRoutes(db: PrismaClient, actor: string, s
       const legacy = await tx.curatedRecommendation.findMany({
         where: { productIdentityId: null }, select: { url: true, listingUrl: true },
       });
-      if (legacy.some(row => identifyProduct(row.listingUrl ?? row.url)?.lookupKey === listing.lookupKey)) return null;
+      if (legacy.some(row => recommendationListing(row.listingUrl ?? row.url)?.lookupKey === listing.lookupKey)) return null;
       const identity = await getOrCreateProductIdentity(tx, metadata.listingUrl, metadata.title ?? undefined);
       if (!identity) throw new Error('Recommendation listing identity missing');
       const inserted = await tx.curatedRecommendation.createMany({

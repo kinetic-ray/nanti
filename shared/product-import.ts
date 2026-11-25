@@ -16,6 +16,7 @@ export type ProductImport = {
   tokopediaImageProof?: string;
   shopeeImageProof?: string;
   productUrl?: string;
+  listingProof?: string;
   sellerName?: string;
   diagnostic?: { code: string; host: string; httpStatus?: number };
 };

@@ -1,8 +1,8 @@
 import type { Prisma, PrismaClient } from './generated/prisma/client.js';
-import { identifyProduct } from './product-identity.js';
+import { identifyCatalogProduct, identifyProduct } from './product-identity.js';
 
 export async function getOrCreateProductIdentity(db: Prisma.TransactionClient, url: string, publicTitle?: string) {
-  const product = identifyProduct(url);
+  const product = identifyCatalogProduct(url);
   if (!product) return null;
   const { hasAttribution: _hasAttribution, ...listing } = product;
   const created = await db.productIdentity.createMany({ data: [{ ...listing, title: publicTitle ?? null }], skipDuplicates: true });
