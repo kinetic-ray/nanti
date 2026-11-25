@@ -1,13 +1,11 @@
+import { requireTestDatabaseUrl } from '../tests/test-database-url.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { connectDatabase } from '../server/database.js';
 
-const url = process.env.DATABASE_URL;
-const target = url && new URL(url);
-const local = target && ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname);
-if (!url || !target || !local || (target.pathname !== '/nanti_migration_test' &&
-    (url !== process.env.TEST_DATABASE_URL || !/_test$/u.test(target.pathname)))) {
-  throw new Error('Recommendation DB smoke tests require a disposable local test schema.');
+const url = requireTestDatabaseUrl(process.env.DATABASE_URL);
+if (process.env.TEST_DATABASE_URL !== url && new URL(url).pathname !== '/nanti_migration_test') {
+  throw new Error('Set DATABASE_URL and TEST_DATABASE_URL to the same local schema.');
 }
 const db = connectDatabase(url);
 const ownerId = randomUUID();

@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +11,7 @@ import { prismaWishlists } from '../server/prisma-wishlists.js';
 
 const mutation = { 'X-Nanti-Request': '1', 'Content-Type': 'application/json' };
 const link = 'https://retailer.example.test/p/lamp?utm_source=user';
-const testDatabase = process.env.TEST_DATABASE_URL;
+const testDatabase = testDatabaseUrl;
 
 it('recognizes supported storefronts, preserves original destinations, and fetches only an explicitly enabled IKEA adapter', async () => {
   const preview = vi.fn().mockImplementation(async (url: URL) => url.hostname === 'shopee.co.id' ||

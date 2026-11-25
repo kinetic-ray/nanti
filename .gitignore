@@ -7,3 +7,5 @@ coverage/
 server/generated/
 
 /backups/
+.vercel
+.env*

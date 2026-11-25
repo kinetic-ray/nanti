@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
@@ -107,7 +108,7 @@ describe('Purchase intelligence HTTP validation', () => {
   });
 });
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 describe.skipIf(!databaseUrl)('Purchase intelligence with MySQL persistence', () => {
   const db = connectDatabase(databaseUrl ?? 'mysql://127.0.0.1/nanti_test');
   const wishlists = prismaWishlists(db);

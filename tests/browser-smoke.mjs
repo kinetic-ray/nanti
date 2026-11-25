@@ -1,3 +1,4 @@
+import { requireTestDatabaseUrl } from './test-database-url.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright-core';
@@ -5,6 +6,10 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
+if (process.env.DATABASE_URL !== requireTestDatabaseUrl()) {
+  throw new Error('Use the same local DATABASE_URL and TEST_DATABASE_URL for the browser server.');
+}
+
 const baseURL = process.env.NANTI_BROWSER_BASE_URL ?? 'http://127.0.0.1:3000';
 if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseURL).hostname)) {
   throw new Error('Run this fixture against a local Nanti instance using an isolated test database.');

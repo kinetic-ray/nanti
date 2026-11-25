@@ -117,8 +117,9 @@ try {
     await wheel([80, -80]);
 
     if (mobile) await page.locator('.studio-mobile-switch button').first().click();
-    const theme = page.locator('.studio-preset-grid button').nth(1);
-    await theme.click();
+    await page.getByRole('button', { name: 'Kontras', exact: true }).click();
+    await page.getByRole('button', { name: 'Gunakan setelan gaya', exact: true }).click();
+    await page.getByRole('button', { name: 'Sesuaikan detail', exact: true }).click();
     await page.locator('.studio-tabs button').nth(1).click();
     await page.locator('.studio-settings .studio-choice-grid').first().locator('button').nth(1).click();
     await page.locator('.studio-tabs button').nth(3).click();

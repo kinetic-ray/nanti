@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { expect, it, vi } from 'vitest';
@@ -12,8 +13,8 @@ vi.mock('../server/account-mail.js', () => ({
   developmentAccountMail: () => async (_email: string, kind: string, code: string) => { outbox.set(kind, code); },
 }));
 
-it.skipIf(!process.env.TEST_DATABASE_URL)('verifies password accounts, revokes sessions and isolates Creator ownership', async () => {
-  const db = connectDatabase(process.env.TEST_DATABASE_URL!);
+it.skipIf(!testDatabaseUrl)('verifies password accounts, revokes sessions and isolates Creator ownership', async () => {
+  const db = connectDatabase(testDatabaseUrl!);
   const accounts = prismaAccounts(db);
   const email = `fixture-${randomUUID()}@example.test`;
   const password = '12345678';

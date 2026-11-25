@@ -1,8 +1,13 @@
+import { requireTestDatabaseUrl } from './test-database-url.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+
+if (process.env.DATABASE_URL !== requireTestDatabaseUrl()) {
+  throw new Error('Use the same local DATABASE_URL and TEST_DATABASE_URL for the browser server.');
+}
 
 const baseURL = process.env.NANTI_BROWSER_BASE_URL ?? 'http://127.0.0.1:3000';
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(baseURL).hostname)) {

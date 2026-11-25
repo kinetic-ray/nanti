@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import request from 'supertest';
@@ -90,7 +91,7 @@ it('rejects invalid image bytes and enforces the stored byte ceiling', async () 
   expect(compressed?.length).toBeLessThanOrEqual(195_000);
 });
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 describe.skipIf(!databaseUrl)('MySQL product photos', () => {
   const db = databaseUrl ? connectDatabase(databaseUrl) : undefined!;
   afterAll(async () => { await db?.$disconnect(); });

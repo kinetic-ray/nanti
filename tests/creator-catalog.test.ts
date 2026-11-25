@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import request from 'supertest';
 import { expect, it } from 'vitest';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -6,7 +7,7 @@ import { connectDatabase } from '../server/database.js';
 import { prismaAccounts, tokenHash } from '../server/prisma-accounts.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 
 it.skipIf(!databaseUrl)('isolates creator drafts and publishes only eligible catalog products', async () => {
   const db = connectDatabase(databaseUrl!);

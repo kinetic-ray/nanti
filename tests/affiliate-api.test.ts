@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import request from 'supertest';
@@ -29,7 +30,7 @@ const evidence: VerificationEvidence = {
   confirmedExact: true,
 };
 
-const url = process.env.TEST_DATABASE_URL;
+const url = testDatabaseUrl;
 describe.skipIf(!url)('Affiliate Center with MySQL', () => {
   const db = connectDatabase(url ?? 'mysql://127.0.0.1/nanti_test');
   const repository = prismaWishlists(db);

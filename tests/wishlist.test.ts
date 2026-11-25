@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { connectDatabase } from '../server/database.js';
 import request from 'supertest';
@@ -192,7 +193,7 @@ function contract(repository: WishlistRepository) {
 
 describe('Wishlist API', () => contract(memoryWishlists()));
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 describe.skipIf(!databaseUrl)('Wishlist API with MySQL-compatible persistence', () => {
   const db = connectDatabase(databaseUrl ?? 'mysql://127.0.0.1/nanti_test');
   afterAll(() => db.$disconnect());

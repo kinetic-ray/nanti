@@ -1,3 +1,4 @@
+import { requireTestDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { adminCredentialScope, hashAdminPassword } from '../server/admin-credentials.js';
@@ -12,11 +13,7 @@ export const mutation = { 'X-Nanti-Request': '1', 'Content-Type': 'application/j
 export const image = 'https://images.tokopedia.net/fixture.jpg';
 
 export async function recommendationFixture(databaseUrl: string, enabled = true) {
-  const database = new URL(databaseUrl);
-  if (!['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) || !/_test$/u.test(database.pathname)) {
-    throw new Error('Recommendation fixtures require an isolated local _test database.');
-  }
-  const db = connectDatabase(databaseUrl);
+  const db = connectDatabase(requireTestDatabaseUrl(databaseUrl));
   const key = randomUUID().slice(0, 8);
   const title = 'New Balance 540 White ' + key;
   const listing = 'https://www.tokopedia.com/fixture/' + key;

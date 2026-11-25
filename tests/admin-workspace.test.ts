@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { expect, it } from 'vitest';
@@ -8,7 +9,7 @@ import { prismaAccounts, tokenHash } from '../server/prisma-accounts.js';
 import { prismaAffiliate } from '../server/prisma-affiliate.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 const mutation = { 'X-Nanti-Request': '1', 'Content-Type': 'application/json' };
 const workspace = '/api/admin/workspace';
 const catalog = '/api/account/creator/catalog';

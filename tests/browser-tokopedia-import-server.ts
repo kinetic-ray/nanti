@@ -1,3 +1,4 @@
+import { requireTestDatabaseUrl } from './test-database-url.mjs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -6,10 +7,10 @@ import { connectDatabase } from '../server/database.js';
 import { createMysqlImageStorage } from '../server/mysql-image-storage.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = requireTestDatabaseUrl();
 const secret = process.env.SESSION_SECRET;
 const port = Number(process.env.PORT ?? 3000);
-if (!databaseUrl || !secret || !Number.isInteger(port)) {
+if (!secret || !Number.isInteger(port)) {
   throw new Error('Set TEST_DATABASE_URL, SESSION_SECRET, and a valid PORT for the isolated browser fixture.');
 }
 

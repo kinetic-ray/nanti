@@ -1,10 +1,11 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { expect, it } from 'vitest';
 import { getOrCreateProductIdentity } from '../server/catalog-ingestion.js';
 import { mutation, path, recommendationFixture, image } from './recommendation-workspace-fixture.js';
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 
 it.skipIf(!databaseUrl)('requires the configured Superadmin session for the recommendation workspace', async () => {
   const fixture = await recommendationFixture(databaseUrl!, false);

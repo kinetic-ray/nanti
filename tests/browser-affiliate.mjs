@@ -1,3 +1,4 @@
+import { requireTestDatabaseUrl } from './test-database-url.mjs';
 
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -17,9 +18,7 @@ import { prismaAccounts } from '../server/prisma-accounts.ts';
 import { prismaAffiliate } from '../server/prisma-affiliate.ts';
 import { prismaWishlists } from '../server/prisma-wishlists.ts';
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
-if (!databaseUrl || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(databaseUrl).hostname) ||
-    !/_test$/u.test(new URL(databaseUrl).pathname)) throw new Error('Set a disposable local TEST_DATABASE_URL.');
+const databaseUrl = requireTestDatabaseUrl();
 const db = connectDatabase(databaseUrl);
 const key = randomUUID();
 const original = 'https://www.tokopedia.com/fixture-store/charger-' + key;

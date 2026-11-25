@@ -1,3 +1,4 @@
+import { testDatabaseUrl } from './test-database-url.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import request from 'supertest';
@@ -23,7 +24,7 @@ const config = {
   AUTH_APPLE_CLIENT_ID: apple, AUTH_APPLE_TEAM_ID: 'fixture-team',
   AUTH_APPLE_KEY_ID: 'fixture-key',
 };
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = testDatabaseUrl;
 type Proof = { subject: string; nonce?: string; issuer?: string; audience?: string; expired?: boolean; invalidSignature?: boolean };
 
 it('validates provider configuration without disclosing secrets', async () => {

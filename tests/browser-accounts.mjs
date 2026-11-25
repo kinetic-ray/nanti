@@ -1,3 +1,4 @@
+import { requireTestDatabaseUrl } from './test-database-url.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -14,11 +15,7 @@ import { prismaIntelligence } from '../server/prisma-intelligence.ts';
 import { prismaPrices } from '../server/prisma-prices.ts';
 import { prismaWishlists } from '../server/prisma-wishlists.ts';
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
-if (!databaseUrl || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(databaseUrl).hostname) ||
-    !/_test$/u.test(new URL(databaseUrl).pathname)) {
-  throw new Error('Set TEST_DATABASE_URL to a migrated local database whose name ends with _test.');
-}
+const databaseUrl = requireTestDatabaseUrl();
 const db = connectDatabase(databaseUrl);
 const key = await generateKeyPair('RS256');
 const jwk = { ...await exportJWK(key.publicKey), kid: 'browser-fixture', alg: 'RS256' };
