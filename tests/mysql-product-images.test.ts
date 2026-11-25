@@ -98,7 +98,8 @@ describe.skipIf(!databaseUrl)('MySQL product photos', () => {
 
   it('keeps embedded Shopee title, seller, and image bound through save and reload', async () => {
     const originalUrl = 'https://s.shopee.co.id/fixture?campaign=one';
-    const productUrl = 'https://shopee.co.id/lamp-i.123.456';
+    const productUrl = 'https://shopee.co.id/product/123/456';
+    const landingUrl = 'https://shopee.co.id/opaanlp/123/456?fixture=affiliate';
     const imageUrl = 'https://down-id.img.susercontent.com/file/fixture-lamp';
     const webp = await raster('webp');
     const html = '<link rel="canonical" href="' + productUrl + '"><script type="text/mfe-initial-data">' +
@@ -111,8 +112,9 @@ describe.skipIf(!databaseUrl)('MySQL product photos', () => {
         } } } } },
       } }) + '</script>';
     const metadataRequest: typeof fetch = async target => String(target) === originalUrl
-      ? new Response(null, { status: 302, headers: { location: productUrl } })
-      : new Response(html, { headers: { 'content-type': 'text/html' } });
+      ? new Response(null, { status: 301, headers: { location: landingUrl } })
+      : new Response(String(target) === landingUrl ? '<title>Shopee</title>' : html,
+        { headers: { 'content-type': 'text/html' } });
     const imageRequest = vi.fn(async target => {
       expect(target.href).toBe(imageUrl);
       return new Response(Uint8Array.from(webp), { headers: { 'content-type': 'image/webp' } });

@@ -64,7 +64,7 @@ describe('Marketplace shortlink redirects', () => {
       if (target.startsWith('https://s.shopee.co.id/')) return new Response(null, {
         status: 302, headers: { location: 'https://www.shopee.co.id/example-i.123.456' },
       });
-      return new Response('<html><head><meta property="og:title" content="Example product"><meta property="og:image" content="https://cf.shopee.co.id/file/test"></head></html>',
+      return new Response('<html><head><link rel="canonical" href="https://shopee.co.id/product/123/456"><meta property="og:title" content="Example product"><meta property="og:image" content="https://cf.shopee.co.id/file/test"></head></html>',
         { headers: { 'content-type': 'text/html' } });
     });
     await expect(previewProductMetadata(new URL('https://s.shopee.co.id/abcd'), fetcher))

@@ -149,3 +149,61 @@ it('keeps verified head fallback when the 2 MiB read cuts off an otherwise valid
   expect(result).toMatchObject({ title: 'Verified title', price: null });
   expect(result?.shopeeDetails).toBeUndefined();
 });
+
+const landingHtml = '<!doctype html><head><title>Shopee</title></head><body><div id="main"></div></body>';
+
+it.each([
+  ['9pTH0oaUaG', '315438066', '10919010280'],
+  ['1qOV3sqP6F', '87506461', '29325976113'],
+  ['1VvkmRGQgz', '2637287', '23082544058'],
+])('resolves captured short route %s and independently verifies the product', async (token, shop, item) => {
+  const original = new URL('https://s.shopee.co.id/' + token);
+  const landing = 'https://shopee.co.id/opaanlp/' + shop + '/' + item + '?__mobile__=1&affiliate=fixture';
+  const product = 'https://shopee.co.id/product/' + shop + '/' + item;
+  const canonical = 'https://shopee.co.id/product-name-i.' + shop + '.' + item;
+  const transport = vi.fn<typeof fetch>(async target => {
+    if (String(target) === original.href) return new Response(null, { status: 301, headers: { location: landing } });
+    return transportFor(String(target) === landing ? landingHtml :
+      embeddedPage(canonical, '', '<meta property="og:title" content="Verified listing">'))(target);
+  });
+  expect(await extractShopeeMetadata(original, transport)).toMatchObject({
+    productUrl: product, title: 'Verified listing', price: null,
+  });
+  expect(transport.mock.calls.map(([target]) => String(target))).toEqual([original.href, landing, product]);
+});
+
+it.each([
+  ['https://shopee.co.id/opaanlp/0/456', 'malformed'],
+  ['https://shopee.co.id/opaanlp/123/456/extra', 'malformed'],
+  ['https://shopee.sg/opaanlp/123/456', 'unsupported market'],
+  ['https://shopee.co.id.example.org/opaanlp/123/456', 'untrusted host'],
+])('does not normalize %s (%s)', async href => {
+  const transport = vi.fn(transportFor(landingHtml));
+  expect(await extractShopeeMetadata(new URL(href), transport)).toBeNull();
+  expect(transport).not.toHaveBeenCalled();
+});
+
+it.each(['missing canonical', 'conflicting canonical', 'redirect mismatch', 'timeout', 'login'])(
+  'keeps affiliate resolution manual on %s', async reason => {
+    const landing = new URL('https://shopee.co.id/opaanlp/123/456');
+    const product = 'https://shopee.co.id/product/123/456';
+    const diagnostic = vi.fn();
+    const transport = vi.fn<typeof fetch>(async target => {
+      if (String(target) === landing.href) return transportFor(reason === 'login'
+        ? '<title>Masuk Diperlukan</title>' : landingHtml)(target);
+      expect(String(target)).toBe(product);
+      if (reason === 'timeout') throw new DOMException('Timed out', 'TimeoutError');
+      if (reason === 'redirect mismatch') return new Response(null, {
+        status: 302, headers: { location: '/product/123/789' },
+      });
+      const og = '<meta property="og:title" content="Product">';
+      return transportFor(reason === 'missing canonical' ? og :
+        embeddedPage('https://shopee.co.id/product/123/789', '', og))(target);
+    });
+    expect(await extractShopeeMetadata(landing, transport, diagnostic)).toBeNull();
+    const code = reason === 'timeout' ? 'destination_timeout' : reason === 'redirect mismatch' ? 'redirect_disallowed' :
+      reason === 'login' ? 'access_blocked' : 'metadata_mismatch';
+    expect(diagnostic).toHaveBeenCalledWith(code, 'shopee.co.id', reason === 'timeout' ? undefined : reason === 'redirect mismatch' ? 302 : 200);
+    expect(transport).toHaveBeenCalledTimes(reason === 'login' ? 1 : 2);
+  },
+);

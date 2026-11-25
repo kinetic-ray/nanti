@@ -10,6 +10,7 @@ import { createApp } from '../server/app.js';
 import { indexExistingProducts } from '../server/catalog-ingestion.js';
 import { connectDatabase } from '../server/database.js';
 import { identifyProduct } from '../server/product-identity.js';
+import { previewProductMetadata } from '../server/product-preview.js';
 import { prismaAffiliate } from '../server/prisma-affiliate.js';
 import { prismaIntelligence } from '../server/prisma-intelligence.js';
 import { prismaWishlists } from '../server/prisma-wishlists.js';
@@ -188,17 +189,25 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     expect(await db.priceObservation.count({ where: { marketplaceIdentityId: product.id } })).toBe(1);
   });
 
-  it('shares a verified short-link identity across owners and keeps their original links and labels', async () => {
-    const direct = 'https://shopee.co.id/product/123/' + randomInt(10_000_000, 99_999_999);
-    const share = 'https://s.shopee.co.id/' + randomUUID();
+  it.each(['short link', 'landing page'])('deduplicates a verified %s and preserves the submitted purchase URL', async kind => {
+    const item = randomInt(10_000_000, 99_999_999);
+    const direct = 'https://shopee.co.id/product/123/' + item;
+    const landing = 'https://shopee.co.id/opaanlp/123/' + item;
+    const share = kind === 'short link' ? 'https://s.shopee.co.id/' + randomUUID() : landing;
     const directKey = identifyProduct(direct)!.lookupKey;
     const shareKey = identifyProduct(share)!.lookupKey;
     keys.add(directKey);
     keys.add(shareKey);
     const title = 'Public short-link product';
-    const application = createApp({ ...options, lookupMetadata: async () => ({
-      productUrl: direct, title, image: null, price: null,
-    }) });
+    const fetchPage: typeof fetch = async target => {
+      if (kind === 'short link' && String(target) === share) {
+        return new Response(null, { status: 301, headers: { location: landing } });
+      }
+      const html = String(target) === landing ? '<title>Shopee</title>' :
+        '<link rel="canonical" href="' + direct + '"><meta property="og:title" content="' + title + '">';
+      return new Response(html, { headers: { 'content-type': 'text/html' } });
+    };
+    const application = createApp({ ...options, lookupMetadata: target => previewProductMetadata(target, fetchPage) });
     const first = await wishlist(application);
     const second = await wishlist(application);
     const preview = (await first.agent.post('/api/products/import').set(mutation).send({ url: share }).expect(200)).body;
@@ -206,6 +215,10 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
       verifiedListing: { url: direct, proof: preview.listingProof },
       publicTitle: { title, proof: preview.publicTitleProof } };
     await first.agent.post(first.path + '/items').set(mutation).send(payload).expect(201);
+    const saved = (await first.agent.get(first.path).expect(200)).body.items[0];
+    await first.agent.get(first.path + '/items/' + saved.id + '/purchase').expect(200, {
+      originalUrl: share, affiliatePath: null,
+    });
     await add(second, direct, 'Second private label');
     await second.agent.post(second.path + '/items').set(mutation).send(payload).expect(201);
     const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: directKey }, select: {
