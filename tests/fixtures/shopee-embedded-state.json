@@ -1,0 +1,143 @@
+[
+  {
+    "url": "https://shopee.co.id/Acaraki-Golden-Sparkling-Paket-Karton-isi-24pcs-i.315438066.10919010280",
+    "state": {
+      "initialState": {
+        "DOMAIN_CONTEXT": {
+          "data": {
+            "shopId": 315438066,
+            "itemId": 10919010280
+          }
+        },
+        "DOMAIN_PDP": {
+          "data": {
+            "PDP_BFF_DATA": {
+              "cachedMap": {
+                "315438066/10919010280": {
+                  "item": {
+                    "shop_id": 315438066,
+                    "item_id": 10919010280,
+                    "title": "Acaraki Golden Sparkling Paket Karton isi 24pcs",
+                    "image": "d5218c1ce06b5df4acfee48565fbd5a6",
+                    "images": [
+                      "d5218c1ce06b5df4acfee48565fbd5a6",
+                      "fixture-secondary-image"
+                    ],
+                    "tier_variations": [
+                      {
+                        "name": "",
+                        "options": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "models": [
+                      {
+                        "name": "",
+                        "model_id": 56471456350,
+                        "item_id": 10919010280,
+                        "price": null
+                      }
+                    ],
+                    "price": null
+                  },
+                  "shop_detailed": {
+                    "name": null
+                  },
+                  "product_price": null
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "url": "https://shopee.co.id/-BEST-SELLER-ADVAN-V11-Tablet-AI-Gemini-11-FHD-IPS-RAM-6-6GB-ROM-128GB-Keyboard-Detachable-4G-LTE-Dual-SIM-Baterai-7200mAh-i.919692407.51864967214",
+    "state": {
+      "initialState": {
+        "DOMAIN_CONTEXT": {
+          "data": {
+            "shopId": 919692407,
+            "itemId": 51864967214
+          }
+        },
+        "DOMAIN_PDP": {
+          "data": {
+            "PDP_BFF_DATA": {
+              "cachedMap": {
+                "919692407/51864967214": {
+                  "item": {
+                    "shop_id": 919692407,
+                    "item_id": 51864967214,
+                    "title": "[BEST SELLER] ADVAN V11 Tablet AI Gemini 11\" FHD IPS | RAM 6+6GB ROM 128GB | Keyboard Detachable | 4G LTE Dual SIM | Baterai 7200mAh",
+                    "image": "id-11134207-81ztc-mvrcph4zjtoh9d",
+                    "images": [
+                      "id-11134207-81ztc-mvrcph4zjtoh9d",
+                      "fixture-secondary-image"
+                    ],
+                    "tier_variations": [
+                      {
+                        "name": "Unit",
+                        "options": [
+                          "TABLET ONLY",
+                          "TAB+KEYBOARD"
+                        ]
+                      }
+                    ],
+                    "models": [
+                      {
+                        "name": "TAB+KEYBOARD",
+                        "model_id": 273032452298,
+                        "item_id": 51864967214,
+                        "price": null
+                      },
+                      {
+                        "name": "TABLET ONLY",
+                        "model_id": 326286000094,
+                        "item_id": 51864967214,
+                        "price": null
+                      }
+                    ],
+                    "price": null,
+                    "shop_vouchers": [
+                      {
+                        "shop_id": 919692407,
+                        "shop_name": "Advan Notebook Official Store "
+                      }
+                    ]
+                  },
+                  "shop_detailed": {
+                    "name": null
+                  },
+                  "product_price": null
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "url": "https://shopee.co.id/product/22816723/19791107773",
+    "state": {
+      "initialState": {
+        "DOMAIN_CONTEXT": {
+          "data": {
+            "shopId": 22816723,
+            "itemId": 19791107773
+          }
+        },
+        "DOMAIN_PDP": {
+          "data": {
+            "PDP_BFF_DATA": {
+              "cachedMap": {}
+            }
+          }
+        }
+      }
+    }
+  }
+]

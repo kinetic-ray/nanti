@@ -579,8 +579,9 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       ...(imagePath && { imagePath }),
       ...(meta?.price && { price: meta.price }),
       ...(meta?.sellerName && { sellerName: meta.sellerName }),
+      ...(merchant === 'shopee' && meta?.shopeeDetails && { shopeeDetails: meta.shopeeDetails }),
       ...(!meta && !name && { diagnostic: diagnostic ?? { code: canLookUp ? (lookupMetadata ? 'metadata_unavailable' : 'adapter_disabled') : 'unsupported_url', host: url.hostname } }),
-      status: imagePath || meta?.price || meta?.sellerName ? 'details_available' : name ? 'name_available' : 'manual_required',
+      status: imagePath || meta?.price || meta?.sellerName || meta?.shopeeDetails ? 'details_available' : name ? 'name_available' : 'manual_required',
     };
     res.json(result);
   }

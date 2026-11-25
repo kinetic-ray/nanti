@@ -252,7 +252,7 @@ describe('Shopee import reliability', () => {
       .resolves.toMatchObject({ title: 'Lamp', image: 'https://cf.shopee.co.id/lamp' });
   });
 
-  it('imports one identity-matched single IDR offer and its seller across www aliases', async () => {
+  it('keeps the identity-matched JSON-LD seller across www aliases with prices disabled', async () => {
     const product = { '@type': 'Product', url: 'https://www.shopee.co.id/lamp-i.123.456', name: 'Lamp',
       offers: { '@type': 'Offer', price: '129000', priceCurrency: 'IDR',
         seller: { '@type': 'Organization', name: 'Lamp Shop' } } };
@@ -260,7 +260,7 @@ describe('Shopee import reliability', () => {
     await expect(previewProductMetadata(listing, async () => new Response(html,
       { headers: { 'content-type': 'text/html' } }))).resolves.toMatchObject({
       title: 'Lamp', sellerName: 'Lamp Shop', productUrl: 'https://shopee.co.id/lamp-i.123.456',
-      price: { priceMinor: 12900000, currency: 'IDR' },
+      price: null,
     });
   });
 
