@@ -119,8 +119,8 @@ try {
   const restoredAccount = access.waitForResponse(response => response.url().endsWith('/api/account/creator'));
   await access.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
   await restoredAccount;
-  await access.waitForFunction(() => document.querySelector('.creator-access-state h1')?.textContent === 'Checking your creator account…');
-  await heading(access, 'Create a creator profile').waitFor({ state: 'hidden' });
+  await heading(access, 'Create a creator profile').waitFor();
+  assert.equal(await heading(access, 'Checking your creator account…').count(), 0, 'restored onboarding shows one account state at a time');
   await access.waitForFunction(() => document.documentElement.classList.contains('session-suspended') === false);
   assert.equal(accountChecks, 3, 'restoring the creator workspace reloads its account state');
   await accessContext.close();
