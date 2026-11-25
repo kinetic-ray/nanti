@@ -18,6 +18,15 @@ import { BookmarkArt, Icon, Loading, ProductMedia } from './visual.js';
 import './styles.css';
 import './consumer.css';
 
+// Every route, including the standalone creator workspace, must discard a
+// frozen page when the browser restores it from the back-forward cache.
+window.addEventListener('pagehide', event => {
+  if (event.persisted) document.documentElement.classList.add('session-suspended');
+});
+window.addEventListener('pageshow', event => {
+  if (event.persisted) location.reload();
+});
+
 const PurchaseTools = lazy(() => import('./intelligence.js').then(({ PurchaseTools }) => ({ default: PurchaseTools })));
 const AccountAdmin = lazy(() => import('./account-admin.js').then(({ AccountAdmin }) => ({ default: AccountAdmin })));
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
@@ -59,18 +68,8 @@ function App() {
 
   useEffect(() => {
     const changed = (event: StorageEvent) => { if (event.key === authChangeKey) location.reload(); };
-    const hide = (event: PageTransitionEvent) => {
-      if (event.persisted) document.documentElement.classList.add('session-suspended');
-    };
-    const restore = (event: PageTransitionEvent) => { if (event.persisted) location.reload(); };
     window.addEventListener('storage', changed);
-    window.addEventListener('pagehide', hide);
-    window.addEventListener('pageshow', restore);
-    return () => {
-      window.removeEventListener('storage', changed);
-      window.removeEventListener('pagehide', hide);
-      window.removeEventListener('pageshow', restore);
-    };
+    return () => window.removeEventListener('storage', changed);
   }, []);
 
   useEffect(() => {
