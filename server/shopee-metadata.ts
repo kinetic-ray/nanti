@@ -15,6 +15,7 @@ type ShopeeMetadata = {
 };
 
 const maxBytes = 2 * 1024 * 1024;
+const maxScriptBytes = 512 * 1024;
 const hosts = new Set([
   's.shopee.co.id', 'shopee.co.id', 'shopee.com', 'shopee.sg', 'shopee.com.my',
   'shopee.co.th', 'shopee.vn', 'shopee.ph', 'shopee.com.br', 'shope.ee',
@@ -61,22 +62,33 @@ function collectProducts(json: unknown): Record<string, unknown>[] {
   });
 }
 
-function readProductPage(html: string, current: URL, key: string | null, status: number,
-  onDiagnostic: Diagnostic | undefined, requireProductIdentity = false): ShopeeMetadata | null {
+function readProductPage(html: string, current: URL, key: string, status: number,
+  onDiagnostic: Diagnostic | undefined, atReadLimit: boolean): ShopeeMetadata | null {
   const document = parse(html, { sourceCodeLocationInfo: true });
   const root = document.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
     'tagName' in node && node.tagName === 'html');
   const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
     'tagName' in node && node.tagName === 'head');
+  const body = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
+    'tagName' in node && node.tagName === 'body');
+  // At the byte ceiling, an unfinished head may have unseen canonical or Open Graph tags.
+  if (atReadLimit && !head?.sourceCodeLocation?.endTag && !body?.sourceCodeLocation?.startTag) {
+    onDiagnostic?.('metadata_missing', current.hostname, status);
+    return null;
+  }
   const tags = new Map<string, string>();
   const scripts: { source: string; requireReference: boolean }[] = [];
   const embedded: string[] = [];
   let hasCanonical = false;
   const readScript = (node: DefaultTreeAdapterTypes.Element, requireReference: boolean) => {
-    if (node.tagName !== 'script' || !node.sourceCodeLocation?.endTag) return;
+    if (node.tagName !== 'script') return;
     const type = node.attrs.find(attr => attr.name === 'type')?.value.toLowerCase();
+    if (type !== 'application/ld+json' && type !== 'text/mfe-initial-data') return;
+    const { startTag, endTag } = node.sourceCodeLocation ?? {};
+    if (!startTag || !endTag || endTag.startOffset - startTag.endOffset > maxScriptBytes ||
+        Buffer.byteLength(html.slice(startTag.endOffset, endTag.startOffset)) > maxScriptBytes) return;
     const text = node.childNodes.find(child => 'value' in child);
-    if (!text || !('value' in text) || Buffer.byteLength(text.value) > 512 * 1024) return;
+    if (!text || !('value' in text)) return;
     if (type === 'application/ld+json') scripts.push({ source: text.value, requireReference });
     if (type === 'text/mfe-initial-data') embedded.push(text.value);
   };
@@ -95,7 +107,6 @@ function readProductPage(html: string, current: URL, key: string | null, status:
     if (node.tagName === 'meta' && name && content && !tags.has(name)) tags.set(name, content);
     readScript(node, false);
   }
-  const body = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => 'tagName' in node && node.tagName === 'body');
   const bodyNodes = [...body?.childNodes ?? []];
   let appShell = false;
   while (bodyNodes.length) {
@@ -106,13 +117,12 @@ function readProductPage(html: string, current: URL, key: string | null, status:
     for (const child of node.childNodes) bodyNodes.push(child);
   }
 
-  const [, shopId, itemId] = key?.split('/') ?? [];
-  const states = hasCanonical && shopId && itemId && key?.startsWith('shopee.co.id/')
+  const [, shopId, itemId] = key.split('/');
+  const states = hasCanonical && shopId && itemId && key.startsWith('shopee.co.id/')
     ? embedded.flatMap(source => readShopeeEmbeddedState(source, shopId, itemId) ?? []) : [];
   const state = states.length === 1 ? states[0] : undefined;
   let title: string | null = state?.title ?? null;
   let image: string | null = null;
-  const products: Record<string, unknown>[] = [];
   const sellers = new Set(state?.sellers);
   for (const { source, requireReference } of scripts) {
     let decoded: unknown;
@@ -121,8 +131,7 @@ function readProductPage(html: string, current: URL, key: string | null, status:
       if (!hasType(value['@type'], 'Product')) continue;
       const reference = value.url ?? value['@id'];
       if (reference !== undefined && !identityMatches(reference, current, key)) continue;
-      if (reference === undefined && (!key || requireReference)) continue;
-      products.push(value);
+      if (reference === undefined && requireReference) continue;
       if (typeof value.name === 'string' && !title) title = value.name.trim().slice(0, 160) || null;
       const photo = Array.isArray(value.image) ? value.image[0] : value.image;
       const imageObject = record(photo);
@@ -136,13 +145,6 @@ function readProductPage(html: string, current: URL, key: string | null, status:
       const seller = record(offer.seller);
       if (typeof seller?.name === 'string' && seller.name.trim()) sellers.add(seller.name.trim().slice(0, 160));
     }
-  }
-
-  // A short link that lands on a non-listing destination (for example, a login page)
-  // must not inherit its generic social title or image as product metadata.
-  if (requireProductIdentity && products.length === 0) {
-    onDiagnostic?.('metadata_mismatch', current.hostname, status);
-    return null;
   }
 
   const socialTitle = tags.get('og:title') ?? tags.get('twitter:title');
@@ -173,7 +175,7 @@ function readProductPage(html: string, current: URL, key: string | null, status:
     title, image: safeImage, price: null,
     ...(state && { shopeeDetails: state.details }),
     ...(sellers.size === 1 ? { sellerName: [...sellers][0]! } : {}),
-    ...(key ? { productUrl: productUrl.href } : {}),
+    productUrl: productUrl.href,
   };
 }
 
@@ -224,6 +226,11 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         await response.body?.cancel();
         return null;
       }
+      if (!key) {
+        diagnostic('metadata_mismatch', response.status);
+        await response.body.cancel();
+        return null;
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let html = '';
@@ -242,8 +249,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         diagnostic('captcha_required', response.status);
         return null;
       }
-      return readProductPage(html, current, key, response.status, onDiagnostic,
-        key === null);
+      return readProductPage(html, current, key, response.status, onDiagnostic, total === maxBytes);
     }
     diagnostic('redirect_limit');
     return null;

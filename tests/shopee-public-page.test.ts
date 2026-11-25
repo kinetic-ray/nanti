@@ -100,3 +100,52 @@ it('uses only matching shop records and withholds conflicting matched records', 
   expect((await readShop(unrelated))?.sellerName).toBe('Advan Notebook Official Store');
   expect((await readShop(matching))?.sellerName).toBeUndefined();
 });
+
+it('accepts verified embedded metadata after a direct HTTP product redirect without JSON-LD', async () => {
+  const short = new URL('https://s.shopee.co.id/fixture');
+  const transport = vi.fn<typeof fetch>(async target => String(target) === short.href
+    ? new Response(null, { status: 302, headers: { location: variants.url } })
+    : transportFor(embeddedPage(variants.url, script(JSON.stringify(variants.state))))(target));
+  expect(await extractShopeeMetadata(short, transport)).toMatchObject({
+    title: expect.stringContaining('ADVAN V11'), productUrl: variants.url, price: null,
+  });
+  expect(transport).toHaveBeenCalledTimes(2);
+});
+
+it('rejects self-identifying JSON-LD on a non-product affiliate destination', async () => {
+  const short = new URL('https://s.shopee.co.id/fixture');
+  const landing = new URL('https://shopee.co.id/opaanlp/919692407/51864967214');
+  const body = '<script type="application/ld+json">' + JSON.stringify({
+    '@type': 'Product', url: landing.href, name: 'Unverified affiliate product',
+  }) + '</script>';
+  const transport: typeof fetch = async target => String(target) === short.href
+    ? new Response(null, { status: 301, headers: { location: landing.href } })
+    : transportFor(embeddedPage(landing.href, body))(target);
+  expect(await extractShopeeMetadata(short, transport)).toBeNull();
+});
+
+it('counts raw script bytes before HTML newline normalization', async () => {
+  const state = JSON.stringify(variants.state);
+  const body = script(state + '\r\n'.repeat(270_000));
+  const page = embeddedPage(variants.url, body, '<meta property="og:title" content="Verified title">');
+  const result = await read(variants.url, page);
+  expect(result).toMatchObject({ title: 'Verified title', price: null });
+  expect(result?.shopeeDetails).toBeUndefined();
+});
+
+it('rejects fallback from a head cut off before conflicting identity metadata', async () => {
+  const head = '<head><link rel="canonical" href="' + variants.url +
+    '"><meta property="og:title" content="Unverified prefix"><!--' + 'x'.repeat(2 * 1024 * 1024) +
+    '--><meta property="og:url" content="https://shopee.co.id/product/1/2"></head>';
+  expect(await read(variants.url, head)).toBeNull();
+});
+
+it('keeps verified head fallback when the 2 MiB read cuts off an otherwise valid script', async () => {
+  const head = '<head><link rel="canonical" href="' + variants.url +
+    '"><meta property="og:title" content="Verified title"></head><body>';
+  const state = '<script type="text/mfe-initial-data">' + JSON.stringify(variants.state);
+  const padding = ' '.repeat(2 * 1024 * 1024 - Buffer.byteLength(head + state));
+  const result = await read(variants.url, head + padding + state + '</script></body>');
+  expect(result).toMatchObject({ title: 'Verified title', price: null });
+  expect(result?.shopeeDetails).toBeUndefined();
+});
