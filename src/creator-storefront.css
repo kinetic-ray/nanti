@@ -214,7 +214,7 @@ html:has(.storefront:not(.storefront-embedded)){overflow-anchor:none}
 }
 @media (max-width: 480px) {
   .storefront-collection-card { min-height: 44px; }
-  .storefront-product-copy > button { min-height: 44px; padding: .55rem .6rem; font-size: .76rem; }
+  .storefront-product-copy > button { min-height: 44px; padding: .5rem .45rem; font-size: .7rem; white-space: nowrap; }
   .storefront-featured a, .storefront-outro a { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
