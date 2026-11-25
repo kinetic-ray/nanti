@@ -43,7 +43,7 @@ try {
     await page.screenshot({ path: join(screenshots, 'before-elegant-gallery-390.png'), fullPage: true });
     await button('Lihat hasil').click();
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await button('Desktop').click();
+    await button('Komputer').click();
     await page.screenshot({ path: join(screenshots, 'before-elegant-gallery-1440.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
   }
