@@ -13,6 +13,7 @@ import { isIkeaMetadataLink, productMerchant, safeImportUrl } from '../shared/pr
 import type { ProductImport } from '../shared/product-import.js';
 import type { previewProductMetadata } from './product-preview.js';
 import { identifyProduct } from './product-identity.js';
+import { shopeeLandingProductUrl } from './shopee-short-link.js';
 import { readWishlist } from './wishlist.js';
 import type { WishlistRepository } from './wishlist.js';
 import { intelligenceRoutes } from './intelligence-routes.js';
@@ -552,7 +553,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: original, name,
       ...(meta?.productUrl && meta.productUrl.length <= 2048 && recommendationListing(meta.productUrl) &&
-        /^(?:www\.)?(?:s\.shopee\.co\.id|shopee\.ee|tokopedia\.link|tk\.tokopedia\.com|vt\.tokopedia\.com)$/u.test(url.hostname) &&
+        (shopeeLandingProductUrl(url) || /^(?:www\.)?(?:s\.shopee\.co\.id|shopee\.ee|tokopedia\.link|tk\.tokopedia\.com|vt\.tokopedia\.com)$/u.test(url.hostname)) &&
         { listingProof: signPublicTitle(secret, {
           owner: 'resolved-listing:' + res.locals.ownerId, url: url.href, title: meta.productUrl,
         }) }),

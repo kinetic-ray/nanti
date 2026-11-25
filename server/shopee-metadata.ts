@@ -2,6 +2,7 @@ import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 import type { ProductImport } from '../shared/product-import.js';
 import { readShopeeEmbeddedState } from './shopee-embedded-state.js';
+import { shopeeLandingProductUrl } from './shopee-short-link.js';
 import { requestPublicPage } from './tokopedia-metadata.js';
 
 type Diagnostic = (reason: string, host: string, status?: number) => void;
@@ -63,7 +64,7 @@ function collectProducts(json: unknown): Record<string, unknown>[] {
 }
 
 function readProductPage(html: string, current: URL, key: string, status: number,
-  onDiagnostic: Diagnostic | undefined, atReadLimit: boolean): ShopeeMetadata | null {
+  onDiagnostic: Diagnostic | undefined, atReadLimit: boolean, requireCanonical: boolean): ShopeeMetadata | null {
   const document = parse(html, { sourceCodeLocationInfo: true });
   const root = document.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
     'tagName' in node && node.tagName === 'html');
@@ -106,6 +107,10 @@ function readProductPage(html: string, current: URL, key: string, status: number
     if (canonicalLink && canonical) hasCanonical = true;
     if (node.tagName === 'meta' && name && content && !tags.has(name)) tags.set(name, content);
     readScript(node, false);
+  }
+  if (requireCanonical && !hasCanonical) {
+    onDiagnostic?.('metadata_mismatch', current.hostname, status);
+    return null;
   }
   const bodyNodes = [...body?.childNodes ?? []];
   let appShell = false;
@@ -185,6 +190,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
   current.hash = '';
   let key = listingKey(current);
   let hop = 0;
+  const requireCanonical = key === null;
   const diagnostic = (reason: string, status?: number) => onDiagnostic?.(reason, current.hostname, status);
   try {
     if (!allowed(current)) { diagnostic('redirect_disallowed'); return null; }
@@ -192,6 +198,12 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
     const visited = new Set<string>();
     for (hop = 0; hop < 6; hop++) {
       visited.add(current.href);
+      const landingProduct = shopeeLandingProductUrl(current);
+      if (/^\/opaanlp(?:\/|$)/u.test(current.pathname) && !landingProduct) {
+        diagnostic('redirect_disallowed');
+        return null;
+      }
+      const landingKey = landingProduct && listingKey(landingProduct);
       const signal = AbortSignal.any([deadline, AbortSignal.timeout(3500)]);
       const response = request
         ? await request(current, { redirect: 'manual', signal, headers: { accept: 'text/html' } })
@@ -204,7 +216,8 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         target.hash = '';
         if (visited.has(target.href)) { diagnostic('redirect_limit', response.status); return null; }
         const targetKey = listingKey(target);
-        if (key && targetKey !== key) { diagnostic('redirect_disallowed', response.status); return null; }
+        const expectedKey = key ?? landingKey;
+        if (expectedKey && targetKey !== expectedKey) { diagnostic('redirect_disallowed', response.status); return null; }
         key ??= targetKey;
         current = target;
         continue;
@@ -226,7 +239,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         await response.body?.cancel();
         return null;
       }
-      if (!key) {
+      if (!key && !landingProduct) {
         diagnostic('metadata_mismatch', response.status);
         await response.body.cancel();
         return null;
@@ -245,11 +258,23 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         }
       } finally { await reader.cancel(); }
       html += decoder.decode();
-      if (/(?:verify (?:that )?you are human|captcha|human verification)/iu.test(html.slice(0, 16_384))) {
+      const prefix = html.slice(0, 16_384);
+      if (/(?:verify (?:that )?you are human|captcha|human verification)/iu.test(prefix)) {
         diagnostic('captcha_required', response.status);
         return null;
       }
-      return readProductPage(html, current, key, response.status, onDiagnostic, total === maxBytes);
+      if (requireCanonical && /(?:<title[^>]*>\s*(?:login required|masuk diperlukan)|sepertinya anda belum masuk)/iu.test(prefix)) {
+        diagnostic('access_blocked', response.status);
+        return null;
+      }
+      if (landingProduct && landingKey) {
+        if (total === maxBytes) { diagnostic('metadata_missing', response.status); return null; }
+        if (visited.has(landingProduct.href)) { diagnostic('redirect_limit', response.status); return null; }
+        key = landingKey;
+        current = landingProduct;
+        continue;
+      }
+      return key ? readProductPage(html, current, key, response.status, onDiagnostic, total === maxBytes, requireCanonical) : null;
     }
     diagnostic('redirect_limit');
     return null;
