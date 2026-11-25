@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { classifyProductMatch, identifyProduct, isEligibleAffiliate, normalizeProductTitle, safeAdminUrl } from '../server/product-identity.js';
+import { classifyProductMatch, identifyCatalogProduct, identifyProduct, isEligibleAffiliate, normalizeProductTitle, safeAdminUrl } from '../server/product-identity.js';
 
 // Local fixtures exercise URL syntax and matching without contacting or publishing a listing.
 const product = 'https://www.ikea.com/us/en/p/test-lamp-white-12345678/';
 
 describe('product identity', () => {
+  it('classifies known marketplace URLs and strips Shopee share tracking while preserving variants', () => {
+    const listing = 'https://shopee.co.id/product/123/456';
+    expect(identifyCatalogProduct('https://s.shopee.co.id/share')?.merchant).toBe('Shopee');
+    expect(identifyCatalogProduct('https://www.shopee.co.id/Lamp-i.123.456?sp_atk=share&xptdk=share')?.canonicalUrl)
+      .toBe(listing);
+    expect(identifyCatalogProduct(listing + '?variationId=7')?.lookupKey)
+      .not.toBe(identifyCatalogProduct(listing + '?variationId=8')?.lookupKey);
+  });
   it('recognizes Tokopedia tracking links while keeping unknown parameters and fragments in the identity', () => {
     const listing = 'https://www.tokopedia.com/store/phone-case';
     const tracked = listing + '?ref=share&utm_source=share';

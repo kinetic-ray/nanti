@@ -25,9 +25,8 @@ export async function previewIkeaImage(url: URL, request: typeof fetch = fetch):
         const { done, value } = await reader.read();
         if (done) break;
         bytes += value.byteLength;
-        if (bytes > maxBytes) return null;
-        html += decoder.decode(value, { stream: true });
-        if (/<\/head\s*>/i.test(html)) break;
+        html += decoder.decode(value.subarray(0, Math.max(0, maxBytes - bytes + value.byteLength)), { stream: true });
+        if (bytes >= maxBytes || /<\/head\s*>/i.test(html)) break;
       }
       html += decoder.decode();
     } finally {

@@ -188,6 +188,39 @@ describe.skipIf(!url)('Affiliate Center with MySQL', () => {
     expect(await db.priceObservation.count({ where: { marketplaceIdentityId: product.id } })).toBe(1);
   });
 
+  it('shares a verified short-link identity across owners and keeps their original links and labels', async () => {
+    const direct = 'https://shopee.co.id/product/123/' + randomInt(10_000_000, 99_999_999);
+    const share = 'https://s.shopee.co.id/' + randomUUID();
+    const directKey = identifyProduct(direct)!.lookupKey;
+    const shareKey = identifyProduct(share)!.lookupKey;
+    keys.add(directKey);
+    keys.add(shareKey);
+    const title = 'Public short-link product';
+    const application = createApp({ ...options, lookupMetadata: async () => ({
+      productUrl: direct, title, image: null, price: null,
+    }) });
+    const first = await wishlist(application);
+    const second = await wishlist(application);
+    const preview = (await first.agent.post('/api/products/import').set(mutation).send({ url: share }).expect(200)).body;
+    const payload = { url: share, name: 'Private wishlist label', quantity: 1, priceMinor: null,
+      verifiedListing: { url: direct, proof: preview.listingProof },
+      publicTitle: { title, proof: preview.publicTitleProof } };
+    await first.agent.post(first.path + '/items').set(mutation).send(payload).expect(201);
+    await add(second, direct, 'Second private label');
+    await second.agent.post(second.path + '/items').set(mutation).send(payload).expect(201);
+    const identity = await db.productIdentity.findUniqueOrThrow({ where: { lookupKey: directKey }, select: {
+      title: true, items: { select: { ownerId: true, url: true, name: true } },
+    } });
+    expect(identity).toEqual({ title, items: expect.arrayContaining([
+      { ownerId: first.ownerId, url: share, name: payload.name },
+      { ownerId: second.ownerId, url: direct, name: 'Second private label' },
+    ]) });
+    expect(identity.items).toHaveLength(2);
+    await expect(db.productIdentity.findUniqueOrThrow({ where: { lookupKey: shareKey } })).resolves.toMatchObject({
+      merchant: 'Shopee', title: null,
+    });
+  });
+
   it('activates a cross-market replacement, serializes changes, and restores the original', async () => {
     const application = createApp({ ...options, recommendationsDb: db });
     const customer = await wishlist(application);

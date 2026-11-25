@@ -310,7 +310,8 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   }, limitMarketplaceSave, async (req, res) => {
     const listId = uuid.parse(req.params.listId);
     const { saveMarketplaceImage, saveTokopediaImage, tokopediaProductUrl, tokopediaImage,
-      shopeeProductUrl, shopeeImage, publicTitle, publicPriceProof, ...input } = itemInput.extend({
+      shopeeProductUrl, shopeeImage, publicTitle, publicPriceProof, verifiedListing, ...input } = itemInput.extend({
+      verifiedListing: z.strictObject({ url: z.string().max(2048), proof: z.string().max(80) }).optional(),
       publicPriceProof: z.string().max(80).optional(),
       publicTitle: z.strictObject({ title: z.string().min(1).max(160), proof: z.string().max(80) }).optional(),
       saveMarketplaceImage: z.literal(true).optional(),
@@ -340,7 +341,10 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     const priceVerified = publicPriceProof && publicUrl && price && verifyPublicTitle(secret, {
       owner, url: publicUrl.href, title: '', price,
     }, publicPriceProof);
-    const publicMetadata = { title: verifiedTitle, priceCurrency: priceVerified ? list.currency : undefined };
+    const listingUrl = verifiedListing && publicUrl && verifyPublicTitle(secret, {
+      owner: 'resolved-listing:' + owner, url: publicUrl.href, title: verifiedListing.url,
+    }, verifiedListing.proof) ? verifiedListing.url : undefined;
+    const publicMetadata = { title: verifiedTitle, priceCurrency: priceVerified ? list.currency : undefined, listingUrl };
     const replay = (saved: (typeof list.items)[number]) => {
       if (saved.url !== input.url || saved.name !== input.name || saved.priceMinor !== input.priceMinor ||
           saved.quantity !== input.quantity || (saved.sellerName ?? null) !== (input.sellerName ?? null) ||
@@ -530,8 +534,8 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
       diagnostic = { code, host, ...(httpStatus === undefined ? {} : { httpStatus }) };
     }) : null;
     const name = canLookUp && !lookupMetadata ? await preview(url) : meta?.title ?? null;
-    const listing = merchant === 'ikea' && meta?.image && identifyProduct(new URL(url.pathname, url.origin).href);
-    const imagePath = listing ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
+    const listing = merchant === 'ikea' && meta?.image && identifyProduct(url.href);
+    const imagePath = listing && listing.merchant === 'IKEA' ? `/api/products/import/image?url=${encodeURIComponent(listing.canonicalUrl)}` :
       (merchant === 'shopee' || merchant === 'tokopedia') ? meta?.image ?? null : null;
     if (adminPreview) {
       const resolved = meta?.productUrl ?? url.href;
@@ -547,6 +551,11 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
     }
     const result: ProductImport = {
       merchant, hostname: url.hostname, originalUrl: original, name,
+      ...(meta?.productUrl && meta.productUrl.length <= 2048 && recommendationListing(meta.productUrl) &&
+        /^(?:www\.)?(?:s\.shopee\.co\.id|shopee\.ee|tokopedia\.link|tk\.tokopedia\.com|vt\.tokopedia\.com)$/u.test(url.hostname) &&
+        { listingProof: signPublicTitle(secret, {
+          owner: 'resolved-listing:' + res.locals.ownerId, url: url.href, title: meta.productUrl,
+        }) }),
       ...(meta?.title && meta.title.length <= 160 && { publicTitleProof: signPublicTitle(secret, {
         owner: res.locals.ownerId, url: url.href, title: meta.title,
       }) }),

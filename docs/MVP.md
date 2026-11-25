@@ -30,6 +30,12 @@ For a loopback MySQL instance that uses `caching_sha2_password` without TLS, poi
 | Retailer | Link intake | Automatic price checks |
 | --- | --- | --- |
 | Shopee | Detects supported storefronts and share links. Uses matching public product metadata when available; otherwise enter details manually. | Exact structured single-offer price only when `NANTI_SHOPEE_PRICE_METADATA_PERMISSION=granted`; no automatic monitoring. |
+
+### Historical catalog reconciliation
+
+Run `node --env-file=.env.test.local --import tsx scripts/reconcile-catalog-metadata.ts --limit 50` against local `nanti_dev`. Continue with the summary's `next` value as `--after`. The default dry run reports marketplace classification changes, candidate identity collisions, missing public metadata, and provenance mismatches. The report contains catalog IDs and counts.
+
+Add `--refresh` to check supported public listing sources for recoverable titles and resolved destinations. IKEA refresh requires its existing metadata permission. An approved `--refresh --apply` run can fill missing catalog titles when the verified lookup key is unchanged. Identity merges and historical image and price repair require separate review. Production reconciliation requires explicit approval.
 | Tokopedia | Detects the storefront and share links. Review the original link and enter details manually. | Unavailable |
 | IKEA | Recognizes `ikea.com` and `ikea.co.id`. With permission, selected `www.ikea.com` product pages can supply a title and photo. Users review and save details themselves. | Unavailable |
 | Other stores | Keeps a valid public listing link and supports manual entry. | Unavailable |

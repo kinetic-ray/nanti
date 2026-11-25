@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { safeProductUrl } from '../shared/wishlist.js';
+import { productMerchant } from '../shared/product-import.js';
 
 const ikeaOrigin = 'https://www.ikea.com';
 const attribution = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id',
@@ -81,6 +82,24 @@ function supportedAttribution(url: URL) {
     keys.add(key);
   }
   return true;
+}
+
+/** Catalog classification also covers marketplace links without a verified listing ID. */
+export function identifyCatalogProduct(value: string) {
+  const url = safeProductUrl(value);
+  if (!url) return null;
+  const marketplace = productMerchant(url.hostname);
+  if (marketplace === 'shopee') {
+    url.searchParams.delete('sp_atk');
+    url.searchParams.delete('xptdk');
+  }
+  const identity = identifyProduct(url.href);
+  if (!identity || identity.merchant !== 'Other' || marketplace === 'other') return identity;
+  const merchant = { ikea: 'IKEA', shopee: 'Shopee', tokopedia: 'Tokopedia' }[marketplace];
+  // Preserve unknown selectors, including fragments, on unresolved marketplace URLs.
+  const canonical = new URL(identity.canonicalUrl);
+  canonical.hash = url.hash;
+  return { ...identity, merchant, canonicalUrl: canonical.href, lookupKey: productKey(canonical.href) };
 }
 
 function hasAttribution(url: URL) {

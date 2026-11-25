@@ -81,7 +81,7 @@ export async function previewProductMetadata(url: URL, request?: typeof fetch, o
     const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
       'tagName' in node && node.tagName === 'head');
     const tags = new Map<string, string>();
-    const offers: NonNullable<ProductImport['price']>[] = [];
+    const offers: (NonNullable<ProductImport['price']> | null)[] = [];
     let inconsistent = false;
     for (const node of head?.childNodes ?? []) {
       if (!('tagName' in node)) continue;
@@ -104,7 +104,7 @@ export async function previewProductMetadata(url: URL, request?: typeof fetch, o
     if (openGraphOffer) offers.push(openGraphOffer);
     const firstOffer = offers[0];
     const price = !inconsistent && firstOffer && offers.every((entry) =>
-      entry.priceMinor === firstOffer.priceMinor && entry.currency === firstOffer.currency) ? firstOffer : null;
+      entry?.priceMinor === firstOffer.priceMinor && entry.currency === firstOffer.currency) ? firstOffer : null;
     const title = tags.get('og:title')?.slice(0, 160) ?? null;
     const image = tags.get('og:image')?.slice(0, 2048) ?? null;
     if (!title && !image && !price) { onDiagnostic?.('metadata_missing', url.hostname, response.status); return null; }
@@ -122,24 +122,28 @@ function parseOffer(amount: unknown, code: unknown): NonNullable<ProductImport['
   return priceMinor === null || !currency ? null : { priceMinor, currency };
 }
 
-function productOffers(data: unknown, url: URL): NonNullable<ProductImport['price']>[] {
+function productOffers(data: unknown, url: URL): (NonNullable<ProductImport['price']> | null)[] {
   const rows = Array.isArray(data) ? data : [data];
-  const tagged = (value: unknown, label: string) => value === label || (Array.isArray(value) && value.includes(label));
+  const tagged = (value: unknown, label: string) =>
+    [value].flat().some(entry => entry === label || entry === 'https://schema.org/' + label);
   return rows.flatMap((row) => {
     if (!row || typeof row !== 'object') return [];
     const products = Array.isArray(row['@graph']) ? [row, ...row['@graph']] : [row];
     return products.flatMap((product) => {
-      if (!product || !tagged(product['@type'], 'Product')) return [];
+      if (!product || (!tagged(product['@type'], 'Product') && !tagged(product['@type'], 'ProductGroup'))) return [];
       if (typeof product.url === 'string') {
         let listed: URL;
         try { listed = new URL(product.url, url.origin); } catch { return []; }
         if (listed.origin !== url.origin || listed.pathname.replace(/\/$/u, '') !== url.pathname.replace(/\/$/u, '')) return [];
       }
+      if (tagged(product['@type'], 'ProductGroup') || product.hasVariant || product.isVariantOf) return [null];
+      if (product.offers == null) return [];
       const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
       const offer = offers[0];
-      if (offers.length !== 1 || !offer || !tagged(offer['@type'], 'Offer')) return [];
+      if (offers.length !== 1 || !offer || !tagged(offer['@type'], 'Offer') ||
+          offer.lowPrice != null || offer.highPrice != null || offer.priceSpecification != null) return [null];
       const price = parseOffer(offer.price, offer.priceCurrency);
-      return price ? [price] : [];
+      return [price];
     });
   });
 }

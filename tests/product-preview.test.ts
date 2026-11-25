@@ -19,6 +19,7 @@ describe('Product preview', () => {
     });
     await expect(previewProductMetadata(link, head(offer('25.00') + tags))).resolves.toMatchObject({ price: null });
     await expect(previewProductMetadata(link, head(offer('23.49', 'AggregateOffer')))).resolves.toMatchObject({ price: null });
+    await expect(previewProductMetadata(link, head(offer('23.49', 'AggregateOffer') + tags))).resolves.toMatchObject({ price: null });
   });
   it('reads the supported product name and strips tracking from the outgoing request', async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(

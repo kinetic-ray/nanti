@@ -3,6 +3,7 @@ import { request } from 'node:https';
 import { BlockList } from 'node:net';
 import { Readable } from 'node:stream';
 import { parse, type DefaultTreeAdapterTypes } from 'parse5';
+import { identifyProduct } from './product-identity.js';
 
 type Price = { amount: number; currency: 'IDR' };
 type Diagnostic = (reason: string, host: string, status?: number) => void;
@@ -344,7 +345,7 @@ function parseMetadata(html: string, url: URL, originalUrl: string): MetadataRes
           if (!tagged(product['@type'], 'Product')) continue;
           if (reference) hasReferencedProduct = true;
           if (isListing) {
-            hasVariants ||= product.isVariantOf != null || hasDifferentQuery(reference);
+            hasVariants ||= product.hasVariant != null || product.isVariantOf != null || hasDifferentQuery(reference);
             products.push({ product, resolve });
           }
         }
@@ -413,7 +414,8 @@ function parseMetadata(html: string, url: URL, originalUrl: string): MetadataRes
     (!jsonLdOfferSeen && !hydrationSeen && exactPageIdentity ? taggedPrice : null);
   const storeName = sellers.size === 1 ? [...sellers][0] ?? null : null;
   if (!title && !price && !imageUrl && !storeName) return { issue: malformed ? 'metadata_malformed' : 'metadata_missing' };
-  return { metadata: { source: 'tokopedia', originalUrl, productUrl: 'https://www.tokopedia.com' + identity, title, price, imageUrl, storeName } };
+  const productUrl = identifyProduct(url.href)?.canonicalUrl ?? 'https://www.tokopedia.com' + identity;
+  return { metadata: { source: 'tokopedia', originalUrl, productUrl, title, price, imageUrl, storeName } };
 }
 
 async function readHtml(response: Response): Promise<{ html: string } | { issue: string }> {
