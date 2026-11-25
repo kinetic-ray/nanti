@@ -1,19 +1,21 @@
 import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 import type { ProductImport } from '../shared/product-import.js';
-import { currencies, maxPriceMinor, parsePrice } from '../shared/wishlist.js';
+import { readShopeeEmbeddedState } from './shopee-embedded-state.js';
 import { requestPublicPage } from './tokopedia-metadata.js';
 
 type Diagnostic = (reason: string, host: string, status?: number) => void;
 type ShopeeMetadata = {
   title: string | null;
   image: string | null;
-  price: NonNullable<ProductImport['price']> | null;
+  price: null;
+  shopeeDetails?: ProductImport['shopeeDetails'];
   sellerName?: string;
   productUrl?: string;
 };
 
-const maxBytes = 512 * 1024;
+const maxBytes = 2 * 1024 * 1024;
+const maxScriptBytes = 512 * 1024;
 const hosts = new Set([
   's.shopee.co.id', 'shopee.co.id', 'shopee.com', 'shopee.sg', 'shopee.com.my',
   'shopee.co.th', 'shopee.vn', 'shopee.ph', 'shopee.com.br', 'shope.ee',
@@ -42,18 +44,6 @@ function hasType(value: unknown, expected: string): boolean {
   return tagged(value) || (Array.isArray(value) && value.some(tagged));
 }
 
-function exactOffer(offer: Record<string, unknown>): NonNullable<ProductImport['price']> | null {
-  if (!hasType(offer['@type'], 'Offer') || 'lowPrice' in offer || 'highPrice' in offer ||
-      'priceSpecification' in offer || typeof offer.priceCurrency !== 'string' ||
-      !currencies.includes(offer.priceCurrency as typeof currencies[number]) ||
-      (typeof offer.price !== 'string' && typeof offer.price !== 'number')) return null;
-  const raw = String(offer.price);
-  if (!/^\d+(?:\.\d{1,2})?$/u.test(raw)) return null;
-  const priceMinor = parsePrice(raw);
-  if (priceMinor === null || priceMinor <= 0 || priceMinor > maxPriceMinor) return null;
-  return { priceMinor, currency: offer.priceCurrency as typeof currencies[number] };
-}
-
 function identityMatches(value: unknown, current: URL, key: string | null): boolean {
   if (typeof value !== 'string') return false;
   const reference = URL.parse(value, current);
@@ -72,35 +62,51 @@ function collectProducts(json: unknown): Record<string, unknown>[] {
   });
 }
 
-function readProductPage(html: string, current: URL, key: string | null, status: number,
-  onDiagnostic: Diagnostic | undefined, requireProductIdentity = false): ShopeeMetadata | null {
-  const document = parse(html);
+function readProductPage(html: string, current: URL, key: string, status: number,
+  onDiagnostic: Diagnostic | undefined, atReadLimit: boolean): ShopeeMetadata | null {
+  const document = parse(html, { sourceCodeLocationInfo: true });
   const root = document.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
     'tagName' in node && node.tagName === 'html');
   const head = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
     'tagName' in node && node.tagName === 'head');
+  const body = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element =>
+    'tagName' in node && node.tagName === 'body');
+  // At the byte ceiling, an unfinished head may have unseen canonical or Open Graph tags.
+  if (atReadLimit && !head?.sourceCodeLocation?.endTag && !body?.sourceCodeLocation?.startTag) {
+    onDiagnostic?.('metadata_missing', current.hostname, status);
+    return null;
+  }
   const tags = new Map<string, string>();
   const scripts: { source: string; requireReference: boolean }[] = [];
+  const embedded: string[] = [];
+  let hasCanonical = false;
   const readScript = (node: DefaultTreeAdapterTypes.Element, requireReference: boolean) => {
-    if (node.tagName !== 'script' || node.attrs.find(attr => attr.name === 'type')?.value.toLowerCase() !== 'application/ld+json') return;
+    if (node.tagName !== 'script') return;
+    const type = node.attrs.find(attr => attr.name === 'type')?.value.toLowerCase();
+    if (type !== 'application/ld+json' && type !== 'text/mfe-initial-data') return;
+    const { startTag, endTag } = node.sourceCodeLocation ?? {};
+    if (!startTag || !endTag || endTag.startOffset - startTag.endOffset > maxScriptBytes ||
+        Buffer.byteLength(html.slice(startTag.endOffset, endTag.startOffset)) > maxScriptBytes) return;
     const text = node.childNodes.find(child => 'value' in child);
-    if (text && 'value' in text) scripts.push({ source: text.value, requireReference });
+    if (!text || !('value' in text)) return;
+    if (type === 'application/ld+json') scripts.push({ source: text.value, requireReference });
+    if (type === 'text/mfe-initial-data') embedded.push(text.value);
   };
   for (const node of head?.childNodes ?? []) {
     if (!('tagName' in node)) continue;
     const attr = (name: string) => node.attrs.find(entry => entry.name === name)?.value;
     const name = (attr('property') ?? attr('name'))?.toLowerCase();
     const content = attr('content')?.trim();
-    const canonical = node.tagName === 'link' && attr('rel')?.toLowerCase().split(/\s+/u).includes('canonical')
-      ? attr('href') : name === 'og:url' ? content : undefined;
-    if (canonical && !identityMatches(canonical, current, key)) {
+    const canonicalLink = node.tagName === 'link' && attr('rel')?.toLowerCase().split(/\s+/u).includes('canonical');
+    const canonical = canonicalLink ? attr('href') : name === 'og:url' ? content : undefined;
+    if ((canonicalLink || canonical) && !identityMatches(canonical, current, key)) {
       onDiagnostic?.('metadata_mismatch', current.hostname, status);
       return null;
     }
+    if (canonicalLink && canonical) hasCanonical = true;
     if (node.tagName === 'meta' && name && content && !tags.has(name)) tags.set(name, content);
     readScript(node, false);
   }
-  const body = root?.childNodes.find((node): node is DefaultTreeAdapterTypes.Element => 'tagName' in node && node.tagName === 'body');
   const bodyNodes = [...body?.childNodes ?? []];
   let appShell = false;
   while (bodyNodes.length) {
@@ -111,53 +117,41 @@ function readProductPage(html: string, current: URL, key: string | null, status:
     for (const child of node.childNodes) bodyNodes.push(child);
   }
 
-  let title: string | null = null;
+  const [, shopId, itemId] = key.split('/');
+  const states = hasCanonical && shopId && itemId && key.startsWith('shopee.co.id/')
+    ? embedded.flatMap(source => readShopeeEmbeddedState(source, shopId, itemId) ?? []) : [];
+  const state = states.length === 1 ? states[0] : undefined;
+  let title: string | null = state?.title ?? null;
   let image: string | null = null;
-  const products: Record<string, unknown>[] = [];
-  let hasVariantSignal = false;
-  const offers: NonNullable<ProductImport['price']>[] = [];
-  const sellers = new Set<string>();
+  const sellers = new Set(state?.sellers);
   for (const { source, requireReference } of scripts) {
     let decoded: unknown;
     try { decoded = JSON.parse(source); } catch { continue; }
     for (const value of collectProducts(decoded)) {
-      if (hasType(value['@type'], 'ProductGroup')) { hasVariantSignal = true; continue; }
       if (!hasType(value['@type'], 'Product')) continue;
       const reference = value.url ?? value['@id'];
       if (reference !== undefined && !identityMatches(reference, current, key)) continue;
-      if (reference === undefined && (!key || requireReference)) continue;
-      products.push(value);
+      if (reference === undefined && requireReference) continue;
       if (typeof value.name === 'string' && !title) title = value.name.trim().slice(0, 160) || null;
-      if ('hasVariant' in value || 'isVariantOf' in value || 'isAccessoryOrSparePartFor' in value) hasVariantSignal = true;
       const photo = Array.isArray(value.image) ? value.image[0] : value.image;
       const imageObject = record(photo);
       const photoUrl = typeof photo === 'string' ? photo :
         typeof imageObject?.url === 'string' ? imageObject.url : null;
       if (photoUrl && !image) image = photoUrl;
       const rawOffers = Array.isArray(value.offers) ? value.offers : [value.offers];
-      if (rawOffers.length !== 1) {
-        if (rawOffers.some(Boolean)) hasVariantSignal = true;
-        continue;
-      }
+      if (rawOffers.length !== 1) continue;
       const offer = record(rawOffers[0]);
       if (!offer) continue;
-      const exact = exactOffer(offer);
-      if (exact) offers.push(exact);
       const seller = record(offer.seller);
       if (typeof seller?.name === 'string' && seller.name.trim()) sellers.add(seller.name.trim().slice(0, 160));
     }
   }
 
-  // A short link that lands on a non-listing destination (for example, a login page)
-  // must not inherit its generic social title or image as product metadata.
-  if (requireProductIdentity && products.length === 0) {
-    onDiagnostic?.('metadata_mismatch', current.hostname, status);
-    return null;
-  }
-
-  title ??= tags.get('og:title')?.slice(0, 160) ?? tags.get('twitter:title')?.slice(0, 160) ?? null;
-  const imageCandidates = [tags.get('og:image'), tags.get('og:image:secure_url'),
-    tags.get('twitter:image'), tags.get('twitter:image:src'), image];
+  const socialTitle = tags.get('og:title') ?? tags.get('twitter:title');
+  const genericSocial = /^shopee indonesia\s*\|/iu.test(socialTitle ?? '');
+  if (!genericSocial) title ??= socialTitle?.slice(0, 160) ?? null;
+  const imageCandidates = [state?.image, ...(genericSocial ? [] : [tags.get('og:image'),
+    tags.get('og:image:secure_url'), tags.get('twitter:image'), tags.get('twitter:image:src')]), image];
   let safeImage: string | null = null;
   for (const candidate of imageCandidates) {
     if (!candidate) continue;
@@ -170,10 +164,7 @@ function readProductPage(html: string, current: URL, key: string | null, status:
     }
   }
 
-  const first = offers[0];
-  const price = !hasVariantSignal && products.length === 1 && offers.length === 1 && first &&
-    offers.every(row => row.priceMinor === first.priceMinor && row.currency === first.currency) ? first : null;
-  if (!title && !safeImage && !price && sellers.size !== 1) {
+  if (!title && !safeImage && sellers.size !== 1 && !state) {
     onDiagnostic?.(appShell ? 'storefront_shell' : 'metadata_missing', current.hostname, status);
     return null;
   }
@@ -181,9 +172,10 @@ function readProductPage(html: string, current: URL, key: string | null, status:
   for (const parameter of ['sp_atk', 'xptdk']) productUrl.searchParams.delete(parameter);
   productUrl.hash = '';
   return {
-    title, image: safeImage, price,
+    title, image: safeImage, price: null,
+    ...(state && { shopeeDetails: state.details }),
     ...(sellers.size === 1 ? { sellerName: [...sellers][0]! } : {}),
-    ...(key ? { productUrl: productUrl.href } : {}),
+    productUrl: productUrl.href,
   };
 }
 
@@ -234,6 +226,11 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         await response.body?.cancel();
         return null;
       }
+      if (!key) {
+        diagnostic('metadata_mismatch', response.status);
+        await response.body.cancel();
+        return null;
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let html = '';
@@ -245,7 +242,6 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
           const length = Math.min(value.byteLength, maxBytes - total);
           total += length;
           html += decoder.decode(value.subarray(0, length), { stream: true });
-          if (/<\/html\s*>/iu.test(html)) break;
         }
       } finally { await reader.cancel(); }
       html += decoder.decode();
@@ -253,8 +249,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
         diagnostic('captcha_required', response.status);
         return null;
       }
-      return readProductPage(html, current, key, response.status, onDiagnostic,
-        key === null);
+      return readProductPage(html, current, key, response.status, onDiagnostic, total === maxBytes);
     }
     diagnostic('redirect_limit');
     return null;

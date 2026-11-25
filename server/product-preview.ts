@@ -7,7 +7,7 @@ import { extractTokopediaMetadata, requestPublicPage } from './tokopedia-metadat
 import { extractShopeeMetadata } from './shopee-metadata.js';
 
 type Diagnostic = (reason: string, host: string, status?: number) => void;
-type ProductPreview = { title: string | null; image: string | null; price: NonNullable<ProductImport['price']> | null; sellerName?: string; productUrl?: string };
+type ProductPreview = { title: string | null; image: string | null; price: NonNullable<ProductImport['price']> | null; sellerName?: string; productUrl?: string; shopeeDetails?: ProductImport['shopeeDetails'] };
 
 const MAX_BYTES = 512 * 1024;
 

@@ -96,17 +96,20 @@ describe.skipIf(!databaseUrl)('MySQL product photos', () => {
   const db = databaseUrl ? connectDatabase(databaseUrl) : undefined!;
   afterAll(async () => { await db?.$disconnect(); });
 
-  it('keeps Shopee preview price, seller, and image bound through save and reload', async () => {
+  it('keeps embedded Shopee title, seller, and image bound through save and reload', async () => {
     const originalUrl = 'https://s.shopee.co.id/fixture?campaign=one';
     const productUrl = 'https://shopee.co.id/lamp-i.123.456';
-    const imageUrl = 'https://cf.shopee.co.id/file/lamp.webp';
+    const imageUrl = 'https://down-id.img.susercontent.com/file/fixture-lamp';
     const webp = await raster('webp');
-    const html = '<script type="application/ld+json">' + JSON.stringify({
-      '@context': 'https://schema.org', '@type': 'Product', url: 'https://www.shopee.co.id/lamp-i.123.456',
-      name: 'Lamp', image: imageUrl,
-      offers: { '@type': 'Offer', price: '129000', priceCurrency: 'IDR',
-        seller: { '@type': 'Organization', name: 'Lamp Shop' } },
-    }) + '</script>';
+    const html = '<link rel="canonical" href="' + productUrl + '"><script type="text/mfe-initial-data">' +
+      JSON.stringify({ initialState: {
+        DOMAIN_CONTEXT: { data: { shopId: 123, itemId: 456 } },
+        DOMAIN_PDP: { data: { PDP_BFF_DATA: { cachedMap: { '123/456': {
+          item: { shop_id: 123, item_id: 456, title: 'Lamp', image: 'fixture-lamp',
+            images: ['fixture-lamp', 'fixture-angle'], models: [{ model_id: 789, name: '' }] },
+          shop_vouchers: [{ shop_id: 123, shop_name: 'Lamp Shop' }],
+        } } } } },
+      } }) + '</script>';
     const metadataRequest: typeof fetch = async target => String(target) === originalUrl
       ? new Response(null, { status: 302, headers: { location: productUrl } })
       : new Response(html, { headers: { 'content-type': 'text/html' } });
@@ -127,10 +130,12 @@ describe.skipIf(!databaseUrl)('MySQL product photos', () => {
       const { body: preview } = await agent.post('/api/products/import').set(mutation).send({ url: originalUrl }).expect(200);
       expect(preview).toMatchObject({ name: 'Lamp', sellerName: 'Lamp Shop', productUrl,
         imagePath: imageUrl, canSaveImage: true, shopeeImageProof: expect.any(String),
-        price: { priceMinor: 12_900_000, currency: 'IDR' } });
+        shopeeDetails: { gallery: [imageUrl, 'https://down-id.img.susercontent.com/file/fixture-angle'],
+          tiers: [], models: [{ id: '789', name: '' }] } });
+      expect(preview).not.toHaveProperty('price');
       await agent.post(path + '/items').set(mutation).set('Idempotency-Key', id).send({
-        ...input, name: preview.name, url: originalUrl, sellerName: preview.sellerName, priceMinor: preview.price.priceMinor,
-        priceSource: 'imported_unverified', saveMarketplaceImage: true,
+        ...input, name: preview.name, url: originalUrl, sellerName: preview.sellerName, priceMinor: 12_900_000,
+        saveMarketplaceImage: true,
         shopeeProductUrl: preview.productUrl,
         shopeeImage: { url: preview.imagePath, proof: preview.shopeeImageProof },
       }).expect(201, { photoStatus: 'saved' });

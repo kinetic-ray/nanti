@@ -18,6 +18,11 @@ export type ProductImport = {
   productUrl?: string;
   listingProof?: string;
   sellerName?: string;
+  shopeeDetails?: {
+    gallery: string[];
+    tiers: { name: string; options: string[] }[];
+    models: { id: string; name: string }[];
+  };
   diagnostic?: { code: string; host: string; httpStatus?: number };
 };
 
