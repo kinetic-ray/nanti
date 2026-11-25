@@ -49,6 +49,7 @@ try {
   }
 
   await button('Switch to English').click();
+  await button('Edit design').click();
   await button('See more styles').click();
   const layouts = [
     ['Simple & Clear', 'simple'], ['Bold & Distinctive', 'bold'], ['Elegant & Polished', 'elegant'],
