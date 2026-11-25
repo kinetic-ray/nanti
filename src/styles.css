@@ -285,3 +285,31 @@ body:has(.site:not(.admin-site)){background:#f6f5fc;color:#211b37}
 .creator-access { width: min(100%, 40rem); padding-top: 3rem; }
 .creator-access h1 { margin-top: 1.5rem; }
 .creator-access form { display: grid; gap: 1rem; justify-items: start; }
+.creator-access {
+  --creator-access-line: color-mix(in srgb, var(--accent, #5335aa) 16%, transparent);
+  width: min(100%, 36rem);
+  padding-top: clamp(1.5rem, 6vh, 4.5rem);
+}
+.creator-access-nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--creator-access-line); }
+.creator-access-nav > a { display: inline-flex; align-items: center; min-height: 2.75rem; font-size: .875rem; font-weight: 700; }
+.creator-access > h1 { margin: clamp(2rem,7vw,3.5rem) 0 1rem; max-width: 13ch; font-size: clamp(2rem,7vw,3.35rem); line-height: 1.08; letter-spacing: -.055em; }
+.creator-access > p[role="alert"] { display: grid; gap: .65rem; color: var(--danger, #982440); }
+.creator-access form { gap: 1.25rem; width: min(100%, 28rem); justify-items: stretch; }
+.creator-access form > p { margin: 0; color: var(--muted, #615774); }
+.creator-access form > label { display: grid; gap: .5rem; font-weight: 700; }
+.creator-access form input { min-height: 3rem; }
+.creator-access :where(button, a):focus-visible { outline: 3px solid var(--focus, #275db4); outline-offset: 3px; }
+.creator-access :where(button, a, input) { font-family: inherit; }
+.creator-access button { min-height: 2.75rem; padding: .6rem .9rem; border-radius: 8px; font-size: .875rem; font-weight: 700; line-height: 1.25; }
+.creator-access form > button.primary { justify-self: start; min-width: min(100%, 13rem); }
+.creator-access-state { display: grid; justify-items: start; gap: .8rem; max-width: 29rem; padding-block: clamp(3rem,10vh,6rem); }
+.creator-access-state h1 { margin: 0; max-width: 17ch; font-size: clamp(1.35rem,4vw,1.75rem); line-height: 1.25; letter-spacing: -.035em; }
+.creator-access-state p { margin: 0; color: var(--muted, #615774); }
+.creator-access-spinner { width: 1.5rem; height: 1.5rem; border: 2px solid var(--creator-access-line); border-top-color: var(--accent, #5335aa); border-radius: 50%; animation: creator-access-spin .8s linear infinite; }
+@keyframes creator-access-spin { to { transform: rotate(360deg); } }
+@media (max-width: 40rem) {
+  .creator-access { padding-top: 1rem; }
+  .creator-access > h1 { margin-top: 2.25rem; }
+  .creator-access form > button.primary { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .creator-access-spinner { animation: none; } }
