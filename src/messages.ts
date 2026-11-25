@@ -105,6 +105,8 @@ export const idMessages = {
   'Download design backup': 'Unduh cadangan desain',
   'Could not open your creator draft. Try again.': 'Draf kreator belum bisa dibuka. Coba lagi.',
   'Could not open your creator account. Try again.': 'Akun kreator belum bisa dibuka. Coba lagi.',
+  'This is taking longer than expected. You can retry or keep waiting.': 'Pemeriksaan ini lebih lama dari biasanya. Kamu bisa mencoba lagi atau menunggu.',
+  'Creator navigation': 'Navigasi kreator',
   'Enter a creator name.': 'Masukkan nama kreator.',
   'Could not save your creator profile. Try again.': 'Profil kreator belum bisa disimpan. Coba lagi.',
   'Back to Nanti Creator': 'Kembali ke Nanti Creator',

@@ -114,6 +114,7 @@ jobs:
           accounts_status=$?
           npm run test:browser:creator 2>&1 | tee test-results/browser-creator.log
           creator_status=$?
+          export NANTI_CREATOR_DESIGN_SCREENSHOTS=test-results/browser/creator-design
           npm run test:browser:creator-design 2>&1 | tee test-results/browser-creator-design.log
           design_status=$?
           if [ "$accounts_status" -ne 0 ] || [ "$creator_status" -ne 0 ] || [ "$design_status" -ne 0 ]; then

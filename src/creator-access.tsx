@@ -15,6 +15,7 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
   const [error, setError] = useState<Message | ''>('');
   const [signedOut, setSignedOut] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [slow, setSlow] = useState(false);
   const inStudio = /^\/creator\/studio\/?$/u.test(location.pathname);
   const outcome = new URLSearchParams(location.search).get('auth');
 
@@ -29,24 +30,39 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
 
   useEffect(() => {
     const controller = new AbortController();
+    setSlow(false);
+    const slowTimer = window.setTimeout(() => setSlow(true), 7000);
+    const timeout = window.setTimeout(() => {
+      if (!controller.signal.aborted) {
+        setError('Could not open your creator account. Try again.');
+        controller.abort();
+      }
+    }, 20000);
     api<State>('/account/creator', { signal: controller.signal }).then(async data => {
-      if (controller.signal.aborted) return;
-      if (data.profile && !inStudio) location.replace('/creator/studio');
-      else {
-        if (inStudio && data.profile) {
-          try {
-            const result = await api<{ design: unknown }>('/account/creator/design', { signal: controller.signal });
-            if (!controller.signal.aborted) setDraft(result.design);
-          } catch (failure) {
-            if (controller.signal.aborted) return;
-            if (errorMessage(failure) === 'Sign in to continue.') setSignedOut(true);
-            else setError('Could not open your creator draft. Try again.');
-            return;
+      try {
+        if (controller.signal.aborted) return;
+        if (data.profile && !inStudio) location.replace('/creator/studio');
+        else {
+          if (inStudio && data.profile) {
+            try {
+              const result = await api<{ design: unknown }>('/account/creator/design', { signal: controller.signal });
+              if (!controller.signal.aborted) setDraft(result.design);
+            } catch (failure) {
+              if (controller.signal.aborted) return;
+              if (errorMessage(failure) === 'Sign in to continue.') setSignedOut(true);
+              else setError('Could not open your creator draft. Try again.');
+              return;
+            }
           }
+          if (!controller.signal.aborted) setState(data);
         }
-        if (!controller.signal.aborted) setState(data);
+      } finally {
+        window.clearTimeout(slowTimer);
+        window.clearTimeout(timeout);
       }
     }, failure => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(timeout);
       if (controller.signal.aborted) return;
       if (errorMessage(failure) === 'Sign in to continue.') {
         if (!inStudio && !outcome) location.replace('/account?next=creator');
@@ -54,7 +70,11 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
       }
       else setError('Could not open your creator account. Try again.');
     });
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [inStudio, outcome, revision]);
 
   useEffect(() => {
@@ -95,20 +115,26 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
   }
 
   if (inStudio && state?.profile) return studio(state.profile.id, draft);
+  const checking = state === null && !signedOut && !error;
   return <div className="consumer"><main className="site creator-access">
-    <a href="/creator">{t('Back to Nanti Creator')}</a> <LanguagePicker />
-    <h1>{t('Create a creator profile')}</h1>
-    {error && <p role="alert">{t(error)}</p>}
+    <nav className="creator-access-nav" aria-label={t('Creator navigation')}><a href="/creator">{t('Back to Nanti Creator')}</a><LanguagePicker /></nav>
+    {checking ? <section className="creator-access-state" aria-live="polite">
+      <span className="creator-access-spinner" aria-hidden="true" />
+      <h1>{t('Checking your creator account…')}</h1>
+      {slow && <><p>{t('This is taking longer than expected. You can retry or keep waiting.')}</p><button type="button" onClick={() => { setError(''); setRevision(value => value + 1); }}>{t('Try again')}</button></>}
+    </section> : <>
+    {!signedOut && <h1>{t('Create a creator profile')}</h1>}
+    {error && <p role="alert">{t(error)} <button type="button" onClick={() => { setError(''); setRevision(value => value + 1); }}>{t('Try again')}</button></p>}
     {signedOut ? <>
       {(outcome === 'failed' || outcome === 'cancelled') && <p role="alert">{t('Sign-in was interrupted. Try again.')}</p>}
       <p>{t('Sign in or create a Nanti account to continue.')}</p>
       <a href="/account?next=creator">{t('Sign in to Nanti')}</a>
     </> : state ? <form onSubmit={event => void setup(event)}>
       <p>{t('This name will appear on your storefront.')}</p>
-      <label>{t('Creator name')}<input name="name" required maxLength={100} disabled={busy} /></label>
+      <label>{t('Creator name')}<input name="name" autoComplete="nickname" required maxLength={100} disabled={busy} /></label>
       <button className="primary" disabled={busy}>{t('Create creator profile')}</button>
-    </form> : error ? <button type="button" onClick={() => { setError(''); setRevision(value => value + 1); }}>{t('Try again')}</button>
-      : <p role="status">{t('Checking your creator account…')}</p>}
+    </form> : null}
+    </>}
     {busy && <p role="status">{t('Working…')}</p>}
   </main></div>;
 }

@@ -79,7 +79,7 @@ try {
   const visitor = await guest.newPage();
   visitor.setDefaultTimeout(12000);
   visitor.on('pageerror', failure => errors.push(failure.message));
-  const widths = [320, 375, 768, 1024, 1440];
+  const widths = [320, 360, 390, 768, 1024, 1440];
   const button = (root, name) => root.getByRole('button', { name, exact: true });
   const heading = (root, name) => root.getByRole('heading', { name, exact: true });
   const mobileToggle = button(page, 'Open navigation');
@@ -97,6 +97,24 @@ try {
     await audit(root, '.aw', label + ' accessibility at ' + width);
     if (artifacts) await root.screenshot({ path: join(artifacts, label + '-' + width + '.png'), fullPage: true });
   }
+
+  const accessContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
+  const access = await accessContext.newPage();
+  await access.addInitScript(() => localStorage.setItem('nanti.language', 'en'));
+  let accountChecks = 0;
+  await access.route('**/api/account/creator', async route => {
+    accountChecks += 1;
+    if (accountChecks === 1) await new Promise(resolve => setTimeout(resolve, 7600));
+    await route.fulfill({ json: { profile: null, continued: false } });
+  });
+  await access.goto('/creator/studio');
+  await heading(access, 'Checking your creator account…').waitFor();
+  assert.equal(await heading(access, 'Create a creator profile').count(), 0, 'onboarding waits for account status before showing its form heading');
+  await access.getByText('This is taking longer than expected. You can retry or keep waiting.').waitFor({ timeout: 8000 });
+  await button(access, 'Try again').click();
+  await heading(access, 'Create a creator profile').waitFor();
+  assert.equal(accountChecks, 2, 'the slow account check can be retried');
+  await accessContext.close();
 
   await page.goto('/creator/studio');
   await page.getByLabel('Creator name').fill('Browser Storefront');
@@ -243,14 +261,13 @@ try {
     ['Bright & Dynamic', 'dynamic'], ['Magazine Style', 'magazine'], ['Playful & Relaxed', 'playful'],
   ]) {
     await page.locator('.studio-layout-option').filter({ hasText: label }).click();
-    if (await page.getByRole('dialog', { name: new RegExp(label) }).count()) {
-      await button(page, 'Use style settings').click();
-    }
+    assert.equal(await page.getByRole('dialog').count(), 0, 'layout changes apply without confirmation');
     await page.locator('.studio-preview-frame .storefront-layout-' + preset).waitFor();
   }
   await button(page, 'Warm').click();
-  await button(page, 'Use style settings').click();
+  assert.equal(await page.getByRole('dialog').count(), 0, 'color changes apply without confirmation');
   await page.locator('.studio-preview-frame .storefront-theme-gallery').waitFor();
+  for (const width of widths) await layout(page, 'creator-appearance', width);
   await button(page, 'Apply & save draft').click();
   await page.getByText('Design draft saved to your account. Your public storefront has not changed.').waitFor();
   await visitor.reload();
