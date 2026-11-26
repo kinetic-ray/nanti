@@ -299,8 +299,28 @@ model User {
   identities  AuthIdentity[]
   sessions    UserSession[]
   dataOwners  DataOwner[]
+  financialProfile FinancialProfile?
 
   @@index([createdAt, id])
+}
+
+model FinancialProfile {
+  userId              String   @id @db.Char(36)
+  income              Json?
+  expenses            Json?
+  debts               Json?
+  savings             Json?
+  readiness           Json?
+  additional          Json?
+  incomeUpdatedAt     DateTime?
+  expensesUpdatedAt   DateTime?
+  debtsUpdatedAt      DateTime?
+  savingsUpdatedAt    DateTime?
+  readinessUpdatedAt  DateTime?
+  additionalUpdatedAt DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DataOwner {

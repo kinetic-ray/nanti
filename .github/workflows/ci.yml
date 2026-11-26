@@ -117,8 +117,10 @@ jobs:
           export NANTI_CREATOR_DESIGN_SCREENSHOTS=test-results/browser/creator-design
           npm run test:browser:creator-design 2>&1 | tee test-results/browser-creator-design.log
           design_status=$?
-          if [ "$accounts_status" -ne 0 ] || [ "$creator_status" -ne 0 ] || [ "$design_status" -ne 0 ]; then
-            echo "Browser suite status: accounts=$accounts_status creator=$creator_status design=$design_status"
+          npm run test:browser:financial-profile 2>&1 | tee test-results/browser-financial-profile.log
+          financial_status=$?
+          if [ "$accounts_status" -ne 0 ] || [ "$creator_status" -ne 0 ] || [ "$design_status" -ne 0 ] || [ "$financial_status" -ne 0 ]; then
+            echo "Browser suite status: accounts=$accounts_status creator=$creator_status design=$design_status financial-profile=$financial_status"
             exit 1
           fi
       - name: Upload test logs and browser screenshots

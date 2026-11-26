@@ -13,6 +13,7 @@ import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.j
 import { AccountDialog, announceAuthChange, authChangeKey, authNotices } from './account.js';
 import type { AuthNotice } from './account.js';
 import type { AccountStatus } from '../shared/account.js';
+import { financialProfileReturnKey } from '../shared/account.js';
 import type { PriceInbox } from '../shared/prices.js';
 import { BookmarkArt, Icon, Loading, ProductMedia } from './visual.js';
 import './styles.css';
@@ -36,6 +37,7 @@ const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ C
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
 const RecommendationInbox = lazy(() => import('./RecommendationInbox.js').then(({ RecommendationInbox }) => ({ default: RecommendationInbox })));
+const FinancialProfilePage = lazy(() => import('./financial-profile.js').then(({ FinancialProfilePage }) => ({ default: FinancialProfilePage })));
 
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
@@ -88,6 +90,14 @@ function App() {
         history.replaceState(null, '', address);
         const outcome = auth as AuthNotice;
         if (['signed-in', 'signed-out', 'imported', 'deleted'].includes(outcome)) announceAuthChange();
+        if (outcome === 'signed-in' && current?.account) {
+          const returnUntil = Number(sessionStorage.getItem(financialProfileReturnKey) ?? 0);
+          sessionStorage.removeItem(financialProfileReturnKey);
+          if (returnUntil > Date.now()) {
+            location.replace('/account/financial-profile?auth=signed-in');
+            return;
+          }
+        }
         if (['linked', 'verified', 'failed', 'cancelled'].includes(outcome) ||
             (outcome === 'signed-in' && current?.account?.import)) {
           setNotice(outcome);
@@ -375,7 +385,11 @@ function App() {
 
 const root = document.getElementById('root');
 if (root) {
-  if (/^\/admin\/?$/u.test(location.pathname)) {
+  if (/^\/account\/financial-profile\/?$/u.test(location.pathname)) {
+    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Membuka profil finansial…</p>}>
+      <FinancialProfilePage />
+    </Suspense></LocaleProvider>);
+  } else if (/^\/admin\/?$/u.test(location.pathname)) {
     document.documentElement.lang = 'id';
     const accounts = new URLSearchParams(location.search).get('view') === 'accounts';
     createRoot(root).render(<Suspense fallback={<p className="site" role="status">Membuka administrasi…</p>}>

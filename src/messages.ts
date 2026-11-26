@@ -191,6 +191,7 @@ export const idMessages = {
   'Site navigation': 'Navigasi situs',
   'Creator': 'Kreator',
   'My profile': 'Profil Saya',
+  'Financial profile': 'Profil Finansial',
   'Sign out': 'Keluar',
   'From Instagram to Nanti': 'Dari Instagram ke Nanti',
   'See the post': 'Lihat postingan',

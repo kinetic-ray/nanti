@@ -37,6 +37,8 @@ import { databaseProblem, databaseUnavailable } from './database-health.js';
 import { Prisma } from './generated/prisma/client.js';
 import { priceRoutes } from './price-routes.js';
 import type { Prices } from './prisma-prices.js';
+import type { FinancialProfileRepository } from './financial-profile.js';
+import { financialProfileRoutes } from './financial-profile-routes.js';
 
 const uuid = z.uuid();
 const listName = z.string().trim().min(1, 'Enter a wishlist name.').max(100);
@@ -67,7 +69,7 @@ type Options = {
   recommendationSuperadminEnabled?: boolean;
   affiliate?: AffiliateRepository;
   admin?: AdminCredentials;
-  consumer?: { accounts: Accounts; providers: OAuthProviders };
+  consumer?: { accounts: Accounts; providers: OAuthProviders; financialProfiles?: FinancialProfileRepository };
   preview: (url: URL) => Promise<string | null>;
   lookupMetadata?: (url: URL, request?: typeof fetch, onDiagnostic?: (reason: string, host: string, status?: number) => void) => ReturnType<typeof previewProductMetadata>;
   productMedia?: ReturnType<typeof createProductMedia>;
@@ -164,6 +166,9 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
         /^\/account\/creator\/catalog\/products\/[a-f0-9-]{36}\/?$/iu.test(req.path)) return next();
     return parseJson(req, res, next);
   });
+  if (consumer?.financialProfiles) {
+    api.use('/account/financial-profile', financialProfileRoutes(consumer.accounts, consumer.financialProfiles, secureCookies));
+  }
   if (account) api.use('/account', account.api);
   else api.get('/account', (_req, res) => res.json({ available: [], account: null }));
   const limitProductLookup = rateLimit({
@@ -616,7 +621,7 @@ export function createApp({ repository, intelligence, prices, recommendationsDb,
   app.use('/api', api);
 
   if (webRoot) {
-    app.get(['/admin', '/account', '/creator', '/creator/studio', '/creator/demo', '/store/:handle'], (_req, res) => {
+    app.get(['/admin', '/account', '/account/financial-profile', '/creator', '/creator/studio', '/creator/demo', '/store/:handle'], (_req, res) => {
       res.set('Cache-Control', 'no-store').sendFile('index.html', { root: webRoot });
     });
     app.use(express.static(webRoot, { dotfiles: 'deny' }));

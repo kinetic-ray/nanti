@@ -1,6 +1,7 @@
 export const loginProviders = ['google', 'apple'] as const;
 export type LoginProvider = typeof loginProviders[number];
 export type AuthPurpose = 'signin' | 'link' | 'verify';
+export const financialProfileReturnKey = 'nanti:financial-profile-return-until';
 export type AccountStatus = {
   available: LoginProvider[];
   emailDelivery?: boolean;
