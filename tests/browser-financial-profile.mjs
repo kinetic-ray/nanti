@@ -106,7 +106,7 @@ try {
   await page.getByRole('button', { name: /Target tabungan/ }).click();
   await page.getByRole('textbox', { name: /Uang yang ingin ditabung setiap bulan/ }).fill('1.000.000');
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
-  await page.locator('.fp-summary > strong').waitFor();
+  await page.getByRole('status').filter({ hasText: 'Perubahan tersimpan.' }).waitFor();
   assert.equal(profile.savings.monthlyAmount, '1000000');
   console.log(`Budget inputs: ${JSON.stringify({ income: profile.income, expenses: profile.expenses, debts: profile.debts, savings: profile.savings })}`);
   assert.equal((await page.locator('.fp-summary > strong').innerText()).replace(/\s/gu, ''), 'Rp3.800.000');
