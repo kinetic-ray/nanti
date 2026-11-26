@@ -617,14 +617,14 @@ a.merchant {
 .consumer .account-signin .account-footer button:hover:not(:disabled) { text-decoration: underline; }
 
 @media (min-width: 800px) {
-  .consumer .account-signin {
+  .consumer dialog.account-signin {
     --auth-width: min(56rem, calc(100vw - 3rem));
     --editorial-width: calc(var(--auth-width) * .45);
     --dialog-padding: clamp(2rem, 4vw, 3rem);
     width: var(--auth-width);
     padding-inline-start: var(--editorial-width);
   }
-  .consumer .account-signin:has(.account-auth-modes) { height: 39rem; }
+  .consumer dialog.account-signin:has(.account-auth-modes) { height: 39rem; }
   .consumer .account-signin > .dialog-header { padding-top: 1.75rem; }
   .account-signin > .dialog-header > h2::before { display: none; }
   .account-editorial {
@@ -1199,7 +1199,7 @@ a.merchant {
 .consumer .icon-button.remove-action:hover, .consumer .icon-button.remove-action:focus-visible { color: #8e192a; background: #fff0f2; }
 .consumer .icon-edit-pencil { display: inline-block; flex: none; vertical-align: middle; }
 
-.consumer .account-route-error {
+.consumer .account-route-panel {
   width: min(100% - 2rem, 42rem);
   margin-inline: auto;
   padding-block: 2rem;

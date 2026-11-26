@@ -51,6 +51,9 @@ let browser;
 let deviceNumber = 0;
 const button = (root, name) => root.getByRole('button', { name, exact: true });
 const modal = (page, name) => page.getByRole('dialog', { name, exact: true });
+const accountEntry = (page, name) => page.getByRole('main').filter({
+  has: page.getByRole('heading', { name, exact: true, level: 1 }),
+});
 const visible = locator => locator.waitFor({ state: 'visible' });
 
 async function device(width) {
@@ -175,7 +178,7 @@ try {
   await db.creatorProfile.create({ data: { userId: accountIdentity.userId, name: 'Eligible browser creator' } });
   for (const mode of ['verify', 'reset']) {
     await guest.goto(`/account?recovery=${mode}#mode=${mode}&token=fixture`);
-    const recovery = modal(guest, 'Akunmu');
+    const recovery = accountEntry(guest, 'Akunmu');
     await visible(recovery.getByRole('button', { name: mode === 'reset' ? 'Simpan kata sandi baru' : 'Verifikasi email', exact: true }));
     await guest.waitForFunction(() => location.hash === '');
     await audit(guest, `360px signed-in ${mode}`);
@@ -326,9 +329,9 @@ try {
   await english.waitForURL(url => url.pathname === '/');
   await visible(button(english, 'Sign in'));
   await english.goto('/account');
-  await visible(modal(english, 'Sign in to Nanti'));
+  await visible(accountEntry(english, 'Sign in to Nanti'));
   assert.equal(await profile.count(), 0);
-  await button(modal(english, 'Sign in to Nanti'), 'Continue as guest').click();
+  await button(accountEntry(english, 'Sign in to Nanti'), 'Continue as guest').click();
   await visible(button(english, 'Sign in'));
   await visible(button(sibling, 'Sign in'));
   assert.equal(await sibling.getByRole('heading', { name: 'Wishlist tamu', exact: true }).isVisible(), false);
@@ -372,7 +375,7 @@ try {
   await creatorGuest.goto('/creator/studio');
   await visible(creatorGuest.getByRole('link', { name: 'Sign in to Nanti' }));
   await creatorGuest.getByRole('link', { name: 'Sign in to Nanti' }).click();
-  await visible(modal(creatorGuest, 'Sign in to Nanti'));
+  await visible(accountEntry(creatorGuest, 'Sign in to Nanti'));
   await creatorGuest.close();
   const creator = await first.newPage();
   await creator.goto('/creator?onboard=1');
@@ -382,13 +385,18 @@ try {
   await creator.goto('/creator?onboard=1');
   await visible(creator.getByRole('heading', { name: 'Ringkasan' }));
   assert.equal(new URL(creator.url()).pathname, '/creator/studio');
+  await button(creator, 'Menu akun').click();
+  await creator.getByRole('link', { name: 'Kembali ke wishlist', exact: true }).click();
+  await creator.waitForURL(url => url.pathname === '/');
+  await visible(button(creator, 'Menu profil'));
+  assert.equal(await creator.locator('dialog[open]').count(), 0);
   await creator.close();
-  console.log('PASS Creator guest gate, one-step setup and returning Studio access');
+  console.log('PASS Creator guest gate, setup, returning Studio access and signed-in exit');
 
   const recovered = await open(second);
   await recovered.goto('/account?next=financial-profile');
-  await visible(modal(recovered, 'Sign in to Nanti'));
-  await button(modal(recovered, 'Sign in to Nanti'), 'Continue with Google').click();
+  await visible(accountEntry(recovered, 'Sign in to Nanti'));
+  await button(accountEntry(recovered, 'Sign in to Nanti'), 'Continue with Google').click();
   await recovered.waitForURL('**/account?section=financial-profile');
   await visible(recovered.getByRole('button', { name: /Savings target.*1[.,]250[.,]000/ }));
   await account.getByRole('link', { name: 'Keamanan', exact: true }).click();
@@ -404,7 +412,7 @@ try {
   await revoke.click();
   await revoke.waitFor({ state: 'hidden' });
   await recovered.reload();
-  await visible(modal(recovered, 'Sign in to Nanti'));
+  await visible(accountEntry(recovered, 'Sign in to Nanti'));
   assert.equal(await recovered.getByRole('heading', { name: 'Financial profile', exact: true }).count(), 0);
   assert.equal((await second.request.get('/api/account/financial-profile')).status(), 401);
   await recovered.close();
@@ -430,7 +438,7 @@ try {
     assert.ok(await passwords.consume(verify, 'verify', originalPassword));
     const page = await open(passwordDevice);
     await page.goto('/account');
-    const signIn = modal(page, 'Masuk ke Nanti');
+    const signIn = accountEntry(page, 'Masuk ke Nanti');
     await signIn.getByLabel('Email', { exact: true }).fill(workspaceEmail);
     await signIn.locator('input[name="password"]').fill(originalPassword);
     await signIn.locator('button[type="submit"]').click();

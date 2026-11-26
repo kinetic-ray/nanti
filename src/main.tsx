@@ -11,7 +11,7 @@ import { LocaleProvider, useLocale } from './locale.js';
 import { HeaderActions } from './header-actions.js';
 import type { Message } from './messages.js';
 import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.js';
-import { AccountDialog, accountWorkspaceReturnKey, announceAuthChange, authChangeKey, authNotices, hasAccountRecovery } from './account.js';
+import { AccountDialog, AccountSignInPage, accountWorkspaceReturnKey, announceAuthChange, authChangeKey, authNotices, hasAccountRecovery } from './account.js';
 import type { AuthNotice } from './account.js';
 import type { AccountStatus } from '../shared/account.js';
 import { financialProfileReturnKey } from '../shared/account.js';
@@ -150,8 +150,9 @@ function App() {
   const [status, setStatus] = useState<Message | ''>('');
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
   const accountRoute = /^\/account\/?$/u.test(location.pathname);
-  const [showAccount, setShowAccount] = useState(accountRoute);
+  const [showAccount, setShowAccount] = useState(false);
   const [accountRecovery] = useState(hasAccountRecovery);
+  const accountEntry = accountRoute || accountRecovery;
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [recommendations, setRecommendations] = useState<'initial' | 'dismissed' | 'reopened'>('initial');
@@ -185,8 +186,7 @@ function App() {
     if (listsLoaded.current) setSessionRefreshing(true);
     const accountRequest = api<AccountStatus>('/account', { signal: controller.signal });
     const loadLists = () => api<WishlistSummary[]>('/session', { method: 'POST', signal: controller.signal });
-    const isAccountPage = /^\/account\/?$/u.test(location.pathname);
-    const wishlistRequest = isAccountPage ? accountRequest.then(current => current.account && !accountRecovery ? [] : loadLists()) : loadLists();
+    const wishlistRequest = accountEntry ? Promise.resolve([]) : loadLists();
     Promise.all([wishlistRequest, accountRequest]).then(
       ([lists, current]) => {
         if (controller.signal.aborted) return;
@@ -205,11 +205,11 @@ function App() {
         setAccountStatus(current);
         setLists(lists);
         const address = new URL(location.href);
-        if (isAccountPage && address.searchParams.get('next') === 'creator' && current.account && !accountRecovery) {
+        if (accountRoute && address.searchParams.get('next') === 'creator' && current.account && !accountRecovery) {
           location.replace('/creator?onboard=1');
           return;
         }
-        if (isAccountPage && address.searchParams.get('section') === 'financial-profile' && !current.account) {
+        if (accountRoute && address.searchParams.get('section') === 'financial-profile' && !current.account) {
           address.searchParams.set('next', 'financial-profile');
           history.replaceState(history.state, '', address);
         }
@@ -219,7 +219,7 @@ function App() {
         history.replaceState(null, '', address);
         const outcome = auth as AuthNotice;
         if (['signed-in', 'signed-out', 'imported', 'deleted'].includes(outcome)) announceAuthChange();
-        if (outcome === 'signed-in' && current.account && !isAccountPage) {
+        if (outcome === 'signed-in' && current.account && !accountEntry) {
           try {
             const financialReturn = Number(sessionStorage.getItem(financialProfileReturnKey));
             const workspaceReturn = Number(sessionStorage.getItem(accountWorkspaceReturnKey));
@@ -234,13 +234,12 @@ function App() {
         }
         if (['linked', 'verified', 'failed', 'cancelled'].includes(outcome) ||
             (outcome === 'signed-in' && current?.account?.import)) {
-          if (current.account && !isAccountPage) {
+          if (current.account && !accountEntry && !['failed', 'cancelled'].includes(outcome)) {
             const section = outcome === 'signed-in' ? '' : '&section=security';
             location.replace('/account?auth=' + outcome + section);
             return;
           }
           setNotice(outcome);
-          setShowAccount(true);
         } else setStatus(authNotices[outcome]);
       },
       (error: unknown) => {
@@ -255,7 +254,7 @@ function App() {
       },
     );
     return () => controller.abort();
-  }, [sessionAttempt, accountRecovery]);
+  }, [sessionAttempt, accountRecovery, accountEntry, accountRoute]);
 
   const selected = lists?.find((list) => list.id === selectedId) ?? lists?.[0];
   const activeId = selected?.id;
@@ -373,12 +372,19 @@ function App() {
     </Suspense>;
   }
 
-  if (accountRoute && !accountStatus && !accountRecovery) {
-    return sessionError ? <main className="site consumer account-route-error">
+  if (accountEntry && !accountStatus) {
+    return sessionError ? <div className="site consumer"><main className="account-route-panel">
       <p role="alert">{t('Could not load your account. Try again.')}</p>
       <button type="button" onClick={() => setSessionAttempt(value => value + 1)}>{t('Try again')}</button>
       <a href="/">{t('Back to wishlists')}</a>
-    </main> : <RouteLoading label="Preparing your account…" />;
+    </main></div> : <RouteLoading label="Preparing your account…" />;
+  }
+
+  if (accountEntry) {
+    return <div className="site consumer">
+      <AccountSignInPage status={accountStatus} notice={notice} update={setAccountStatus}
+        close={() => location.replace(new URLSearchParams(location.search).get('next') === 'creator' ? '/creator' : '/')} />
+    </div>;
   }
 
   return (
@@ -519,6 +525,9 @@ function App() {
       <div className={status ? 'toast' : 'sr-only'} role="status">
         {status && <><Icon name="check" />{t(status)}</>}
       </div>
+      {notice && !showAccount && <p className="toast" role={notice === 'failed' ? 'alert' : 'status'}>
+        {t(authNotices[notice])}
+      </p>}
       {editor?.kind === 'list' && <ListForm list={editor.list} close={() => setEditor(null)} save={saveList} />}
       {editor?.kind === 'item' && <ItemForm item={editor.item} initialUrl={!editor.item ? sharedDraft ?? undefined : undefined} listId={editor.list.id} currency={editor.list.currency}
         existingItems={detail?.id === editor.list.id ? detail.items : undefined}
@@ -538,14 +547,6 @@ function App() {
       {showAccount && <AccountDialog status={accountStatus} notice={notice}
         close={() => {
           if (sessionError) setSessionAttempt(value => value + 1);
-          if (/^\/account\/?$/u.test(location.pathname)) {
-            if (new URLSearchParams(location.search).get('next') === 'creator') {
-              location.replace('/creator?onboard=1');
-              return;
-            }
-            location.replace('/');
-            return;
-          }
           setShowAccount(false);
           setNotice(null);
         }} update={setAccountStatus} />}

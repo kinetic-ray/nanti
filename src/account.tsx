@@ -51,19 +51,23 @@ type AccountContentProps = {
   status: AccountStatus | null;
   update: (status: AccountStatus) => void;
 } & (
-  | { close: () => void; notice: AuthNotice | null; section?: never; signOut?: never }
-  | { section: 'information' | 'security'; signOut: () => Promise<void>; close?: never; notice?: never }
+  | { close: () => void; notice: AuthNotice | null; page?: true; section?: never; signOut?: never }
+  | { section: 'information' | 'security'; signOut: () => Promise<void>; close?: never; notice?: never; page?: never }
 );
 
-export function AccountDialog(props: Extract<AccountContentProps, { close: () => void }>) {
+export function AccountDialog(props: Omit<Extract<AccountContentProps, { close: () => void }>, 'page'>) {
   return <AccountContent {...props} />;
+}
+
+export function AccountSignInPage(props: Parameters<typeof AccountDialog>[0]) {
+  return <AccountContent {...props} page />;
 }
 
 export function AccountPanel(props: Extract<AccountContentProps, { section: string }>) {
   return <AccountContent {...props} />;
 }
 
-function AccountContent({ status, notice, close, update, section, signOut }: AccountContentProps) {
+function AccountContent({ status, notice, close, update, section, signOut, page }: AccountContentProps) {
   const { t, error: translateError, number, language } = useLocale();
   const [resolvedStatus, setResolvedStatus] = useState<AccountStatus | null>(status);
   const [statusAttempt, setStatusAttempt] = useState(0);
@@ -197,7 +201,7 @@ function AccountContent({ status, notice, close, update, section, signOut }: Acc
   const title = account ? 'Your account' : currentStatus?.emailDelivery ? 'Welcome to Nanti' : 'Sign in to Nanti';
 
   const content = <>
-    {!account && <div className="account-editorial">
+    {!account && !page && <div className="account-editorial">
       <div className="account-editorial-brand"><span className="brand-symbol" aria-hidden="true" />Nanti</div>
       <div className="account-editorial-copy">
         <p className="account-editorial-tagline">{t('Save it now. Decide later.')}</p>
@@ -343,6 +347,10 @@ function AccountContent({ status, notice, close, update, section, signOut }: Acc
   </>;
 
   if (section) return <div className="account-panel">{content}</div>;
+  if (page) return <main className="account-route-panel account-signin">
+    <h1>{t(title)}</h1>
+    {content}
+  </main>;
   return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
     title={t(title)} busy={busy || passwordBusy} close={close} focusHeading
     headerAction={<button type="button" className="account-signin-close" aria-label={t('Close')}
