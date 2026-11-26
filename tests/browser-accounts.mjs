@@ -159,6 +159,10 @@ try {
   await visible(list);
   console.log('PASS 360px guest sign-in, keyboard recovery, confirmation, import and accessibility');
 
+  const accountIdentity = await db.authIdentity.findUniqueOrThrow({
+    where: { provider_subjectHash: { provider: 'google', subjectHash: tokenHash(subject) } },
+  });
+  await db.creatorProfile.create({ data: { userId: accountIdentity.userId, name: 'Eligible browser creator' } });
   for (const mode of ['verify', 'reset']) {
     await guest.goto(`/account?recovery=${mode}#mode=${mode}&token=fixture`);
     const recovery = modal(guest, 'Akunmu');
@@ -170,17 +174,17 @@ try {
   }
   await button(account, 'Tutup').click();
   await account.waitFor({ state: 'hidden' });
+  await db.creatorProfile.delete({ where: { userId: accountIdentity.userId } });
   console.log('PASS signed-in recovery links, fragment cleanup and accessibility');
 
   const passwordContext = await device(1280);
-  const passwordPage = await open(passwordContext);
   const email = 'password-fixture@example.test';
   let resendRequests = 0;
-  await passwordPage.route('**/api/account', async route => {
+  await passwordContext.route('**/api/account', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, json: { ...await response.json(), emailDelivery: true } });
   });
-  await passwordPage.route('**/api/account/password/*', async route => {
+  await passwordContext.route('**/api/account/password/*', async route => {
     const action = new URL(route.request().url()).pathname.split('/').at(-1);
     const data = route.request().postDataJSON();
     assert.equal(data.email, email);
@@ -195,6 +199,7 @@ try {
     assert.ok(['register', 'forgot', 'resend'].includes(action));
     await route.fulfill({ status: 202 });
   });
+  const passwordPage = await open(passwordContext);
   await button(passwordPage, 'Masuk').click();
   const passwordDialog = modal(passwordPage, 'Selamat datang di Nanti');
   const resend = button(passwordDialog, 'Kirim ulang email verifikasi');
@@ -283,6 +288,7 @@ try {
   assert.equal(await english.locator('html').getAttribute('lang'), 'en');
   await english.goto('/account');
   const profile = modal(english, 'Your account');
+  await button(profile, 'Edit').click();
   await profile.getByLabel('Display name').fill('Shared profile');
   await button(profile, 'Save name').click();
   await visible(profile.getByText('Display name saved.', { exact: true }));
