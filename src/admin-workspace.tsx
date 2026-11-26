@@ -118,13 +118,12 @@ export function AdminWorkspace<Section extends string>({
     </nav>;
   }
 
-  const brand = <a className="aw-brand" href={section.href(items[0]!.id)}
-    onClick={event => navigate(event, items[0]!.id)} aria-label={name}>
+  const brand = <a className="aw-brand" href="/" aria-label={name}>
     <span className="brand-symbol" aria-hidden="true" />
     <span className="aw-brand-copy"><strong>nanti<span>.</span></strong><small>{name}</small></span>
   </a>;
 
-  return <div className="aw" data-collapsed={collapsed} lang={language}>
+  return <div className="aw" data-workspace={name === 'Superadmin' ? 'superadmin' : ['Creator Studio', 'Studio Kreator'].includes(name) ? 'creator' : ['My profile', 'Profil saya'].includes(name) ? 'account' : undefined} data-collapsed={collapsed} lang={language}>
     <a className="aw-skip" href={'#' + id}>{en ? 'Skip to content' : 'Lewati ke konten'}</a>
     <aside className="aw-sidebar">{brand}{navigation()}</aside>
     <dialog ref={drawer} className="aw-drawer" aria-label={en ? 'Workspace navigation' : 'Navigasi ruang kerja'}

@@ -247,7 +247,7 @@ function NotificationInbox({ onExpired }: { onExpired: () => void }) {
   return <>
     {error && <p className="error" role="alert">{adminError(error)}</p>}
     <p className="decision-status" role="status">{feedback}</p>
-    <section className="admin-panel">
+    <section className="admin-panel aw-notification-panel">
       <header className="aw-card-header"><h2>Notifikasi</h2><div className="aw-actions">
         <button type="button" disabled={busy || !inbox?.unread} onClick={() => void markAllRead()}>Tandai semua dibaca</button>
       </div></header>

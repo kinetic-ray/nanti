@@ -1312,3 +1312,142 @@ a.merchant {
 @media (prefers-reduced-motion: reduce) {
   .consumer .fp-accordion-trigger svg, .consumer .fp-readiness-trigger > svg, .consumer .fp-additional > h3 button > svg { transition: none; }
 }
+
+/* Financial profile — desktop form ergonomics */
+@media (min-width: 64rem) {
+  .consumer .fp-panel,
+  .consumer .fp-readiness-editor,
+  .consumer .fp-additional-panel {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 50rem;
+    justify-self: start;
+  }
+
+  .consumer .fp-edit-row {
+    grid-template-columns: minmax(0, 1fr) 14rem 44px;
+    align-items: end;
+    gap: .75rem;
+  }
+
+  .consumer .fp-expense-row {
+    grid-template-columns:
+      minmax(0, 1fr)
+      12rem
+      10rem
+      44px;
+  }
+
+  .consumer .fp-debt-row {
+    grid-template-columns:
+      minmax(0, 1fr)
+      12rem
+      9rem
+      44px;
+  }
+
+  .consumer .fp-check {
+    display: flex;
+    align-items: center;
+    gap: .625rem;
+    min-height: 28px;
+    max-width: 100%;
+  }
+
+  .consumer .fp-check input[type="checkbox"] {
+    box-sizing: border-box;
+    flex: 0 0 18px;
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .consumer .fp-check > span {
+    min-width: 0;
+    line-height: 1.5;
+  }
+
+  .consumer .fp-helper,
+  .consumer .fp-muted {
+    max-width: 65ch;
+  }
+}
+
+@media (min-width: 64rem) and (pointer: fine) {
+  .consumer .fp-save-row .primary {
+    min-height: 36px;
+    height: auto;
+    padding: .5rem 1rem;
+    font-size: .875rem;
+  }
+}
+
+/* Financial profile — contextual focus mode */
+
+.consumer .fp-page :is(
+  .fp-accordion-trigger,
+  .fp-readiness-trigger,
+  .fp-additional > h3 > button
+) {
+  transition:
+    background-color 180ms ease-out,
+    color 180ms ease-out,
+    opacity 180ms ease-out;
+}
+
+/* De-emphasize inactive groups while editing */
+.consumer .fp-page:has(button[aria-expanded="true"])
+:is(
+  .fp-accordion-trigger,
+  .fp-readiness-trigger,
+  .fp-additional > h3 > button
+)[aria-expanded="false"] {
+  opacity: .65;
+}
+
+/* Restore emphasis when interacting */
+.consumer .fp-page:has(button[aria-expanded="true"])
+:is(
+  .fp-accordion-trigger,
+  .fp-readiness-trigger,
+  .fp-additional > h3 > button
+)[aria-expanded="false"]:is(:hover, :focus-visible) {
+  opacity: 1;
+}
+
+/* Highlight the active group */
+.consumer .fp-page :is(
+  .fp-accordion-item,
+  .fp-readiness-row,
+  .fp-additional
+):has(> h4 > button[aria-expanded="true"],
+      > button[aria-expanded="true"],
+      > h3 > button[aria-expanded="true"]) {
+  background: rgba(83, 53, 170, .025);
+  border-radius: 8px;
+}
+
+.consumer .fp-page :is(
+  .fp-accordion-trigger,
+  .fp-readiness-trigger,
+  .fp-additional > h3 > button
+)[aria-expanded="true"] {
+  opacity: 1;
+  color: var(--accent-strong);
+  background: rgba(83, 53, 170, .045);
+  border-radius: 6px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .consumer .fp-page :is(
+    .fp-accordion-trigger,
+    .fp-readiness-trigger,
+    .fp-additional > h3 > button
+  ) {
+    transition: none;
+  }
+}
