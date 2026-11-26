@@ -13,7 +13,8 @@ import { prismaWishlists } from './prisma-wishlists.js';
 import { createProductMedia } from './product-media.js';
 import { createImageStorage } from './image-storage.js';
 import { createMysqlImageStorage } from './mysql-image-storage.js';
-import { previewProduct, previewProductMetadata } from './product-preview.js';
+import { previewProductMetadata } from './product-preview.js';
+import { createMetadataCoalescer } from './metadata-coalescer.js';
 import { productMerchant } from '../shared/product-import.js';
 import { prismaFinancialProfiles } from './financial-profile.js';
 
@@ -102,6 +103,8 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
   });
   const ikeaMetadataAllowed = env.NANTI_IKEA_METADATA_PERMISSION === 'granted';
 
+  const coalescedMetadata = createMetadataCoalescer(previewProductMetadata);
+
   const app = createApp({
     repository: prismaWishlists(db),
     intelligence,
@@ -116,11 +119,11 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     } : undefined,
     // Marketplace previews use their own strict domain allowlist; IKEA remains opt-in.
     preview: async (url) => (ikeaMetadataAllowed || ['shopee', 'tokopedia'].includes(productMerchant(url.hostname)))
-      ? previewProduct(url) : null,
+      ? coalescedMetadata(url).then(metadata => metadata?.title ?? null) : null,
     lookupMetadata: async (url, request, onDiagnostic) => {
       const merchant = productMerchant(url.hostname);
       if (!ikeaMetadataAllowed && merchant !== 'shopee' && merchant !== 'tokopedia') return null;
-      const metadata = await previewProductMetadata(url, request, onDiagnostic);
+      const metadata = await coalescedMetadata(url, request, onDiagnostic);
       return metadata && { ...metadata, price: marketplacePriceAllowed(merchant, env) ? metadata.price : null };
     },
     productMedia: ikeaMetadataAllowed ? createProductMedia() : undefined,

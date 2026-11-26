@@ -1,3 +1,4 @@
+import { classifyNetworkError } from './network-diagnostics.js';
 import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 import type { ProductImport } from '../shared/product-import.js';
@@ -279,8 +280,7 @@ export async function extractShopeeMetadata(initial: URL, request?: typeof fetch
     diagnostic('redirect_limit');
     return null;
   } catch (error) {
-    const timeout = error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name);
-    diagnostic(timeout ? (hop > 0 ? 'destination_timeout' : 'timeout') : 'request_error');
+    diagnostic(classifyNetworkError(error, hop > 0));
     return null;
   }
 }

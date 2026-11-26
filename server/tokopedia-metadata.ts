@@ -1,3 +1,4 @@
+import { classifyNetworkError } from './network-diagnostics.js';
 import { resolve4 } from 'node:dns/promises';
 import { request } from 'node:https';
 import { BlockList } from 'node:net';
@@ -46,14 +47,30 @@ export async function requestPublicPage(url: URL, signal: AbortSignal, accept = 
     resolve4(url.hostname).then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
   });
   signal.throwIfAborted();
-  const address = addresses[0];
-  if (!address || addresses.some((ip) => privateAddresses.check(ip))) throw new Error('Non-public DNS answer');
-  // Pin the checked address while retaining the original hostname for TLS and Host.
-  return new Promise((resolve, reject) => {
+  if (!addresses.length || addresses.some((ip) => privateAddresses.check(ip))) {
+    throw Object.assign(new Error('Non-public DNS answer'), { code: 'NANTI_DNS_UNSAFE' });
+  }
+
+  // Only retry validated addresses on transient transport failures.
+  const candidates = [...new Set(addresses)].slice(0, 2);
+  const retryable = new Set([
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'EPIPE',
+  ]);
+
+  const connect = (address: string, attemptTimeout?: number): Promise<Response> => new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clearAttemptTimer = () => clearTimeout(timer);
+
     const outgoing = request(url, {
       agent: false, hostname: address, servername: url.hostname, signal,
       headers: { Host: url.hostname, Accept: accept, 'Accept-Encoding': 'identity', 'User-Agent': 'Nanti/1.0' },
     }, (incoming) => {
+      clearAttemptTimer();
       const headers = new Headers();
       for (const [key, value] of Object.entries(incoming.headers)) {
         if (typeof value === 'string') headers.set(key, value);
@@ -67,9 +84,44 @@ export async function requestPublicPage(url: URL, signal: AbortSignal, accept = 
       const body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
       resolve(new Response(body, { status, headers }));
     });
-    outgoing.on('error', reject);
+    outgoing.on('error', error => {
+      clearAttemptTimer();
+      reject(error);
+    });
+
+    if (attemptTimeout !== undefined) {
+      timer = setTimeout(() => {
+        const error = Object.assign(
+          new Error('Address attempt timed out'),
+          { code: 'ETIMEDOUT' },
+        );
+        outgoing.destroy(error);
+      }, attemptTimeout);
+    }
+
     outgoing.end();
   });
+
+  for (const [index, address] of candidates.entries()) {
+    signal.throwIfAborted();
+
+    try {
+      return await connect(address, index < candidates.length - 1 ? 2000 : undefined);
+    } catch (error) {
+      signal.throwIfAborted();
+
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (
+        index === candidates.length - 1 ||
+        !code ||
+        !retryable.has(code)
+      ) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('No available public address');
 }
 
 function safeHttps(value: string, base?: URL): URL | null {
@@ -484,6 +536,24 @@ export async function extractTokopediaMetadata(originalUrl: string, transport: P
       current.hash = '';
       const key = listingKey(current);
       identity ??= key;
+
+      // Remove known Tokopedia search tracking parameters
+      // before fetching a verified product listing.
+      // Preserve originalUrl, affiliate links and variant selectors.
+      if (key) {
+        for (const parameter of [
+          'extParam',
+          't_id',
+          't_st',
+          't_pp',
+          't_efo',
+          't_ef',
+          't_sm',
+          't_spt',
+        ]) {
+          current.searchParams.delete(parameter);
+        }
+      }
       if (visited.has(current.href)) return fail('redirect_limit');
       visited.add(current.href);
       const response = await transport(current, controller.signal);
@@ -523,7 +593,7 @@ export async function extractTokopediaMetadata(originalUrl: string, transport: P
   });
   try {
     return await Promise.race([extract().catch((error: unknown) => controller.signal.aborted ? null :
-      fail(error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name) ? timeoutReason() : 'request_error')), timeout]);
+      fail(classifyNetworkError(error, hop > 0))), timeout]);
   } finally {
     clearTimeout(timer);
   }

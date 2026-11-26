@@ -305,3 +305,33 @@ test.each([
   assert.equal(result?.title, 'Lamp');
   assert.equal(result?.price, null);
 });
+
+test('strips Tokopedia search tracking before fetching a listing', async () => {
+  const original = product +
+    '?extParam=ivf%3Dfalse&t_id=123&t_st=2&t_pp=search_result' +
+    '&t_efo=search_pure_goods_card&t_ef=goods_search&t_sm=&t_spt=search_result';
+
+  const result = await extractTokopediaMetadata(original, async (url) => {
+    assert.equal(url.href, product);
+    return html('complete');
+  });
+
+  assert.equal(result?.originalUrl, original);
+  assert.equal(result?.productUrl, product);
+  assert.equal(result?.title, 'Lamp & Stand');
+});
+
+test('preserves unknown selectors when stripping search tracking', async () => {
+  const original = product + '?variant=blue&t_id=123';
+
+  let requested = false;
+
+  await extractTokopediaMetadata(original, async (url) => {
+    requested = true;
+    assert.equal(url.searchParams.get('variant'), 'blue');
+    assert.equal(url.searchParams.has('t_id'), false);
+    return html('complete');
+  });
+
+  assert.equal(requested, true);
+});
