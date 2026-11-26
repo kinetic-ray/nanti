@@ -106,7 +106,7 @@ export function HeaderActions({ account, ready, unread, openAlerts, signIn, sign
           }}>{t('Sign out')}</button>
         </div>
       </div>
-    </div> : <button className="masthead-action" type="button" disabled={!ready}
+    </div> : <button className="masthead-action" type="button"
       aria-label={t('Sign in')} title={t('Sign in')} onClick={signIn}><Icon name="person" /></button>}
     <div className="masthead-menu">
       <button className="masthead-menu-toggle" type="button" ref={navigation} aria-label={t('Open menu')}
