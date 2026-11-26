@@ -38,7 +38,13 @@ it.skipIf(!testDatabaseUrl)('verifies password accounts, revokes sessions and is
     expect(await db.passwordCredential.count({ where: { email } })).toBe(1);
     const registered = await db.passwordCredential.findUniqueOrThrow({ where: { email }, select: { userId: true } });
     expect(await db.adminNotification.count({ where: { eventKey: `user:${registered.userId}`, kind: 'new_user' } })).toBe(1);
-    await post('/password/login', { email, password }).expect(401);
+    const pending = await post('/password/login', { email, password }).expect(401);
+    expect(pending.body).toEqual({ error: 'Verify your email before signing in.' });
+    expect(pending.headers['set-cookie']).toBeUndefined();
+    const wrong = await post('/password/login', { email, password: replacement }).expect(401);
+    const unknown = await post('/password/login', { email: newEmail, password }).expect(401);
+    expect(wrong.body).toEqual({ error: 'Check your email, password, and email verification.' });
+    expect(unknown.body).toEqual(wrong.body);
     await db.accountToken.updateMany({ where: { kind: 'verify', user: { password: { email } } }, data: { expiresAt: new Date(0) } });
     await post('/password/verify', { code: outbox.get('verify'), password }).expect(400);
     const expired = outbox.get('verify');

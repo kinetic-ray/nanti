@@ -48,11 +48,12 @@ export function passwordAccounts(db: PrismaClient, session: (tx: Transaction, id
     },
     async login(email: string, password: string, guest: string | null) {
       const credential = await db.passwordCredential.findUnique({ where: { email } });
-      if (!await verifyPassword(password, credential?.passwordHash ?? null) || !credential?.verifiedAt) return null;
+      if (!await verifyPassword(password, credential?.passwordHash ?? null) || !credential) return null;
       return db.$transaction(async tx => {
         const current = await locked(tx, credential.userId);
-        if (current?.passwordHash !== credential.passwordHash || current.email !== email || !current.verifiedAt) return null;
-        return session(tx, credential.userId, guest);
+        if (current?.passwordHash !== credential.passwordHash || current.email !== email) return null;
+        if (!current.verifiedAt) return { verificationRequired: true } as const;
+        return { sessionToken: await session(tx, credential.userId, guest) };
       });
     },
     async issue(email: string, kind: Exclude<AccountTokenKind, 'changeEmail'>) {
