@@ -64,7 +64,7 @@ const toInput = (minor: string | null, language: 'id' | 'en') => {
   return fraction ? `${whole}${language === 'id' ? ',' : '.'}${fraction}` : whole;
 };
 
-export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; item: Item; close: () => void }) {
+export function GuidedPurchaseDecisionLegacy({ list, item, close }: { list: Wishlist; item: Item; close: () => void }) {
   const { language, money, t, date } = useLocale();
   const [stage, setStage] = useState<1 | 2>(1);
   const [price, setPrice] = useState('');
@@ -321,3 +321,5 @@ export function GuidedPurchaseDecision({ list, item, close }: { list: Wishlist; 
     </section>}
   </div>;
 }
+
+export { GuidedPurchaseDecisionV2 as GuidedPurchaseDecision } from './guided-purchase-decision-v2.js';
