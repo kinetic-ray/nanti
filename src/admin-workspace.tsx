@@ -47,7 +47,7 @@ export function useWorkspaceSection<Section extends string>(
 }
 
 export function AdminWorkspace<Section extends string>({
-  name, items, section, account, accountActions, secondaryActions, children, language = 'id',
+  name, items, section, account, accountActions, secondaryActions, children, language = 'id', hideCurrentPage = false,
 }: {
   name: string;
   items: readonly WorkspaceItem<Section>[];
@@ -57,6 +57,7 @@ export function AdminWorkspace<Section extends string>({
   secondaryActions?: ReactNode;
   children: ReactNode;
   language?: 'id' | 'en';
+  hideCurrentPage?: boolean;
 }) {
   const id = useId();
   const main = useRef<HTMLElement>(null);
@@ -151,7 +152,7 @@ export function AdminWorkspace<Section extends string>({
         <nav className="aw-breadcrumb" aria-label={en ? 'Breadcrumb' : 'Jejak navigasi'}>
           <a href={section.href(items[0]!.id)} onClick={event => navigate(event, items[0]!.id)}>{name}</a>
           <ChevronRight size={14} aria-hidden="true" />
-          <span aria-current="page">{item?.label}</span>
+          <span className={hideCurrentPage ? 'sr-only' : undefined} aria-current="page">{item?.label}</span>
         </nav>
         <div className="aw-top-actions">
           {secondaryActions}

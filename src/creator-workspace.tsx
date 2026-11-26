@@ -115,7 +115,7 @@ export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: u
     preview: t('Storefront preview'), settings: l('Pengaturan', 'Settings'), analytics: l('Analitik', 'Analytics'),
   };
   const catalogSection = active !== 'analytics';
-  return <AdminWorkspace name={l('Studio Kreator', 'Creator Studio')} section={section} language={language}
+  return <AdminWorkspace name={l('Studio Kreator', 'Creator Studio')} section={section} language={language} hideCurrentPage
     items={[
       { id: 'overview', label: labels.overview, icon: LayoutDashboard },
       { id: 'products', label: labels.products, icon: Package },

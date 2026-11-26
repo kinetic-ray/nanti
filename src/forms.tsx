@@ -162,6 +162,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [saveStage, setSaveStage] = useState<'save' | 'photo' | null>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const pastePending = useRef(false);
   const submitting = useRef(false);
@@ -313,6 +314,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
       preview.price.currency === currency ? preview.publicPriceProof : undefined;
     submitting.current = true;
     setBusy(true);
+    setSaveStage('save');
     try {
       const fingerprintFor = (key: string | null, hasUpload: boolean) => JSON.stringify({ listId, name: name.trim(), url: originalUrl,
         priceMinor, quantity: Number(quantity), sellerName: sellerName ?? null, imageKey: key, hasUploadedImage: hasUpload,
@@ -324,6 +326,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
       }
       const requestKey = item ? undefined : saveRequestKey.current ?? (saveRequestKey.current = crypto.randomUUID());
       if (uploadedImage) {
+        setSaveStage('photo');
         const blob = await (await fetch(uploadedImage)).blob();
         if (blob.size > 195_000) throw new Error('Image is too large after compression.');
         const result = await fetch('/api/uploads/product-image/content', {
@@ -335,6 +338,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
         setUploadedImage(null);
         setImageKey(key);
         saveFingerprint.current = fingerprintFor(key, false);
+        setSaveStage('save');
         await save({ name, url: originalUrl, priceMinor, quantity: Number(quantity), imageKey: key, sellerName,
           ...(publicTitle && { publicTitle }),
           ...(verifiedListing && { verifiedListing }),
@@ -360,12 +364,13 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
     } finally {
       submitting.current = false;
       setBusy(false);
+      setSaveStage(null);
     }
   }
 
   return (
     <Dialog title={t(item ? 'Edit product' : 'Add product')} busy={busy} close={close} className="import-dialog" closeOnCancel={false}>
-      <form noValidate autoComplete="off" onSubmit={submit}>
+      <form noValidate autoComplete="off" aria-busy={busy || looking} onSubmit={submit}>
         <label>{t(item ? 'Product link' : 'Paste a product link')}
           <input type="url" name="product-url" value={url} maxLength={2048} placeholder="https://…" spellCheck={false}
             disabled={looking || busy} onChange={(event) => {
@@ -386,7 +391,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
           <p className="hint" role="status">{t('This link is already in your wishlist. You can update the quantity there.')}</p>}
         {(!preview || preview.originalUrl !== url || (preview.merchant === 'tokopedia' && preview.status === 'manual_required')) && <div className="actions">
           <button type="button" className={showDetails ? 'lookup' : 'primary'} disabled={looking || busy || !url.trim()}
-            onClick={() => void findProduct(url)}>{t(looking ? 'Looking up…' : preview?.merchant === 'tokopedia' && preview.status === 'manual_required' ? 'Try again' : 'Check product link')}</button>
+            onClick={() => void findProduct(url)}>{t(looking ? 'Fetching product details…' : preview?.merchant === 'tokopedia' && preview.status === 'manual_required' ? 'Try again' : 'Check product link')}</button>
           {!showDetails && <button type="button" onClick={() => {
             setShowDetails(true);
             requestAnimationFrame(() => nameInput.current?.focus());
@@ -394,7 +399,8 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
             {t('Enter details myself')}
           </button>}
         </div>}
-        {(lookup || looking) && <p className="hint" role="status">{looking ? t('Checking the product link…') : localError(lookup)}</p>}
+        {(lookup || looking) && <p className="hint" role="status">{looking ? t('Fetching product details…') : localError(lookup)}</p>}
+        {busy && <p className="hint" role="status">{t(saveStage === 'photo' ? 'Uploading product photo…' : item ? 'Saving changes…' : 'Saving product…')}</p>}
         {preview && <div className={preview.status === 'manual_required' ? 'import-fallback' : 'import-preview'}>
           {preview.imagePath && !imageFailed && <img src={preview.imagePath} alt="" width="80" height="64"
             decoding="async" onError={() => setImageFailed(true)} />}
@@ -481,7 +487,7 @@ export function ItemForm({ item, initialUrl, listId, currency, existingItems, cl
         {error && <p role="alert" className="error">{localError(error)}</p>}
         <div className="form-actions">
           <button type="button" disabled={busy} onClick={close}>{t('Cancel')}</button>
-          {showDetails && <button className="primary" disabled={busy || looking}>{t(busy ? 'Saving…' : 'Save product')}</button>}
+          {showDetails && <button className="primary" disabled={busy || looking}>{t(busy ? saveStage === 'photo' ? 'Uploading product photo…' : item ? 'Saving changes…' : 'Saving product…' : 'Save product')}</button>}
         </div>
       </form>
     </Dialog>
@@ -512,10 +518,11 @@ export function DeleteForm({ name, wishlist, close, remove }: {
     <Dialog title={t(wishlist ? 'Delete wishlist?' : 'Remove product?')} busy={busy} close={close}>
       <form onSubmit={submit}>
         <p>{t(wishlist ? '“{name}” and all its products will be deleted.' : '“{name}” will be removed from this wishlist.', { name })}</p>
+        {busy && <p role="status">{t(wishlist ? 'Deleting wishlist…' : 'Removing product…')}</p>}
         {error && <p role="alert" className="error">{localError(error)}</p>}
         <div className="form-actions">
           <button type="button" disabled={busy} onClick={close}>{t('Cancel')}</button>
-          <button className="danger" disabled={busy}>{t(busy ? 'Removing…' : wishlist ? 'Delete wishlist' : 'Remove product')}</button>
+          <button className="danger" disabled={busy}>{t(busy ? wishlist ? 'Deleting wishlist…' : 'Removing product…' : wishlist ? 'Delete wishlist' : 'Remove product')}</button>
         </div>
       </form>
     </Dialog>
