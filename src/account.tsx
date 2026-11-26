@@ -22,6 +22,12 @@ export const authNotices = {
 } as const satisfies Record<string, Message>;
 export type AuthNotice = keyof typeof authNotices;
 export const authChangeKey = 'nanti:account-changed';
+export const accountWorkspaceReturnKey = 'nanti:account-workspace-return-until';
+
+export function hasAccountRecovery() {
+  const link = new URLSearchParams(location.hash.slice(1));
+  return Boolean(link.get('token')) && ['verify', 'reset', 'changeEmail'].includes(link.get('mode') ?? '');
+}
 const providerNames = { apple: 'Apple', google: 'Google' } as const;
 const providerOrigins = { apple: 'https://appleid.apple.com', google: 'https://accounts.google.com' } as const;
 type ActiveSession = { id: string; expiresAt: string; current: boolean };
@@ -41,9 +47,27 @@ export function announceAuthChange() {
   try { localStorage.setItem(authChangeKey, String(Date.now())); } catch { /* Storage can be blocked. */ }
 }
 
-export function AccountDialog({ status, notice, close, update }: {
-  status: AccountStatus | null; notice: AuthNotice | null; close: () => void; update: (status: AccountStatus) => void;
-}) {
+type AccountContentProps = {
+  status: AccountStatus | null;
+  update: (status: AccountStatus) => void;
+} & (
+  | { close: () => void; notice: AuthNotice | null; page?: true; section?: never; signOut?: never }
+  | { section: 'information' | 'security'; signOut: () => Promise<void>; close?: never; notice?: never; page?: never }
+);
+
+export function AccountDialog(props: Omit<Extract<AccountContentProps, { close: () => void }>, 'page'>) {
+  return <AccountContent {...props} />;
+}
+
+export function AccountSignInPage(props: Parameters<typeof AccountDialog>[0]) {
+  return <AccountContent {...props} page />;
+}
+
+export function AccountPanel(props: Extract<AccountContentProps, { section: string }>) {
+  return <AccountContent {...props} />;
+}
+
+function AccountContent({ status, notice, close, update, section, signOut, page }: AccountContentProps) {
   const { t, error: translateError, number, language } = useLocale();
   const [resolvedStatus, setResolvedStatus] = useState<AccountStatus | null>(status);
   const [statusAttempt, setStatusAttempt] = useState(0);
@@ -65,11 +89,9 @@ export function AccountDialog({ status, notice, close, update }: {
   const nextDestination = new URLSearchParams(location.search).get('next');
   const creator = nextDestination === 'creator';
   const financialProfile = nextDestination === 'financial-profile';
+  const accountWorkspace = !creator && !financialProfile && /^\/account\/?$/u.test(location.pathname);
   const [deletion, setDeletion] = useState(false);
-  const [recovering] = useState(() => {
-    const link = new URLSearchParams(location.hash.slice(1));
-    return Boolean(link.get('token')) && ['verify', 'reset', 'changeEmail'].includes(link.get('mode') ?? '');
-  });
+  const [recovering] = useState(hasAccountRecovery);
   const [sessions, setSessions] = useState<ActiveSession[] | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState(false);
@@ -107,8 +129,9 @@ export function AccountDialog({ status, notice, close, update }: {
     try {
       const result = await api<{ sessions: ActiveSession[] }>('/account/sessions');
       setSessions(result.sessions);
-    } catch {
-      setSessionsError(true);
+    } catch (failure) {
+      if (section && errorMessage(failure) === 'Sign in to continue.') location.reload();
+      else setSessionsError(true);
     } finally {
       setSessionsLoading(false);
     }
@@ -122,7 +145,9 @@ export function AccountDialog({ status, notice, close, update }: {
     catch (failure) {
       const text = errorMessage(failure);
       setError(text);
-      if (text === 'Verify your sign-in to continue.') {
+      if (text === 'Sign in to continue.' && section) {
+        location.reload();
+      } else if (text === 'Verify your sign-in to continue.') {
         const current = await api<AccountStatus>('/account').catch(() => null);
         if (current) update(current);
       }
@@ -139,12 +164,12 @@ export function AccountDialog({ status, notice, close, update }: {
       if (url.origin !== providerOrigins[provider] || url.username || url.password) {
         throw new Error('This sign-in option is unavailable.');
       }
-      if (financialProfile && purpose === 'signin') {
-        sessionStorage.setItem(financialProfileReturnKey, String(Date.now() + 600_000));
+      if (purpose === 'signin' && (financialProfile || accountWorkspace)) {
+        const key = financialProfile ? financialProfileReturnKey : accountWorkspaceReturnKey;
+        try { sessionStorage.setItem(key, String(Date.now() + 600_000)); } catch { /* OAuth can continue without storage. */ }
       }
       location.assign(url.href);
     } catch (failure) {
-      if (financialProfile) sessionStorage.removeItem(financialProfileReturnKey);
       setSigningInWith(null);
       throw failure;
     }
@@ -173,15 +198,10 @@ export function AccountDialog({ status, notice, close, update }: {
       <Icon name="arrow" />
     </button>);
   const signInProviders = loginProviders.filter(provider => currentStatus?.available.includes(provider));
-  const title = account
-    ? new URLSearchParams(location.search).get('view') === 'settings' ? 'Account settings' : 'Your account'
-    : currentStatus?.emailDelivery ? 'Welcome to Nanti' : 'Sign in to Nanti';
+  const title = account ? 'Your account' : currentStatus?.emailDelivery ? 'Welcome to Nanti' : 'Sign in to Nanti';
 
-  return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
-    title={t(title)} busy={busy || passwordBusy} close={close} focusHeading
-    headerAction={<button type="button" className="account-signin-close" aria-label={t('Close')}
-      disabled={busy || passwordBusy} onClick={close}><Icon name="close" /></button>}>
-    {!account && <div className="account-editorial">
+  const content = <>
+    {!account && !page && <div className="account-editorial">
       <div className="account-editorial-brand"><span className="brand-symbol" aria-hidden="true" />Nanti</div>
       <div className="account-editorial-copy">
         <p className="account-editorial-tagline">{t('Save it now. Decide later.')}</p>
@@ -206,16 +226,16 @@ export function AccountDialog({ status, notice, close, update }: {
         busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} /> :
       !account ? <div className="account-signin-shell">
         <PasswordForm delivery={Boolean(currentStatus.emailDelivery)} signedIn={false} creator={creator}
-          busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy}
+          returnToAccountAfterSignIn={accountWorkspace} busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy}
           alternatives={signInProviders.length > 0 && <div className="account-signin-alternatives">
             <p className="account-signin-divider">{t('Or')}</p>
             <div className="account-providers">{providerButtons(signInProviders, 'signin')}</div>
           </div>} />
       </div> : <>
-        <section className="account-overview" aria-label={t('Account overview')}>
+        {section === 'information' && <><section className="account-overview" aria-label={t('Account overview')}>
           <div className="account-avatar" aria-hidden="true">
             {account.avatarUrl && !profileImageFailed
-              ? <img src={account.avatarUrl} alt="" loading="eager" decoding="async" onError={() => setProfileImageFailed(true)} />
+              ? <img src={account.avatarUrl} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" onError={() => setProfileImageFailed(true)} />
               : <span>{account.displayName?.trim().charAt(0).toLocaleUpperCase() || account.email?.trim().charAt(0).toLocaleUpperCase() || 'N'}</span>}
           </div>
           <div className="account-overview-copy">
@@ -228,10 +248,10 @@ export function AccountDialog({ status, notice, close, update }: {
         </section>
 
         <section className="account-section account-personal" aria-labelledby="account-personal-heading">
-          <div className="account-section-heading"><h3 id="account-personal-heading">{t('Personal information')}</h3>
+          <div className="account-section-heading"><h3 id="account-personal-heading">{t('Display name')}</h3>
             {!editingProfile && <button type="button" onClick={() => setEditingProfile(true)}>{t('Edit')}</button>}
           </div>
-          <p className="account-value"><span>{t('Display name')}</span><strong>{account.displayName || t('Not set')}</strong></p>
+          {!editingProfile && <p className="account-value"><strong>{account.displayName || t('Not set')}</strong></p>}
           {editingProfile && <form onSubmit={profile}>
             <label>{t('Display name')}<input autoComplete="nickname" value={displayName} maxLength={100} disabled={busy}
               onChange={event => setDisplayName(event.target.value)} /></label>
@@ -242,8 +262,8 @@ export function AccountDialog({ status, notice, close, update }: {
           </form>}
         </section>
 
-        <section className="account-section account-security" aria-labelledby="account-security-heading">
-          <h3 id="account-security-heading">{t('Security and sign-in')}</h3>
+        </>}
+        {section === 'security' && <section className="account-section account-security" aria-label={t('Security and sign-in')}>
           {account.hasPassword && <details><summary>{t('Change password')}</summary>
             <PasswordForm delivery={false} signedIn creator={false} busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />
           </details>}
@@ -251,7 +271,7 @@ export function AccountDialog({ status, notice, close, update }: {
             <PasswordForm delivery signedIn emailChange creator={false} busy={busy || passwordBusy} setPasswordBusy={setPasswordBusy} />
           </details>}
           <div className="account-methods" aria-busy={statusLoading}>
-            <h4>{t('Connected sign-in methods')}</h4>
+            <h3>{t('Connected sign-in methods')}</h3>
             {account.providers.length > 0
               ? <ul className="account-connected">{account.providers.map(provider => <li key={provider}>{providerNames[provider]}</li>)}</ul>
               : <p>{t('No external sign-in methods are connected.')}</p>}
@@ -281,9 +301,9 @@ export function AccountDialog({ status, notice, close, update }: {
               </li>)}</ul>}
             </div>
           </details>
-        </section>
+        </section>}
 
-        {account.import && <section className="account-import" aria-labelledby="account-import-heading">
+        {section === 'information' && account.import && <section className="account-import" aria-labelledby="account-import-heading">
           <div><h3 id="account-import-heading">{t('Bring your guest data')}</h3>
             <p>{t('{guest} guest wishlists · {account} in your account', {
               guest: number(account.import.guestLists), account: number(account.import.accountLists),
@@ -298,10 +318,10 @@ export function AccountDialog({ status, notice, close, update }: {
           </button>
         </section>}
 
-        <section className="account-section account-actions" aria-labelledby="account-actions-heading">
+        {section === 'security' && <section className="account-section account-actions" aria-labelledby="account-actions-heading">
           <h3 id="account-actions-heading">{t('Account actions')}</h3>
           <div className="account-row-actions">
-            <button type="button" disabled={busy} onClick={() => void run(() => transition('/account/logout', 'POST', 'signed-out'))}>
+            <button type="button" disabled={busy} onClick={() => void run(signOut)}>
               {t('Sign out on this device')}
             </button>
             <button type="button" disabled={busy || passwordBusy} onClick={() => void run(() => transition('/account/sessions/revoke-all', 'POST', 'signed-out'))}>
@@ -319,10 +339,22 @@ export function AccountDialog({ status, notice, close, update }: {
               <button className="danger" disabled={busy || !account.recentlyVerified}>{t('Permanently delete account')}</button>
             </form>
           </details>
-        </section>
+        </section>}
       </>}
     {!account && <div className="account-footer"><button type="button" onClick={close} disabled={busy || passwordBusy}>
       {t('Continue as guest')}
     </button></div>}
+  </>;
+
+  if (section) return <div className="account-panel">{content}</div>;
+  if (page) return <main className="account-route-panel account-signin">
+    <h1>{t(title)}</h1>
+    {content}
+  </main>;
+  return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
+    title={t(title)} busy={busy || passwordBusy} close={close} focusHeading
+    headerAction={<button type="button" className="account-signin-close" aria-label={t('Close')}
+      disabled={busy || passwordBusy} onClick={close}><Icon name="close" /></button>}>
+    {content}
   </Dialog>;
 }

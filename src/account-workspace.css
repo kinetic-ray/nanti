@@ -1,0 +1,91 @@
+.consumer .account-home {
+  color: inherit;
+  text-decoration: none;
+}
+
+.consumer .account-workspace {
+  width: min(100% - 2rem, 66rem);
+  margin-inline: auto;
+  padding-block: 1rem 3rem;
+}
+
+.consumer .account-back {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: .875rem;
+  font-weight: 700;
+}
+
+.consumer .account-workspace h1 {
+  margin: .5rem 0 1.5rem;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+}
+
+.consumer .account-workspace-grid {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.consumer .account-workspace-nav { display: grid; gap: .25rem; }
+
+.consumer .account-workspace-nav a {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  min-height: 44px;
+  padding: .625rem .75rem;
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: .875rem;
+  font-weight: 700;
+}
+
+.consumer .account-workspace-nav a svg { flex: none; }
+.consumer .account-workspace-nav a:hover,
+.consumer .account-workspace-nav a[aria-current="page"] {
+  background: var(--wash);
+  color: var(--accent-strong);
+}
+
+.consumer .account-workspace-content {
+  min-width: 0;
+  padding: clamp(.875rem, 2.5vw, 1.5rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.consumer .account-workspace-content > h2 { margin: 0 0 1.25rem; font-size: 1.3rem; }
+.consumer .account-panel { max-width: 36rem; }
+.consumer .account-panel p { overflow-wrap: anywhere; }
+.consumer .account-panel h3 { margin: 0; font-size: 1rem; }
+.consumer .account-panel .account-overview { padding-block-end: .25rem; }
+.consumer .account-panel .account-security { margin-top: 0; padding-top: 0; border-top: 0; }
+.consumer .account-panel :is(button, summary, input:not([type="checkbox"])) { min-height: 44px; }
+.consumer .account-panel details summary { cursor: pointer; padding-block: .65rem; }
+.consumer .account-panel .account-section details:not(.account-delete) > summary { color: var(--ink); }
+.consumer .account-panel label.account-confirm { display: flex; align-items: center; gap: .65rem; }
+.consumer .account-panel .account-methods { padding-block: .75rem; }
+.consumer .account-panel .account-import { margin-block-start: 1.5rem; }
+.consumer .account-panel form > button { justify-self: start; }
+.consumer .account-workspace .fp-page { width: 100%; padding: 0; }
+
+@media (max-width: 47.99rem) {
+  .consumer .account-workspace-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .consumer .account-workspace-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .consumer .account-workspace-nav a {
+    flex-direction: column;
+    justify-content: center;
+    gap: .25rem;
+    min-height: 56px;
+    padding: .375rem .125rem;
+    text-align: center;
+    font-size: .75rem;
+  }
+}

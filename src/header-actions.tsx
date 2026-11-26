@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { WalletCards } from 'lucide-react';
+import { LayoutDashboard, LogOut, UserRound } from 'lucide-react';
 import type { AccountStatus } from '../shared/account.js';
 import { LanguagePicker, useLocale } from './locale.js';
 import { Icon } from './visual.js';
@@ -94,16 +94,14 @@ export function HeaderActions({ account, ready, unread, openAlerts, signIn, sign
             {account.email && <span>{account.email}</span>}
           </div>
         </div>
-        <a href="/account" onClick={() => setOpen(null)}>{t('My profile')}</a>
-        <a href="/account/financial-profile" onClick={() => setOpen(null)}><WalletCards size={16} aria-hidden="true" />{t('Financial profile')}</a>
-        <a href="/account?view=settings" onClick={() => setOpen(null)}>{t('Account settings')}</a>
-        <a href="/creator/studio" onClick={() => setOpen(null)}>Creator Studio</a>
+        <a href="/account" onClick={() => setOpen(null)}><UserRound size={16} aria-hidden="true" />{t('My profile')}</a>
+        <a href="/creator/studio" onClick={() => setOpen(null)}><LayoutDashboard size={16} aria-hidden="true" />Creator Studio</a>
         <div className="masthead-sign-out">
           <button type="button" onClick={() => {
             profile.current?.focus();
             setOpen(null);
             signOut();
-          }}>{t('Sign out')}</button>
+          }}><LogOut size={16} aria-hidden="true" />{t('Sign out')}</button>
         </div>
       </div>
     </div> : <button className="masthead-action" type="button"

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { BarChart3, CircleCheck, Clock3, ExternalLink, Eye, FileText, LayoutDashboard, LogOut, Package, Palette, Plus, Settings, Store, UserRound } from 'lucide-react';
+import { ArrowLeft, BarChart3, CircleCheck, Clock3, ExternalLink, Eye, FileText, LayoutDashboard, LogOut, Package, Palette, Plus, Settings, Store, UserRound } from 'lucide-react';
 import type { CreatorCatalog, PublicStorefront } from '../shared/creator-catalog.js';
 import { validateDesign } from '../shared/creator-design.js';
 import { announceAuthChange } from './account.js';
@@ -127,6 +127,7 @@ export function CreatorWorkspace({ ownerId, draft }: { ownerId: string; draft: u
     ]}
     account={catalog?.name ?? l('Kreator', 'Creator')}
     accountActions={<>
+      <a href="/"><ArrowLeft size={16} aria-hidden="true" />{t('Back to wishlists')}</a>
       <a href="/account"><UserRound size={16} aria-hidden="true" />{t('Account')}</a>
       <button type="button" disabled={signingOut} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />{l('Keluar', 'Sign out')}</button>
     </>}

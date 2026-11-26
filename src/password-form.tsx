@@ -11,9 +11,9 @@ const labels: Record<Mode, Message> = {
   email: 'Change email address', changeEmail: 'Verify new email address',
 };
 const success = 'If the email address is eligible, we’ll send a link.';
-export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBusy, alternatives, emailChange, returnToAccount }: {
+export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBusy, alternatives, emailChange, returnToAccount, returnToAccountAfterSignIn }: {
   delivery: boolean; signedIn: boolean; creator: boolean; busy: boolean; setPasswordBusy: (busy: boolean) => void;
-  alternatives?: ReactNode; emailChange?: boolean; returnToAccount?: boolean;
+  alternatives?: ReactNode; emailChange?: boolean; returnToAccount?: boolean; returnToAccountAfterSignIn?: boolean;
 }) {
   const { t } = useLocale();
   const [link] = useState(() => new URLSearchParams(location.hash.slice(1)));
@@ -113,7 +113,8 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
       }
       if (mode === 'login') {
         location.replace(creator ? '/creator?onboard=1&auth=signed-in' :
-          returnToFinancialProfile ? '/account/financial-profile?auth=signed-in' : '/?auth=signed-in');
+          returnToFinancialProfile ? '/account/financial-profile?auth=signed-in' :
+            returnToAccountAfterSignIn ? '/account?auth=signed-in' : '/?auth=signed-in');
         return;
       }
       if (mode === 'change' || mode === 'changeEmail') {
