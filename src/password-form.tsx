@@ -24,6 +24,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
   const [notice, setNotice] = useState<Message | null>(null);
   const [failed, setFailed] = useState(false);
   const entryMode = mode === 'login' || mode === 'register';
+  const returnToFinancialProfile = new URLSearchParams(location.search).get('next') === 'financial-profile';
   const passwordHintId = useId();
   const passwordHint = mode === 'verify' ? 'Enter the password you chose when you created your account.'
     : ['register', 'reset', 'change'].includes(mode) ? 'Use at least 8 characters.' : null;
@@ -73,7 +74,8 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     try {
       await api(`/account/password/${mode === 'changeEmail' ? 'email/verify' : mode}`, { method: 'POST', data });
       if (mode === 'login') {
-        location.replace(creator ? '/creator?onboard=1&auth=signed-in' : '/?auth=signed-in');
+        location.replace(creator ? '/creator?onboard=1&auth=signed-in' :
+          returnToFinancialProfile ? '/account/financial-profile?auth=signed-in' : '/?auth=signed-in');
         return;
       }
       if (mode === 'change' || mode === 'changeEmail') {

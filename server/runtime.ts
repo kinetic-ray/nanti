@@ -15,6 +15,7 @@ import { createImageStorage } from './image-storage.js';
 import { createMysqlImageStorage } from './mysql-image-storage.js';
 import { previewProduct, previewProductMetadata } from './product-preview.js';
 import { productMerchant } from '../shared/product-import.js';
+import { prismaFinancialProfiles } from './financial-profile.js';
 
 const runtimeConfig = z.object({
   DATABASE_URL: z.string().startsWith('mysql://'),
@@ -69,6 +70,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
       ['Item', () => db.item.findFirst({ select: { id: true, imageKey: true, sellerName: true } })],
       ['ProductImage', () => db.productImage.findFirst({ select: { id: true } })],
       ['AuthIdentity', () => db.authIdentity.findFirst({ select: { avatarUrl: true } })],
+      ['FinancialProfile', () => db.financialProfile.findFirst({ select: { userId: true } })],
       ['CreatorProfile', () => db.creatorProfile.findFirst({ select: { handle: true, publishedDesign: true } })],
       ['CreatorProduct', () => db.creatorProduct.findFirst({ select: { id: true, hasPhoto: true } })],
       ['PriceObservation', () => db.priceObservation.findFirst({ select: { id: true } })],
@@ -86,6 +88,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
   };
   const intelligence = prismaIntelligence(db);
   const accounts = prismaAccounts(db);
+  const financialProfiles = prismaFinancialProfiles(db);
   const mysqlImages = createMysqlImageStorage(db);
   const prune = () => Promise.allSettled([
     intelligence.prune(new Date(Date.now() - assessmentRetentionDays * 86_400_000)),
@@ -107,7 +110,7 @@ export async function createRuntime(environment: NodeJS.ProcessEnv, options: { v
     recommendationSuperadminEnabled: Boolean(env.NANTI_RECOMMENDATION_SUPERADMIN_USERNAME &&
       env.NANTI_RECOMMENDATION_SUPERADMIN_USERNAME === env.NANTI_ADMIN_USERNAME),
     affiliate: prismaAffiliate(db),
-    consumer: { accounts, providers },
+    consumer: { accounts, providers, financialProfiles },
     admin: env.NANTI_ADMIN_USERNAME && env.NANTI_ADMIN_PASSWORD_HASH ? {
       username: env.NANTI_ADMIN_USERNAME, passwordHash: env.NANTI_ADMIN_PASSWORD_HASH,
     } : undefined,

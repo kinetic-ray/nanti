@@ -23,6 +23,7 @@
     "test:browser:accounts": "node --import tsx tests/browser-accounts.mjs",
     "test:browser:creator": "node --import tsx tests/browser-creator-catalog.mjs",
     "test:browser:creator-design": "node tests/browser-creator-design.mjs",
+    "test:browser:financial-profile": "node tests/browser-financial-profile.mjs",
     "test:browser:visual": "node tests/browser-visual.mjs",
     "test:browser:mvp": "node tests/browser-mvp.mjs"
   },

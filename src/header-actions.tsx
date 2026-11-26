@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { WalletCards } from 'lucide-react';
 import type { AccountStatus } from '../shared/account.js';
 import { LanguagePicker, useLocale } from './locale.js';
 import { Icon } from './visual.js';
@@ -14,13 +15,14 @@ function Avatar({ src, initials }: { src?: string | null; initials: string }) {
   </span>;
 }
 
-export function HeaderActions({ account, ready, unread, openAlerts, signIn, signOut }: {
+export function HeaderActions({ account, ready, unread, openAlerts, signIn, signOut, alertsEnabled = true }: {
   account?: Account | null;
   ready: boolean;
   unread: number;
   openAlerts: () => void;
   signIn: () => void;
   signOut: () => void;
+  alertsEnabled?: boolean;
 }) {
   const { t, number } = useLocale();
   const [open, setOpen] = useState<Disclosure | null>(null);
@@ -53,17 +55,30 @@ export function HeaderActions({ account, ready, unread, openAlerts, signIn, sign
 
   const toggle = (value: Disclosure) => setOpen(current => current === value ? null : value);
   return <div className="masthead-controls" onKeyDown={event => {
-    if (event.key !== 'Escape' || !open) return;
+    if (!open) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      trigger.current?.focus();
+      setOpen(null);
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const panel = document.getElementById(open === 'profile' ? 'masthead-profile' : 'masthead-navigation');
+    const items = Array.from(panel?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? []);
+    if (!items.length) return;
+    const active = items.indexOf(document.activeElement as HTMLElement);
+    let next = event.key === 'Home' || (event.key === 'ArrowDown' && active < 0) ? 0
+      : event.key === 'End' || (event.key === 'ArrowUp' && active < 0) ? items.length - 1
+        : event.key === 'ArrowDown' ? (active + 1) % items.length : (active - 1 + items.length) % items.length;
     event.preventDefault();
-    trigger.current?.focus();
-    setOpen(null);
+    items[next]?.focus();
   }} onBlur={event => {
     if (open && event.relatedTarget && !trigger.current?.parentElement?.contains(event.relatedTarget)) setOpen(null);
   }}>
-    <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
+    {alertsEnabled && <button className="icon-button price-alert-entry" type="button" aria-label={t('Price alerts')}
       title={t('Price alerts')} disabled={!ready} onClick={openAlerts}>
       <Icon name="bell" />{unread > 0 && <span aria-hidden="true">{number(Math.min(99, unread))}</span>}
-    </button>
+    </button>}
     <LanguagePicker />
     {account ? <div className="masthead-profile">
       <button className="masthead-action" type="button" ref={profile} aria-label={t('Profile menu')}
@@ -80,6 +95,7 @@ export function HeaderActions({ account, ready, unread, openAlerts, signIn, sign
           </div>
         </div>
         <a href="/account" onClick={() => setOpen(null)}>{t('My profile')}</a>
+        <a href="/account/financial-profile" onClick={() => setOpen(null)}><WalletCards size={16} aria-hidden="true" />{t('Financial profile')}</a>
         <a href="/account?view=settings" onClick={() => setOpen(null)}>{t('Account settings')}</a>
         <a href="/creator/studio" onClick={() => setOpen(null)}>Creator Studio</a>
         <div className="masthead-sign-out">

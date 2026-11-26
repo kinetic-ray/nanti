@@ -2,6 +2,7 @@ import { PasswordForm } from './password-form.js';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { loginProviders } from '../shared/account.js';
+import { financialProfileReturnKey } from '../shared/account.js';
 import type { AccountStatus, AuthPurpose, LoginProvider } from '../shared/account.js';
 import { api, errorMessage } from './api.js';
 import { Dialog } from './forms.js';
@@ -54,7 +55,9 @@ export function AccountDialog({ status, notice, close, update }: {
   const [error, setError] = useState('');
   const [message, setMessage] = useState<Message | null>(null);
   const [passwordBusy, setPasswordBusy] = useState(false);
-  const creator = new URLSearchParams(location.search).get('next') === 'creator';
+  const nextDestination = new URLSearchParams(location.search).get('next');
+  const creator = nextDestination === 'creator';
+  const financialProfile = nextDestination === 'financial-profile';
   const [deletion, setDeletion] = useState(false);
   const [recovering] = useState(() => {
     const link = new URLSearchParams(location.hash.slice(1));
@@ -85,13 +88,19 @@ export function AccountDialog({ status, notice, close, update }: {
   async function start(provider: LoginProvider, purpose: AuthPurpose) {
     setSigningInWith(provider);
     try {
-      const next = await api<{ url: string }>(`/account/${provider}/start`, { method: 'POST', data: { purpose, ...(creator && purpose === 'signin' ? { destination: 'creator' } : {}) } });
+      const next = await api<{ url: string }>(`/account/${provider}/start`, { method: 'POST', data: {
+        purpose, ...(creator && purpose === 'signin' ? { destination: 'creator' } : {}),
+      } });
       const url = new URL(next.url);
       if (url.origin !== providerOrigins[provider] || url.username || url.password) {
         throw new Error('This sign-in option is unavailable.');
       }
+      if (financialProfile && purpose === 'signin') {
+        sessionStorage.setItem(financialProfileReturnKey, String(Date.now() + 600_000));
+      }
       location.assign(url.href);
     } catch (failure) {
+      if (financialProfile) sessionStorage.removeItem(financialProfileReturnKey);
       setSigningInWith(null);
       throw failure;
     }
