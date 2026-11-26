@@ -40,7 +40,7 @@ await page.addInitScript({ path: axePath });
 await page.route('**/api/account', route => route.fulfill({ status: 200, json: {
   available: [], account: { displayName: 'Arya', email: 'arya@example.test', providers: ['google'], recentlyVerified: true, import: null },
 } }));
-await page.route('**/api/account/financial-profile*', async route => {
+await page.route(/\/api\/account\/financial-profile(?:\/.*)?$/u, async route => {
   const request = route.request();
   if (request.method() === 'GET') return route.fulfill({ status: 200, json: profile });
   if (request.method() === 'DELETE') {
