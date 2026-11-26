@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
+import type { SetStateAction } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { safeProductUrl } from '../shared/wishlist.js';
 import { sharedProductLink } from './share-target.js';
@@ -46,6 +47,10 @@ type Editor =
   | { kind: 'item'; item?: Item; list: WishlistSummary }
   | { kind: 'privacy' }
   | { kind: 'delete'; list: WishlistSummary; item?: Item };
+
+const sessionCache: { account: AccountStatus | null; lists: WishlistSummary[] | null; identity: string | null; validatedAt: number } = {
+  account: null, lists: null, identity: null, validatedAt: 0,
+};
 
 function WishlistPicker({ lists, activeId, label, onChange }: {
   lists: WishlistSummary[]; activeId: string; label: string; onChange: (id: string) => void;
@@ -132,12 +137,12 @@ function RouteLoading({ label, storefront = false }: { label: Message; storefron
 
 function App() {
   const { t, error, money, number } = useLocale();
-  const [lists, setLists] = useState<WishlistSummary[] | null>(null);
+  const [lists, setListsState] = useState<WishlistSummary[] | null>(() => sessionCache.lists);
   const [sessionError, setSessionError] = useState('');
   const [sessionRefreshing, setSessionRefreshing] = useState(false);
   const [sessionAttempt, setSessionAttempt] = useState(0);
-  const listsLoaded = useRef(false);
-  const listsRef = useRef<WishlistSummary[] | null>(null);
+  const listsLoaded = useRef(sessionCache.lists !== null);
+  const listsRef = useRef<WishlistSummary[] | null>(sessionCache.lists);
   const previousIdentity = useRef<string | null>(null);
   const identityLoaded = useRef(false);
   const hiddenAt = useRef(0);
@@ -150,8 +155,8 @@ function App() {
   const [tools, setTools] = useState<IntelligenceSelection | null>(null);
   const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map() }));
   const [status, setStatus] = useState<Message | ''>('');
-  const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
-  const accountStatusRef = useRef<AccountStatus | null>(null);
+  const [accountStatus, setAccountStatusState] = useState<AccountStatus | null>(() => sessionCache.account);
+  const accountStatusRef = useRef<AccountStatus | null>(sessionCache.account);
   const accountRoute = /^\/account\/?$/u.test(location.pathname);
   const [showAccount, setShowAccount] = useState(false);
   const [accountRecovery] = useState(hasAccountRecovery);
@@ -164,11 +169,18 @@ function App() {
   const [sharedLink, setSharedLink] = useState(() => sharedProductLink(new URL(location.href)));
   const [sharedDraft, setSharedDraft] = useState(() => sharedProductLink(new URL(location.href)));
 
-  useEffect(() => {
-    const changed = (event: StorageEvent) => { if (event.key === authChangeKey) location.reload(); };
-    window.addEventListener('storage', changed);
-    return () => window.removeEventListener('storage', changed);
-  }, []);
+  function setLists(update: SetStateAction<WishlistSummary[] | null>) {
+    setListsState(current => {
+      const next = typeof update === 'function' ? update(current) : update;
+      sessionCache.lists = next;
+      return next;
+    });
+  }
+
+  function setAccountStatus(status: AccountStatus | null) {
+    sessionCache.account = status;
+    setAccountStatusState(status);
+  }
 
   useEffect(() => {
     const visibility = () => {
@@ -186,26 +198,31 @@ function App() {
   useEffect(() => {
     const controller = new AbortController();
     setSessionError('');
-    if (listsLoaded.current && !accountEntry && sessionAttempt > 0) setSessionRefreshing(true);
-    const useLoadedSession = sessionAttempt === 0 && accountStatusRef.current !== null;
+    const sessionFresh = accountStatusRef.current !== null && Date.now() - sessionCache.validatedAt < 5 * 60_000;
+    const useLoadedSession = sessionAttempt === 0 && sessionFresh;
+    if (listsLoaded.current && !accountEntry && !useLoadedSession) setSessionRefreshing(true);
+    if (accountEntry && !useLoadedSession) setAccountStatus(null);
     const accountRequest = useLoadedSession
       ? Promise.resolve(accountStatusRef.current!)
       : api<AccountStatus>('/account', { signal: controller.signal });
     const loadLists = () => api<WishlistSummary[]>('/session', { method: 'POST', signal: controller.signal });
     const wishlistRequest = accountEntry ? Promise.resolve(null)
-      : sessionAttempt === 0 && listsLoaded.current ? Promise.resolve(listsRef.current ?? []) : loadLists();
+      : useLoadedSession && listsLoaded.current ? Promise.resolve(listsRef.current ?? []) : loadLists();
     Promise.all([wishlistRequest, accountRequest]).then(
       ([lists, current]) => {
         if (controller.signal.aborted) return;
         const identity = current.account
           ? `account:${current.account.email?.trim().toLocaleLowerCase() || 'signed-in'}`
           : 'guest';
-        if (identityLoaded.current && previousIdentity.current !== identity) {
+        if ((identityLoaded.current && previousIdentity.current !== identity) ||
+            (sessionCache.identity !== null && sessionCache.identity !== identity)) {
           location.reload();
           return;
         }
         previousIdentity.current = identity;
         identityLoaded.current = true;
+        sessionCache.identity = identity;
+        sessionCache.validatedAt = Date.now();
         accountStatusRef.current = current;
         setSessionRefreshing(false);
         setSessionError('');
@@ -257,6 +274,10 @@ function App() {
         if (controller.signal.aborted) return;
         listsLoaded.current = false;
         listsRef.current = null;
+        sessionCache.account = null;
+        sessionCache.lists = null;
+        sessionCache.identity = null;
+        sessionCache.validatedAt = 0;
         setSessionRefreshing(false);
         setDetailLoading(false);
         setLists(null);
@@ -268,14 +289,6 @@ function App() {
     );
     return () => controller.abort();
   }, [sessionAttempt, accountRecovery, accountEntry, accountRoute]);
-
-  useEffect(() => {
-    listsRef.current = lists;
-  }, [lists]);
-
-  useEffect(() => {
-    accountStatusRef.current = accountStatus;
-  }, [accountStatus]);
 
   const selected = lists?.find((list) => list.id === selectedId) ?? lists?.[0];
   const activeId = selected?.id;
@@ -376,8 +389,24 @@ function App() {
 
   const list = detail?.id === activeId ? detail : null;
   const account = accountStatus?.account;
+
+  function renderHeader() {
+    return <header className="masthead">
+      <div className="brand-group">
+        <span className="brand-symbol" aria-hidden="true" />
+        <div className="brand">nanti<span>.</span></div>
+      </div>
+      <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
+        openAlerts={() => setAlertsOpen(true)} signIn={() => setShowAccount(true)} signOut={requestSignOut} />
+    </header>;
+  }
+
   async function signOut() {
     await api('/account/logout', { method: 'POST' });
+    sessionCache.account = null;
+    sessionCache.lists = null;
+    sessionCache.identity = null;
+    sessionCache.validatedAt = 0;
     announceAuthChange();
     location.replace('/?auth=signed-out');
   }
@@ -387,22 +416,25 @@ function App() {
   }
 
   if (accountRoute && !accountRecovery && accountStatus?.account) {
-    return <Suspense fallback={<RouteLoading label="Preparing your account…" />}>
-      <AccountWorkspace status={accountStatus} notice={notice} update={setAccountStatus}
-        signOut={signOut} statusMessage={status} requestSignOut={requestSignOut} />
-    </Suspense>;
+    return <div className="site consumer">{renderHeader()}
+      <Suspense fallback={<RouteLoading label="Preparing your account…" />}>
+        <AccountWorkspace status={accountStatus} notice={notice} update={setAccountStatus}
+          signOut={signOut} statusMessage={status} requestSignOut={requestSignOut} />
+      </Suspense>
+    </div>;
   }
 
   if (accountEntry && !accountStatus) {
-    return sessionError ? <div className="site consumer"><main className="account-route-panel">
+    return <div className="site consumer">{renderHeader()}{sessionError ? <main className="account-route-panel">
       <p role="alert">{t('Could not load your account. Try again.')}</p>
       <button type="button" onClick={() => setSessionAttempt(value => value + 1)}>{t('Try again')}</button>
       <a href="/">{t('Back to wishlists')}</a>
-    </main></div> : <RouteLoading label="Preparing your account…" />;
+    </main> : <RouteLoading label="Preparing your account…" />}</div>;
   }
 
   if (accountEntry) {
     return <div className="site consumer">
+      {renderHeader()}
       <AccountSignInPage status={accountStatus} notice={notice} update={setAccountStatus}
         close={() => navigateTo(new URLSearchParams(location.search).get('next') === 'creator' ? '/creator' : '/', { replace: true })} />
     </div>;
@@ -410,14 +442,7 @@ function App() {
 
   return (
     <div className="site consumer">
-      <header className="masthead">
-        <div className="brand-group">
-          <span className="brand-symbol" aria-hidden="true" />
-          <div className="brand">nanti<span>.</span></div>
-        </div>
-        <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
-          openAlerts={() => setAlertsOpen(true)} signIn={() => setShowAccount(true)} signOut={requestSignOut} />
-      </header>
+      {renderHeader()}
       <div className={`workspace${selected ? ' workspace-collection' : ''}`}>
         {selected && <aside className="collection-rail">
           <div className="rail-heading">
@@ -603,7 +628,6 @@ function isMainRoute(pathname: string) {
 
 function ApplicationRouter() {
   const [route, setRoute] = useState(normalizeLocation);
-  const [appMounted, setAppMounted] = useState(() => isMainRoute(location.pathname));
   const address = new URL(route, location.origin);
   const { pathname } = address;
   const mainRoute = isMainRoute(pathname);
@@ -616,8 +640,10 @@ function ApplicationRouter() {
   useEffect(() => {
     function syncLocation() {
       setRoute(normalizeLocation());
-      if (isMainRoute(location.pathname)) setAppMounted(true);
       if (/^\/admin\/?$/u.test(location.pathname)) document.documentElement.lang = 'id';
+    }
+    function onAuthChange(event: StorageEvent) {
+      if (event.key === authChangeKey) location.reload();
     }
     function onClick(event: MouseEvent) {
       const destination = isInternalNavigationClick(event);
@@ -629,17 +655,19 @@ function ApplicationRouter() {
     document.addEventListener('click', onClick);
     document.addEventListener('pointerover', prefetchInternalNavigation);
     document.addEventListener('focusin', prefetchInternalNavigation);
+    window.addEventListener('storage', onAuthChange);
     if (adminRoute) document.documentElement.lang = 'id';
     return () => {
       window.removeEventListener('popstate', syncLocation);
       document.removeEventListener('click', onClick);
       document.removeEventListener('pointerover', prefetchInternalNavigation);
       document.removeEventListener('focusin', prefetchInternalNavigation);
+      window.removeEventListener('storage', onAuthChange);
     };
   }, [adminRoute]);
 
   return <LocaleProvider>
-    {appMounted && <div hidden={!mainRoute}><App /></div>}
+    {mainRoute && <App />}
     {adminRoute && <Suspense fallback={<p className="site" role="status">Membuka administrasi…</p>}>
       {new URLSearchParams(address.search).get('view') === 'accounts' ? <AccountAdmin /> : <AdminCenter />}
     </Suspense>}
