@@ -56,7 +56,17 @@ try {
     page.setDefaultTimeout(8000);
     await page.addInitScript(() => localStorage.setItem('nanti.language', 'en'));
     await page.route('**/api/session', route => route.fulfill({ json: [] }));
-    await page.route('**/api/account', route => route.fulfill({ json: { account, available: [] } }));
+    let signedIn = Boolean(account);
+    let logoutRequests = 0;
+    await page.route('**/api/account', route => route.fulfill({ json: {
+      account: signedIn ? { providers: [], recentlyVerified: false, import: null, ...account } : null, available: [],
+    } }));
+    await page.route('**/api/account/logout', route => {
+      assert.equal(route.request().method(), 'POST');
+      logoutRequests++;
+      signedIn = false;
+      return route.fulfill({ status: 204 });
+    });
     const notice = {
       id: 'notice-1', readAt: null, request: { productName: 'Original product' },
       product: { title: 'Alternative product', url: 'https://example.com/product', priceMinor: 2500, currency: 'IDR' },
@@ -144,7 +154,8 @@ try {
       assert.ok(bounds.y + bounds.height <= height);
       assert.equal(await panel.getByText(account.email).count(), 1);
       assert.equal(await panel.getByRole('link', { name: 'My profile' }).getAttribute('href'), '/account');
-      assert.equal(await panel.getByRole('link', { name: 'Account settings' }).getAttribute('href'), '/account?view=settings');
+      assert.deepEqual(await panel.locator('a, button').allTextContents(), ['My profile', 'Creator Studio', 'Sign out']);
+      assert.equal(await panel.locator('a svg, button svg').count(), 3);
       assert.equal(await panel.getByRole('link', { name: 'Creator Studio' }).getAttribute('href'), '/creator/studio');
       if (account.avatarUrl) {
         await panel.locator('img').evaluate(img => img.decode());
@@ -162,6 +173,17 @@ try {
       await page.keyboard.press('Tab');
       await page.keyboard.press('Escape');
       assert.ok(await profile.evaluate(el => el === document.activeElement));
+      await profile.click();
+      await panel.getByRole('link', { name: 'My profile', exact: true }).click();
+      await page.getByRole('heading', { name: 'Account information', exact: true }).waitFor();
+      assert.equal(new URL(page.url()).pathname, '/account');
+      assert.equal(await page.locator('dialog[open]').count(), 0);
+      assert.equal(await panel.isVisible(), false);
+      await profile.click();
+      await panel.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await header.getByRole('button', { name: 'Sign in', exact: true }).waitFor();
+      assert.equal(logoutRequests, 1);
+      assert.equal(new URL(page.url()).pathname, '/');
     } else {
       await header.getByRole('button', { name: 'Sign in' }).click();
       await page.getByRole('dialog').waitFor();

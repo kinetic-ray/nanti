@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { api, errorMessage } from './api.js';
-import { HeaderActions } from './header-actions.js';
 import { useLocale } from './locale.js';
-import type { AccountStatus } from '../shared/account.js';
 import type {
   AdditionalSection, DebtItem, DebtSection, ExpenseClassification, ExpenseItem, ExpenseSection,
   FinancialGoal, FinancialProfile, IncomeItem, IncomeSection, ReadinessSection, SavingsSection,
@@ -104,10 +102,10 @@ function today() {
   return local.toISOString().slice(0, 10);
 }
 
-export function FinancialProfilePage() {
+export function FinancialProfile() {
   const { date, language } = useLocale();
   const l = (id: string, en: string) => language === 'id' ? id : en;
-  const [account, setAccount] = useState<AccountStatus['account'] | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [profile, setProfile] = useState<FinancialProfile | null>(null);
   const [drafts, setDrafts] = useState<Drafts>(blankDrafts);
   const [load, setLoad] = useState<LoadState>('loading');
@@ -121,16 +119,9 @@ export function FinancialProfilePage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      api<AccountStatus>('/account', { signal: controller.signal }),
-    ]).then(async ([status]) => {
-      if (controller.signal.aborted) return;
-      if (!status.account) {
-        location.replace('/account?next=financial-profile');
-        return;
-      }
-      setAccount(status.account);
-      const saved = await api<FinancialProfile>('/account/financial-profile', { signal: controller.signal });
+    setLoad('loading');
+    setError('');
+    api<FinancialProfile>('/account/financial-profile', { signal: controller.signal }).then(saved => {
       if (controller.signal.aborted) return;
       setProfile(saved);
       setDrafts(draftsFrom(saved));
@@ -139,10 +130,10 @@ export function FinancialProfilePage() {
       if (controller.signal.aborted) return;
       const text = errorMessage(reason);
       if (text === 'Sign in to continue.') location.replace('/account?next=financial-profile');
-      else { setError(l('Profil finansial belum bisa dimuat. Coba lagi.', 'Your financial profile could not be loaded. Try again.')); setLoad('failed'); }
+      else setLoad('failed');
     });
     return () => controller.abort();
-  }, []);
+  }, [attempt]);
 
   const incomeTotal = totalAmounts(profile?.income?.items.map(item => ({ amount: item.monthlyNet })) ?? null,
     Boolean(profile?.income?.confirmed));
@@ -167,8 +158,9 @@ export function FinancialProfilePage() {
       setDrafts(current => ({ ...current, [section]: data }));
       setNotice(l('Perubahan tersimpan.', 'Changes saved.'));
       if (section === 'readiness') setEditingReadiness(null);
-    } catch {
-      setError(l('Perubahan belum tersimpan. Periksa isianmu, lalu coba lagi.', 'Changes were not saved. Check your entries and try again.'));
+    } catch (failure) {
+      if (errorMessage(failure) === 'Sign in to continue.') location.replace('/account?next=financial-profile');
+      else setError(l('Perubahan belum tersimpan. Periksa isianmu, lalu coba lagi.', 'Changes were not saved. Check your entries and try again.'));
     } finally { setSaving(null); }
   }
 
@@ -201,12 +193,12 @@ export function FinancialProfilePage() {
       setDrafts(draftsFrom(empty));
       setDeleteConfirm(false);
       setNotice(l('Profil finansial sudah dihapus.', 'Your financial profile was deleted.'));
-    } catch {
-      setError(l('Profil belum bisa dihapus. Coba lagi.', 'The profile could not be deleted. Try again.'));
+    } catch (failure) {
+      if (errorMessage(failure) === 'Sign in to continue.') location.replace('/account?next=financial-profile');
+      else setError(l('Profil belum bisa dihapus. Coba lagi.', 'The profile could not be deleted. Try again.'));
     } finally { setSaving(null); }
   }
 
-  const menuStatus: AccountStatus['account'] = account;
   const summaryDescription = freeBudget === null
     ? l('Lengkapi keuangan bulananmu untuk melihat perkiraannya.', 'Fill in your monthly finances to see an estimate.')
     : BigInt(freeBudget) < 0n
@@ -216,25 +208,11 @@ export function FinancialProfilePage() {
     ? [expenseTotal!, debtTotal!, savingsTotal!, freeBudget].map(value => Number((BigInt(value) * 10000n) / BigInt(incomeTotal)) / 100) : null;
   const lastUpdated = profile?.updatedAt ? date(profile.updatedAt) : null;
 
-  return <div className="site consumer">
-    <header className="masthead">
-      <a className="brand-group fp-brand-link" href="/" aria-label="Nanti">
-        <span className="brand-symbol" aria-hidden="true" /><span className="brand">nanti<span>.</span></span>
-      </a>
-      <HeaderActions account={menuStatus} ready unread={0} openAlerts={() => undefined}
-        signIn={() => location.replace('/account?next=financial-profile')}
-        signOut={() => void api('/account/logout', { method: 'POST' }).then(() => location.replace('/?auth=signed-out'))}
-        alertsEnabled={false} />
-    </header>
-    <main className="fp-page">
-      <a className="fp-back" href="/"><ArrowLeft size={16} aria-hidden="true" />{l('Kembali ke wishlist', 'Back to wishlists')}</a>
-      <header className="fp-heading">
-        <h1>{l('Profil Finansial', 'Financial Profile')}</h1>
-        <p>{l('Kenali ruang belanjamu sebelum membeli.', 'Understand your spending room before buying.')}</p>
-      </header>
+  return <div className="fp-page">
       {load === 'loading' ? <div className="fp-loading" role="status">{l('Memuat profil finansial…', 'Loading your financial profile…')}</div>
-        : load === 'failed' ? <section className="fp-feedback"><p role="alert">{error}</p>
-          <button type="button" onClick={() => location.reload()}>{l('Coba lagi', 'Try again')}</button></section>
+        : load === 'failed' ? <section className="fp-feedback"><p role="alert">
+          {l('Profil finansial belum bisa dimuat. Coba lagi.', 'Your financial profile could not be loaded. Try again.')}</p>
+          <button type="button" onClick={() => setAttempt(value => value + 1)}>{l('Coba lagi', 'Try again')}</button></section>
           : <>
             <section className="fp-summary" aria-labelledby="fp-summary-heading">
               <p id="fp-summary-heading">{l('Uang bebas per bulan', 'Available per month')}</p>
@@ -251,7 +229,7 @@ export function FinancialProfilePage() {
             </section>
 
             <section className="fp-section" aria-labelledby="fp-monthly-heading">
-              <div className="fp-section-heading"><h2 id="fp-monthly-heading">{l('Keuangan bulanan', 'Monthly finances')}</h2>
+              <div className="fp-section-heading"><h3 id="fp-monthly-heading">{l('Keuangan bulanan', 'Monthly finances')}</h3>
                 <p>{l('Informasi utama untuk memahami kemampuan belanjamu.', 'The key details for understanding your spending capacity.')}</p>
               </div>
               <div className="fp-accordion">
@@ -263,11 +241,11 @@ export function FinancialProfilePage() {
                   const unknown = amount === null;
                   const expandedNow = expanded === key;
                   return <article className={`fp-accordion-item${expandedNow ? ' is-open' : ''}`} key={key}>
-                    <h3><button type="button" className="fp-accordion-trigger" aria-expanded={expandedNow}
+                    <h4><button type="button" className="fp-accordion-trigger" aria-expanded={expandedNow}
                       aria-controls={`fp-panel-${key}`} onClick={() => { setExpanded(expandedNow ? null : key); setError(''); }}>
                       <span>{title}</span><span className="fp-parent-value">{unknown ? l('Belum diisi', 'Not filled in') : formatRupiah(amount)}</span>
                       <ChevronDown size={18} aria-hidden="true" />
-                    </button></h3>
+                    </button></h4>
                     {expandedNow && <div id={`fp-panel-${key}`} className="fp-panel">
                       {key === 'income' && <>
                         <p className="fp-helper">{l('Masukkan uang yang biasanya kamu terima setelah potongan.', 'Enter the money you usually receive after deductions.')}</p>
@@ -369,7 +347,7 @@ export function FinancialProfilePage() {
             </section>
 
             <section className="fp-section fp-readiness" aria-labelledby="fp-readiness-heading">
-              <div className="fp-section-heading"><h2 id="fp-readiness-heading">{l('Kesiapan membeli', 'Purchase readiness')}</h2>
+              <div className="fp-section-heading"><h3 id="fp-readiness-heading">{l('Kesiapan membeli', 'Purchase readiness')}</h3>
                 <p>{l('Disarankan untuk rekomendasi yang lebih akurat.', 'Recommended for more accurate suggestions.')}</p>
               </div>
               <div className="fp-compact-rows">
@@ -391,9 +369,9 @@ export function FinancialProfilePage() {
             </section>
 
             <section className="fp-additional" aria-labelledby="fp-additional-heading">
-              <h2><button type="button" aria-expanded={additionalOpen} aria-controls="fp-additional-panel"
+              <h3><button type="button" aria-expanded={additionalOpen} aria-controls="fp-additional-panel"
                 onClick={() => setAdditionalOpen(value => !value)}><span><strong id="fp-additional-heading">{l('Informasi tambahan', 'Additional information')}</strong>
-                  <small>{l('Opsional', 'Optional')}</small></span><ChevronDown size={18} aria-hidden="true" /></button></h2>
+                  <small>{l('Opsional', 'Optional')}</small></span><ChevronDown size={18} aria-hidden="true" /></button></h3>
               {additionalOpen && <div id="fp-additional-panel" className="fp-additional-panel">
                 <label className="fp-select-field"><span>{l('Tanggal gajian', 'Payday')}</span>
                   <select value={drafts.additional.payday ?? ''} onChange={event => setDraft('additional', { ...drafts.additional,
@@ -401,7 +379,7 @@ export function FinancialProfilePage() {
                     <option value="">{l('Belum diisi', 'Not filled in')}</option>
                     {Array.from({ length: 31 }, (_, index) => index + 1).map(day => <option value={day} key={day}>{l(`Tanggal ${day}`, `Day ${day}`)}</option>)}
                   </select></label>
-                <div className="fp-goals-heading"><h3>{l('Tujuan finansial', 'Financial goals')}</h3>
+                <div className="fp-goals-heading"><h4>{l('Tujuan finansial', 'Financial goals')}</h4>
                   <button className="fp-text-action" type="button" onClick={() => setDraft('additional', { ...drafts.additional,
                     goals: [...drafts.additional.goals, { id: crypto.randomUUID(), name: '', targetAmount: '', savedAmount: '', targetDate: null }] })}>
                     <Plus size={16} aria-hidden="true" />{l('Tambah tujuan', 'Add a goal')}</button></div>
@@ -429,8 +407,7 @@ export function FinancialProfilePage() {
             </section>
           </>}
       <div className="fp-live" role="status" aria-live="polite">{notice}</div>
-      {error && <p className="fp-error" role="alert">{error}</p>}
-    </main>
+      {load === 'ready' && error && <p className="fp-error" role="alert">{error}</p>}
   </div>;
 }
 

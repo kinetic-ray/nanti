@@ -11,6 +11,7 @@ import { createApp } from '../server/app.ts';
 import { connectDatabase } from '../server/database.ts';
 import { configureOAuth } from '../server/oauth-providers.ts';
 import { prismaAccounts, tokenHash } from '../server/prisma-accounts.ts';
+import { prismaFinancialProfiles } from '../server/financial-profile.ts';
 import { prismaIntelligence } from '../server/prisma-intelligence.ts';
 import { prismaPrices } from '../server/prisma-prices.ts';
 import { prismaWishlists } from '../server/prisma-wishlists.ts';
@@ -39,20 +40,26 @@ const providers = await configureOAuth({
 });
 server.on('request', createApp({
   repository: prismaWishlists(db), intelligence: prismaIntelligence(db), prices: prismaPrices(db),
-  consumer: { accounts: prismaAccounts(db), providers }, secret: randomBytes(32).toString('hex'),
-  secureCookies: false, preview: async () => null, webRoot: fileURLToPath(new URL('../dist/web/', import.meta.url)),
+  consumer: { accounts: prismaAccounts(db), providers, financialProfiles: prismaFinancialProfiles(db) }, secret: randomBytes(32).toString('hex'),
+  secureCookies: false, trustedProxy: 'loopback', preview: async () => null, webRoot: fileURLToPath(new URL('../dist/web/', import.meta.url)),
 }));
 
 const axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
 const errors = [];
 const guestOwners = new Set();
 let browser;
+let deviceNumber = 0;
 const button = (root, name) => root.getByRole('button', { name, exact: true });
 const modal = (page, name) => page.getByRole('dialog', { name, exact: true });
 const visible = locator => locator.waitFor({ state: 'visible' });
 
 async function device(width) {
   const context = await browser.newContext({ baseURL, viewport: { width, height: 800 } });
+  // Give each simulated device its own rate-limit bucket on the local fixture server.
+  const address = `192.0.2.${++deviceNumber}`;
+  await context.route(`${baseURL}/api/**`, route => route.continue({
+    headers: { ...route.request().headers(), 'x-forwarded-for': address },
+  }));
   await context.addInitScript({ path: axePath });
   await context.route('https://accounts.google.com/**', async route => {
     const authorization = new URL(route.request().url());
@@ -147,14 +154,17 @@ try {
 
   await signInEntry.click();
   await button(signIn, 'Lanjut dengan Google').click();
-  const account = modal(guest, 'Akunmu');
+  const account = guest.getByRole('main').filter({ has: guest.getByRole('heading', { name: 'Profil saya', exact: true }) });
   await visible(account.getByRole('heading', { name: 'Pindahkan data tamu', exact: true }));
   assert.equal(await list.isVisible(), false);
   await audit(guest, '360px Indonesian import');
-  await button(account, 'Tutup').click();
+  await account.getByRole('link', { name: 'Kembali ke wishlist', exact: true }).click();
+  await visible(button(guest, 'Menu profil'));
   assert.equal(await list.isVisible(), false);
   await button(guest, 'Menu profil').click();
-  await guest.getByRole('link', { name: 'Profil Saya' }).click();
+  await guest.getByRole('link', { name: 'Profil saya', exact: true }).click();
+  await guest.waitForURL('**/account');
+  assert.equal(await guest.locator('dialog[open]').count(), 0);
   await button(account, 'Pindahkan data tamu').click();
   await visible(list);
   console.log('PASS 360px guest sign-in, keyboard recovery, confirmation, import and accessibility');
@@ -172,7 +182,7 @@ try {
     await recovery.getByRole('link', { name: 'Kembali ke akun', exact: true }).click();
     await visible(account.getByRole('link', { name: 'Creator Studio' }));
   }
-  await button(account, 'Tutup').click();
+  await account.getByRole('link', { name: 'Kembali ke wishlist', exact: true }).click();
   await account.waitFor({ state: 'hidden' });
   await db.creatorProfile.delete({ where: { userId: accountIdentity.userId } });
   console.log('PASS signed-in recovery links, fragment cleanup and accessibility');
@@ -287,19 +297,38 @@ try {
   await visible(english.getByRole('heading', { name: 'Wishlist tamu', exact: true }));
   assert.equal(await english.locator('html').getAttribute('lang'), 'en');
   await english.goto('/account');
-  const profile = modal(english, 'Your account');
+  const profile = english.getByRole('main').filter({ has: english.getByRole('heading', { name: 'My profile', exact: true }) });
   await button(profile, 'Edit').click();
-  await profile.getByLabel('Display name').fill('Shared profile');
+  await profile.getByRole('textbox', { name: 'Display name', exact: true }).fill('Shared profile');
   await button(profile, 'Save name').click();
   await visible(profile.getByText('Display name saved.', { exact: true }));
-  for (const width of [320, 360, 390, 430, 768, 1280, 1440]) {
+  for (const width of [320, 360, 390, 430, 768, 1024, 1280, 1440]) {
     await english.setViewportSize({ width, height: 800 });
     await audit(english, `${width}px English account`);
   }
   await english.setViewportSize({ width: 390, height: 800 });
   const sibling = await open(second);
   await visible(sibling.getByRole('heading', { name: 'Wishlist tamu', exact: true }));
+  await profile.getByRole('link', { name: 'Financial profile', exact: true }).click();
+  await profile.getByRole('button', { name: /Savings target/ }).click();
+  await profile.getByRole('textbox', { name: /save each month/i }).fill('1250000');
+  await button(profile, 'Save').click();
+  await visible(profile.getByText('Changes saved.', { exact: true }));
+  await english.reload();
+  await visible(profile.getByRole('button', { name: /Savings target.*1[.,]250[.,]000/ }));
+  assert.equal((await db.financialProfile.findUniqueOrThrow({ where: { userId: accountIdentity.userId } })).savings.monthlyAmount, '1250000');
+  await profile.getByRole('link', { name: 'Security', exact: true }).click();
+  await visible(profile.getByText('Google', { exact: true }));
+  assert.equal(await profile.getByText('Change password', { exact: true }).count(), 0);
+  await profile.getByText('Active sessions', { exact: true }).click();
+  await visible(profile.getByText('This session', { exact: true }));
   await button(profile, 'Sign out on this device').click();
+  await english.waitForURL(url => url.pathname === '/');
+  await visible(button(english, 'Sign in'));
+  await english.goto('/account');
+  await visible(modal(english, 'Sign in to Nanti'));
+  assert.equal(await profile.count(), 0);
+  await button(modal(english, 'Sign in to Nanti'), 'Continue as guest').click();
   await visible(button(english, 'Sign in'));
   await visible(button(sibling, 'Sign in'));
   assert.equal(await sibling.getByRole('heading', { name: 'Wishlist tamu', exact: true }).isVisible(), false);
@@ -336,7 +365,9 @@ try {
   console.log('PASS Google admin return, member denial, role revocation, logout and dashboard accessibility');
 
   await button(guest, 'Menu profil').click();
-  await guest.getByRole('link', { name: 'Profil Saya' }).click();
+  await guest.getByRole('link', { name: 'Creator Studio', exact: true }).click();
+  await guest.waitForURL('**/creator/studio');
+  await guest.goto('/account');
   const creatorGuest = await second.newPage();
   await creatorGuest.goto('/creator/studio');
   await visible(creatorGuest.getByRole('link', { name: 'Sign in to Nanti' }));
@@ -354,14 +385,76 @@ try {
   await creator.close();
   console.log('PASS Creator guest gate, one-step setup and returning Studio access');
 
+  const recovered = await open(second);
+  await recovered.goto('/account?next=financial-profile');
+  await visible(modal(recovered, 'Sign in to Nanti'));
+  await button(modal(recovered, 'Sign in to Nanti'), 'Continue with Google').click();
+  await recovered.waitForURL('**/account?section=financial-profile');
+  await visible(recovered.getByRole('button', { name: /Savings target.*1[.,]250[.,]000/ }));
+  await account.getByRole('link', { name: 'Keamanan', exact: true }).click();
+  const listed = guest.waitForResponse(response => new URL(response.url()).pathname === '/api/account/sessions');
+  await account.getByText('Sesi aktif', { exact: true }).click();
+  const sessionsResponse = await listed;
+  assert.equal(sessionsResponse.status(), 200);
+  const { sessions } = await sessionsResponse.json();
+  assert.deepEqual(sessions.map(session => session.current).sort(), [false, true]);
+  const revoke = button(account, 'Keluar dari sesi ini');
+  await visible(revoke);
+  assert.equal(await revoke.count(), 1);
+  await revoke.click();
+  await revoke.waitFor({ state: 'hidden' });
+  await recovered.reload();
+  await visible(modal(recovered, 'Sign in to Nanti'));
+  assert.equal(await recovered.getByRole('heading', { name: 'Financial profile', exact: true }).count(), 0);
+  assert.equal((await second.request.get('/api/account/financial-profile')).status(), 401);
+  await recovered.close();
+  console.log('PASS financial persistence, legacy return after sign-in and revoked-session access');
   await account.getByText('Hapus akun', { exact: true }).click();
   await account.getByRole('checkbox').check();
   await audit(guest, '360px deletion confirmation');
   await button(account, 'Hapus akun secara permanen').click();
   await visible(button(guest, 'Masuk'));
   assert.equal(await list.isVisible(), false);
-  assert.deepEqual(errors, []);
   console.log('PASS 360px accessible account deletion');
+
+  const workspaceEmail = `workspace-${randomUUID()}@example.test`;
+  const originalPassword = 'local fixture password';
+  const replacementPassword = 'local fixture replacement password';
+  const passwords = prismaAccounts(db).passwords;
+  await passwords.register(workspaceEmail, originalPassword);
+  const credential = await db.passwordCredential.findUniqueOrThrow({ where: { email: workspaceEmail }, select: { userId: true } });
+  const passwordDevice = await device(390);
+  try {
+    const verify = await passwords.issue(workspaceEmail, 'verify');
+    assert.ok(verify);
+    assert.ok(await passwords.consume(verify, 'verify', originalPassword));
+    const page = await open(passwordDevice);
+    await page.goto('/account');
+    const signIn = modal(page, 'Masuk ke Nanti');
+    await signIn.getByLabel('Email', { exact: true }).fill(workspaceEmail);
+    await signIn.locator('input[name="password"]').fill(originalPassword);
+    await signIn.locator('button[type="submit"]').click();
+    await page.getByRole('heading', { name: 'Informasi akun', exact: true }).waitFor();
+    await visible(page.getByText('Email terverifikasi', { exact: true }));
+    await page.getByRole('link', { name: 'Keamanan', exact: true }).click();
+    const change = page.locator('.account-security details').filter({ hasText: 'Ubah kata sandi' });
+    await change.locator('summary').click();
+    await change.getByRole('button', { name: 'Ubah kata sandi', exact: true }).click();
+    await change.locator('input[name="currentPassword"]').fill(originalPassword);
+    await change.locator('input[name="password"]').fill(replacementPassword);
+    await change.locator('button[type="submit"]').click();
+    await visible(signIn);
+    assert.equal(await page.getByRole('heading', { name: 'Keamanan', exact: true }).count(), 0);
+    await signIn.getByLabel('Email', { exact: true }).fill(workspaceEmail);
+    await signIn.locator('input[name="password"]').fill(replacementPassword);
+    await signIn.locator('button[type="submit"]').click();
+    await page.getByRole('heading', { name: 'Informasi akun', exact: true }).waitFor();
+  } finally {
+    await passwordDevice.close();
+    await db.user.delete({ where: { id: credential.userId } });
+  }
+  assert.deepEqual(errors, []);
+  console.log('PASS verified password account, in-workspace password change and sign-in return');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

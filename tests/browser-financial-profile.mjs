@@ -34,15 +34,25 @@ const errors = [];
 let profile = { income: null, expenses: null, debts: null, savings: null, readiness: null, additional: null,
   sectionUpdatedAt: {}, createdAt: null, updatedAt: null };
 let failExpenseSave = true;
+let failProfileLoad = true;
+let financialLoads = 0;
 page.on('pageerror', error => errors.push(error.message));
 await page.addInitScript(() => localStorage.setItem('nanti.language', 'id'));
 await page.addInitScript({ path: axePath });
 await page.route('**/api/account', route => route.fulfill({ status: 200, json: {
-  available: [], account: { displayName: 'Arya', email: 'arya@example.test', providers: ['google'], recentlyVerified: true, import: null },
+  available: [], account: { displayName: 'Arya'.repeat(25), email: 'long-account-name'.repeat(8) + '@example.test',
+    providers: ['google'], recentlyVerified: true, import: null },
 } }));
 await page.route(/\/api\/account\/financial-profile(?:\/.*)?$/u, async route => {
   const request = route.request();
-  if (request.method() === 'GET') return route.fulfill({ status: 200, json: profile });
+  if (request.method() === 'GET') {
+    financialLoads++;
+    if (failProfileLoad) {
+      failProfileLoad = false;
+      return route.fulfill({ status: 503, json: { error: 'Could not load profile.' } });
+    }
+    return route.fulfill({ status: 200, json: profile });
+  }
   if (request.method() === 'DELETE') {
     profile = { income: null, expenses: null, debts: null, savings: null, readiness: null, additional: null,
       sectionUpdatedAt: {}, createdAt: null, updatedAt: null };
@@ -63,12 +73,36 @@ await page.route(/\/api\/account\/financial-profile(?:\/.*)?$/u, async route => 
 const button = name => page.getByRole('button', { name, exact: true });
 const close = () => browser.close().finally(() => new Promise(resolve => server.close(resolve)));
 try {
+  await page.goto('/account');
+  const workspace = page.getByRole('main');
+  const info = workspace.getByRole('link', { name: 'Informasi akun', exact: true });
+  const financial = workspace.getByRole('link', { name: 'Profil finansial', exact: true });
+  const security = workspace.getByRole('link', { name: 'Keamanan', exact: true });
+  await workspace.getByRole('heading', { name: 'Informasi akun', exact: true }).waitFor();
+  assert.equal(await info.getAttribute('aria-current'), 'page');
+  await security.click();
+  await workspace.getByRole('heading', { name: 'Keamanan', exact: true }).waitFor();
+  assert.equal(await security.getAttribute('aria-current'), 'page');
+  assert.equal(financialLoads, 0);
+  await financial.click();
+  await workspace.getByRole('heading', { name: 'Profil finansial', exact: true }).waitFor();
+  await page.waitForURL('**/account?section=financial-profile');
+  await workspace.getByRole('alert').filter({ hasText: 'Profil finansial belum bisa dimuat' }).waitFor();
+  await button('Coba lagi').click();
+  await page.getByText('Belum bisa dihitung', { exact: true }).waitFor();
+  await page.goBack();
+  await workspace.getByRole('heading', { name: 'Keamanan', exact: true }).waitFor();
+  await page.goForward();
+  await workspace.getByRole('heading', { name: 'Profil finansial', exact: true }).waitFor();
+  assert.equal(financialLoads, 2);
   await page.goto('/account/financial-profile');
-  await page.getByRole('heading', { name: 'Profil Finansial', exact: true }).waitFor();
+  await page.waitForURL('**/account?section=financial-profile');
+  await workspace.getByRole('heading', { name: 'Profil finansial', exact: true }).waitFor();
+  assert.equal(await financial.getAttribute('aria-current'), 'page');
   await page.getByText('Belum bisa dihitung', { exact: true }).waitFor();
   assert.equal(await page.getByText('Belum bisa dihitung', { exact: true }).isVisible(), true);
   assert.equal(await page.locator('.fp-accordion-trigger[aria-expanded="true"]').count(), 0);
-  assert.equal(await page.locator('.fp-additional > h2 button').getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator('.fp-additional > h3 button').getAttribute('aria-expanded'), 'false');
   console.log('PASS direct route and empty profile remain unfilled');
 
   await page.getByRole('button', { name: /Penghasilan/ }).click();
@@ -89,6 +123,13 @@ try {
   await page.getByRole('button', { name: /Kebutuhan/ }).click();
   const expenseRows = page.locator('.fp-expense-row');
   await expenseRows.first().locator('input[inputmode="numeric"]').fill('1.200.000');
+  const expenseCount = await expenseRows.count();
+  await button('Tambah kebutuhan').click();
+  assert.equal(await expenseRows.count(), expenseCount + 1);
+  await expenseRows.last().locator('input:not([inputmode])').fill('Buku sekolah');
+  await expenseRows.last().locator('input[inputmode="numeric"]').fill('250000');
+  await expenseRows.last().getByRole('button', { name: 'Hapus Buku sekolah', exact: true }).click();
+  assert.equal(await expenseRows.count(), expenseCount);
   await page.getByRole('checkbox', { name: /Aku sudah mencatat semua kebutuhan rutinku/ }).check();
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Perubahan belum tersimpan.' }).waitFor();
@@ -113,11 +154,17 @@ try {
   assert.equal((await page.locator('.fp-summary > strong').innerText()).replace(/\s/gu, ''), 'Rp3.800.000');
   console.log('PASS budget calculation and explicit zero installments');
 
+  await page.reload();
+  await page.locator('.fp-summary > strong').filter({ hasText: /3\.800\.000/ }).waitFor();
   await button('Menu profil').click();
+  const menu = page.locator('#masthead-profile');
+  const actions = menu.locator('a, button');
+  assert.deepEqual(await actions.allTextContents(), ['Profil saya', 'Creator Studio', 'Keluar']);
+  assert.equal(await actions.locator('svg').count(), 3);
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Profil Saya');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Profil saya');
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Profil Finansial');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Creator Studio');
   await page.keyboard.press('Escape');
   assert.equal(await button('Menu profil').evaluate(trigger => trigger === document.activeElement), true);
   console.log('PASS profile menu keyboard navigation and focus return');
@@ -126,7 +173,7 @@ try {
     runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] },
   })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })));
   assert.deepEqual(axeFailures, []);
-  for (const width of [320, 360, 390, 430, 768, 1280]) {
+  for (const width of [320, 360, 390, 430, 768, 1024, 1280, 1440]) {
     await page.setViewportSize({ width, height: width < 769 ? 850 : 900 });
     const layout = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth,
       document: document.documentElement.scrollWidth, page: document.querySelector('.fp-page')?.scrollWidth }));
@@ -134,7 +181,7 @@ try {
     assert.ok((layout.page ?? 0) <= layout.viewport, `${width}px profile overflow`);
   }
   assert.deepEqual(errors, []);
-  console.log('PASS WCAG scan, six responsive widths, and no browser errors');
+  console.log('PASS WCAG scan, eight responsive widths, and no browser errors');
 } finally {
   await close();
 }

@@ -11,7 +11,7 @@ import { LocaleProvider, useLocale } from './locale.js';
 import { HeaderActions } from './header-actions.js';
 import type { Message } from './messages.js';
 import type { IntelligenceDrafts, IntelligenceSelection } from './intelligence.js';
-import { AccountDialog, announceAuthChange, authChangeKey, authNotices } from './account.js';
+import { AccountDialog, accountWorkspaceReturnKey, announceAuthChange, authChangeKey, authNotices, hasAccountRecovery } from './account.js';
 import type { AuthNotice } from './account.js';
 import type { AccountStatus } from '../shared/account.js';
 import { financialProfileReturnKey } from '../shared/account.js';
@@ -38,7 +38,7 @@ const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ C
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
 const RecommendationInbox = lazy(() => import('./RecommendationInbox.js').then(({ RecommendationInbox }) => ({ default: RecommendationInbox })));
-const FinancialProfilePage = lazy(() => import('./financial-profile.js').then(({ FinancialProfilePage }) => ({ default: FinancialProfilePage })));
+const AccountWorkspace = lazy(() => import('./account-workspace.js').then(({ AccountWorkspace }) => ({ default: AccountWorkspace })));
 
 type Editor =
   | { kind: 'list'; list?: WishlistSummary }
@@ -149,7 +149,9 @@ function App() {
   const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map() }));
   const [status, setStatus] = useState<Message | ''>('');
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
-  const [showAccount, setShowAccount] = useState(/^\/account\/?$/u.test(location.pathname));
+  const accountRoute = /^\/account\/?$/u.test(location.pathname);
+  const [showAccount, setShowAccount] = useState(accountRoute);
+  const [accountRecovery] = useState(hasAccountRecovery);
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [recommendations, setRecommendations] = useState<'initial' | 'dismissed' | 'reopened'>('initial');
@@ -181,8 +183,10 @@ function App() {
     const controller = new AbortController();
     setSessionError('');
     if (listsLoaded.current) setSessionRefreshing(true);
-    const wishlistRequest = api<WishlistSummary[]>('/session', { method: 'POST', signal: controller.signal });
     const accountRequest = api<AccountStatus>('/account', { signal: controller.signal });
+    const loadLists = () => api<WishlistSummary[]>('/session', { method: 'POST', signal: controller.signal });
+    const isAccountPage = /^\/account\/?$/u.test(location.pathname);
+    const wishlistRequest = isAccountPage ? accountRequest.then(current => current.account && !accountRecovery ? [] : loadLists()) : loadLists();
     Promise.all([wishlistRequest, accountRequest]).then(
       ([lists, current]) => {
         if (controller.signal.aborted) return;
@@ -201,22 +205,40 @@ function App() {
         setAccountStatus(current);
         setLists(lists);
         const address = new URL(location.href);
+        if (isAccountPage && address.searchParams.get('next') === 'creator' && current.account && !accountRecovery) {
+          location.replace('/creator?onboard=1');
+          return;
+        }
+        if (isAccountPage && address.searchParams.get('section') === 'financial-profile' && !current.account) {
+          address.searchParams.set('next', 'financial-profile');
+          history.replaceState(history.state, '', address);
+        }
         const auth = address.searchParams.get('auth');
         if (!auth || !Object.hasOwn(authNotices, auth)) return;
         address.searchParams.delete('auth');
         history.replaceState(null, '', address);
         const outcome = auth as AuthNotice;
         if (['signed-in', 'signed-out', 'imported', 'deleted'].includes(outcome)) announceAuthChange();
-        if (outcome === 'signed-in' && current?.account) {
-          const returnUntil = Number(sessionStorage.getItem(financialProfileReturnKey) ?? 0);
-          sessionStorage.removeItem(financialProfileReturnKey);
-          if (returnUntil > Date.now()) {
-            location.replace('/account/financial-profile?auth=signed-in');
-            return;
-          }
+        if (outcome === 'signed-in' && current.account && !isAccountPage) {
+          try {
+            const financialReturn = Number(sessionStorage.getItem(financialProfileReturnKey));
+            const workspaceReturn = Number(sessionStorage.getItem(accountWorkspaceReturnKey));
+            sessionStorage.removeItem(financialProfileReturnKey);
+            sessionStorage.removeItem(accountWorkspaceReturnKey);
+            if (Math.max(financialReturn, workspaceReturn) > Date.now()) {
+              const section = financialReturn > workspaceReturn ? '&section=financial-profile' : '';
+              location.replace('/account?auth=signed-in' + section);
+              return;
+            }
+          } catch { /* Sign-in can continue without storage. */ }
         }
         if (['linked', 'verified', 'failed', 'cancelled'].includes(outcome) ||
             (outcome === 'signed-in' && current?.account?.import)) {
+          if (current.account && !isAccountPage) {
+            const section = outcome === 'signed-in' ? '' : '&section=security';
+            location.replace('/account?auth=' + outcome + section);
+            return;
+          }
           setNotice(outcome);
           setShowAccount(true);
         } else setStatus(authNotices[outcome]);
@@ -233,7 +255,7 @@ function App() {
       },
     );
     return () => controller.abort();
-  }, [sessionAttempt]);
+  }, [sessionAttempt, accountRecovery]);
 
   const selected = lists?.find((list) => list.id === selectedId) ?? lists?.[0];
   const activeId = selected?.id;
@@ -334,6 +356,31 @@ function App() {
 
   const list = detail?.id === activeId ? detail : null;
   const account = accountStatus?.account;
+  async function signOut() {
+    await api('/account/logout', { method: 'POST' });
+    announceAuthChange();
+    location.replace('/?auth=signed-out');
+  }
+
+  function requestSignOut() {
+    void signOut().catch(() => setStatus('Could not load your account. Try again.'));
+  }
+
+  if (accountRoute && !accountRecovery && accountStatus?.account) {
+    return <Suspense fallback={<RouteLoading label="Preparing your account…" />}>
+      <AccountWorkspace status={accountStatus} notice={notice} update={setAccountStatus}
+        signOut={signOut} statusMessage={status} requestSignOut={requestSignOut} />
+    </Suspense>;
+  }
+
+  if (accountRoute && !accountStatus && !accountRecovery) {
+    return sessionError ? <main className="site consumer account-route-error">
+      <p role="alert">{t('Could not load your account. Try again.')}</p>
+      <button type="button" onClick={() => setSessionAttempt(value => value + 1)}>{t('Try again')}</button>
+      <a href="/">{t('Back to wishlists')}</a>
+    </main> : <RouteLoading label="Preparing your account…" />;
+  }
+
   return (
     <div className="site consumer">
       <header className="masthead">
@@ -342,10 +389,7 @@ function App() {
           <div className="brand">nanti<span>.</span></div>
         </div>
         <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
-          openAlerts={() => setAlertsOpen(true)} signIn={() => setShowAccount(true)} signOut={() => void api('/account/logout', { method: 'POST' }).then(() => {
-            announceAuthChange();
-            location.replace('/?auth=signed-out');
-          }, () => setStatus('Could not load your account. Try again.'))} />
+          openAlerts={() => setAlertsOpen(true)} signIn={() => setShowAccount(true)} signOut={requestSignOut} />
       </header>
       <div className={`workspace${selected ? ' workspace-collection' : ''}`}>
         {selected && <aside className="collection-rail">
@@ -499,7 +543,8 @@ function App() {
               location.replace('/creator?onboard=1');
               return;
             }
-            history.replaceState(history.state, '', '/');
+            location.replace('/');
+            return;
           }
           setShowAccount(false);
           setNotice(null);
@@ -510,11 +555,21 @@ function App() {
 
 const root = document.getElementById('root');
 if (root) {
-  if (/^\/account\/financial-profile\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<p className="site" role="status">Membuka profil finansial…</p>}>
-      <FinancialProfilePage />
-    </Suspense></LocaleProvider>);
-  } else if (/^\/admin\/?$/u.test(location.pathname)) {
+  const address = new URL(location.href);
+  if (/^\/account\/financial-profile\/?$/u.test(address.pathname)) {
+    address.pathname = '/account';
+    address.searchParams.set('section', 'financial-profile');
+    history.replaceState(history.state, '', address);
+  } else if (/^\/account\/?$/u.test(address.pathname) && address.searchParams.get('view') === 'settings') {
+    address.searchParams.delete('view');
+    address.searchParams.set('section', 'security');
+    history.replaceState(history.state, '', address);
+  }
+  if (/^\/account\/?$/u.test(address.pathname) && address.searchParams.get('next') === 'financial-profile') {
+    address.searchParams.set('section', 'financial-profile');
+    history.replaceState(history.state, '', address);
+  }
+  if (/^\/admin\/?$/u.test(location.pathname)) {
     document.documentElement.lang = 'id';
     const accounts = new URLSearchParams(location.search).get('view') === 'accounts';
     createRoot(root).render(<Suspense fallback={<p className="site" role="status">Membuka administrasi…</p>}>
