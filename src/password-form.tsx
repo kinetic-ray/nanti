@@ -25,7 +25,8 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
   const [failed, setFailed] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
-  const [cooldown, setCooldown] = useState(false);
+  const [verificationCooldown, setVerificationCooldown] = useState<{ email: string } | null>(null);
+  const cooldown = verificationCooldown !== null && verificationCooldown.email === pendingEmail;
   const entryMode = mode === 'login' || mode === 'register';
   const returnToFinancialProfile = new URLSearchParams(location.search).get('next') === 'financial-profile';
   const passwordHintId = useId();
@@ -39,15 +40,15 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
       focusAfterChange.current = false;
       formRef.current?.querySelector('input')?.focus();
     }
-  }, [busy, expanded, mode]);
+  }, [busy, expanded, mode, pendingEmail]);
   useLayoutEffect(() => {
     if (pendingEmail) verificationHeading.current?.focus();
   }, [pendingEmail]);
   useEffect(() => {
-    if (!cooldown) return;
-    const timer = window.setTimeout(() => setCooldown(false), 60_000);
+    if (!verificationCooldown) return;
+    const timer = window.setTimeout(() => setVerificationCooldown(null), 60_000);
     return () => window.clearTimeout(timer);
-  }, [cooldown]);
+  }, [verificationCooldown]);
   const code = link.get('token');
   useEffect(() => {
     if (!code) return;
@@ -73,10 +74,10 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     try {
       await api('/account/password/resend', { method: 'POST', data: { email: pendingEmail, creator } });
       setNotice(success);
-      setCooldown(true);
+      setVerificationCooldown({ email: pendingEmail });
     } catch (error) {
       setFailed(true);
-      if (errorMessage(error) === 'Too many account requests. Try again in a minute.') setCooldown(true);
+      if (errorMessage(error) === 'Too many account requests. Try again in a minute.') setVerificationCooldown({ email: pendingEmail });
       setNotice('Could not request a verification email. Try again.');
     } finally {
       setResending(false);
@@ -105,8 +106,9 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     try {
       await api(`/account/password/${mode === 'changeEmail' ? 'email/verify' : mode}`, { method: 'POST', data });
       if (mode === 'register' && typeof data.email === 'string') {
-        setPendingEmail(data.email);
-        setCooldown(true);
+        const email = data.email.toLowerCase();
+        setPendingEmail(email);
+        setVerificationCooldown({ email });
         return;
       }
       if (mode === 'login') {
@@ -128,7 +130,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
       } else setNotice(mode === 'email' ? 'Check your new email address for a verification link.' : success);
     } catch (error) {
       if (mode === 'login' && errorMessage(error) === 'Verify your email before signing in.') {
-        if (delivery && typeof data.email === 'string') setPendingEmail(data.email);
+        if (delivery && typeof data.email === 'string') setPendingEmail(data.email.toLowerCase());
         else {
           setFailed(true);
           setNotice('Verify your email before signing in.');

@@ -256,6 +256,9 @@ try {
   assert.equal(resendRequests, 2);
   await passwordPage.clock.fastForward(60_001);
   assert.equal(await resend.isEnabled(), true);
+  await button(authModes, 'Masuk').click();
+  assert.equal(await passwordEmail.evaluate(element => document.activeElement === element), true);
+  assert.equal(await resend.count(), 0);
   await passwordPage.keyboard.press('Escape');
   await passwordDialog.waitFor({ state: 'hidden' });
   await passwordContext.close();
