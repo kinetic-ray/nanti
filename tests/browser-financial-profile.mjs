@@ -102,7 +102,7 @@ try {
   await page.getByRole('button', { name: /Rp\s*0/ }).waitFor();
 
   await page.getByRole('button', { name: /Target tabungan/ }).click();
-  await page.getByLabel('Uang yang ingin ditabung setiap bulan').locator('input').fill('1.000.000');
+  await page.getByRole('textbox', { name: /Uang yang ingin ditabung setiap bulan/ }).fill('1.000.000');
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.locator('.fp-summary > strong').waitFor();
   assert.equal((await page.locator('.fp-summary > strong').innerText()).replace(/\s/gu, ''), 'Rp3.800.000');
