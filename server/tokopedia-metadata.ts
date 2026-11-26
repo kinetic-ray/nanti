@@ -1,3 +1,4 @@
+import { resolveResilientIpv4 } from './dns-resilience.js';
 import { classifyNetworkError } from './network-diagnostics.js';
 import { resolve4 } from 'node:dns/promises';
 import { request } from 'node:https';
@@ -40,12 +41,17 @@ export function isPublicIpv4(address: string) {
 
 export async function requestPublicPage(url: URL, signal: AbortSignal, accept = 'text/html'): Promise<Response> {
   signal.throwIfAborted();
-  // DNS resolution does not take an AbortSignal. Enforce the same deadline before TLS starts.
-  const addresses = await new Promise<string[]>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason);
-    signal.addEventListener('abort', onAbort, { once: true });
-    resolve4(url.hostname).then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
-  });
+  const addresses = process.env.NANTI_DNS_FALLBACK_ENABLED === 'true'
+    ? await resolveResilientIpv4(url.hostname, signal)
+    : await new Promise<string[]>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+
+      resolve4(url.hostname).then(resolve, reject).finally(() => {
+        signal.removeEventListener('abort', onAbort);
+      });
+    });
+
   signal.throwIfAborted();
   if (!addresses.length || addresses.some((ip) => privateAddresses.check(ip))) {
     throw Object.assign(new Error('Non-public DNS answer'), { code: 'NANTI_DNS_UNSAFE' });
