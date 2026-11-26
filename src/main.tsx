@@ -493,6 +493,7 @@ function App() {
       </Suspense>}
       {showAccount && <AccountDialog status={accountStatus} notice={notice}
         close={() => {
+          if (sessionError) setSessionAttempt(value => value + 1);
           if (/^\/account\/?$/u.test(location.pathname)) {
             if (new URLSearchParams(location.search).get('next') === 'creator') {
               location.replace('/creator?onboard=1');
