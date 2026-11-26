@@ -178,7 +178,7 @@ export function AccountDialog({ status, notice, close, update }: {
     : currentStatus?.emailDelivery ? 'Welcome to Nanti' : 'Sign in to Nanti';
 
   return <Dialog className={account ? 'account-dialog account-settings' : 'account-dialog account-signin'}
-    title={t(title)} busy={busy || passwordBusy} close={close}
+    title={t(title)} busy={busy || passwordBusy} close={close} focusHeading
     headerAction={<button type="button" className="account-signin-close" aria-label={t('Close')}
       disabled={busy || passwordBusy} onClick={close}><Icon name="close" /></button>}>
     {!account && <div className="account-editorial">
