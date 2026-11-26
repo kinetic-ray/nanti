@@ -65,6 +65,7 @@ const close = () => browser.close().finally(() => new Promise(resolve => server.
 try {
   await page.goto('/account/financial-profile');
   await page.getByRole('heading', { name: 'Profil Finansial', exact: true }).waitFor();
+  await page.getByText('Belum bisa dihitung', { exact: true }).waitFor();
   assert.equal(await page.getByText('Belum bisa dihitung', { exact: true }).isVisible(), true);
   assert.equal(await page.locator('.fp-accordion-trigger[aria-expanded="true"]').count(), 0);
   assert.equal(await page.locator('.fp-additional > h2 button').getAttribute('aria-expanded'), 'false');
