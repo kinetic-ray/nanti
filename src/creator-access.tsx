@@ -4,6 +4,7 @@ import { announceAuthChange, authChangeKey } from './account.js';
 import { api, errorMessage } from './api.js';
 import { LanguagePicker, useLocale } from './locale.js';
 import type { Message } from './messages.js';
+import { navigateTo } from './navigation.js';
 
 type State = { profile: { id: string; name: string } | null; continued: boolean };
 
@@ -41,7 +42,7 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
     api<State>('/account/creator', { signal: controller.signal }).then(async data => {
       try {
         if (controller.signal.aborted) return;
-        if (data.profile && !inStudio) location.replace('/creator/studio');
+        if (data.profile && !inStudio) navigateTo('/creator/studio', { replace: true });
         else {
           if (inStudio && data.profile) {
             try {
@@ -103,7 +104,7 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
     try {
       if (!state?.continued) await api('/account/creator/continue', { method: 'POST' });
       await api('/account/creator/setup', { method: 'POST', data: { name } });
-      location.replace('/creator/studio');
+      navigateTo('/creator/studio', { replace: true });
     } catch (failure) {
       if (errorMessage(failure) === 'Sign in to continue.') setSignedOut(true);
       else setError('Could not save your creator profile. Try again.');
