@@ -1,12 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { api } from './api.js';
+import { api, errorMessage } from './api.js';
 import { useLocale } from './locale.js';
 import type { Message } from './messages.js';
 
-type Mode = 'login' | 'register' | 'forgot' | 'resend' | 'verify' | 'reset' | 'change' | 'email' | 'changeEmail';
+type Mode = 'login' | 'register' | 'forgot' | 'verify' | 'reset' | 'change' | 'email' | 'changeEmail';
 const labels: Record<Mode, Message> = {
-  login: 'Sign in with email', register: 'Create an account', forgot: 'Reset password', resend: 'Resend verification',
+  login: 'Sign in with email', register: 'Create an account', forgot: 'Reset password',
   verify: 'Verify email', reset: 'Save new password', change: 'Change password',
   email: 'Change email address', changeEmail: 'Verify new email address',
 };
@@ -23,20 +23,32 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
   const [show, setShow] = useState(false);
   const [notice, setNotice] = useState<Message | null>(null);
   const [failed, setFailed] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [verificationCooldown, setVerificationCooldown] = useState<{ email: string } | null>(null);
+  const cooldown = verificationCooldown !== null && verificationCooldown.email === pendingEmail;
   const entryMode = mode === 'login' || mode === 'register';
   const returnToFinancialProfile = new URLSearchParams(location.search).get('next') === 'financial-profile';
   const passwordHintId = useId();
   const passwordHint = mode === 'verify' ? 'Enter the password you chose when you created your account.'
     : ['register', 'reset', 'change'].includes(mode) ? 'Use at least 8 characters.' : null;
-  const canResend = delivery && ['login', 'register', 'forgot', 'verify'].includes(mode);
   const formRef = useRef<HTMLFormElement>(null);
+  const verificationHeading = useRef<HTMLHeadingElement>(null);
   const focusAfterChange = useRef(false);
   useLayoutEffect(() => {
     if (focusAfterChange.current && !busy) {
       focusAfterChange.current = false;
       formRef.current?.querySelector('input')?.focus();
     }
-  }, [busy, expanded, mode]);
+  }, [busy, expanded, mode, pendingEmail]);
+  useLayoutEffect(() => {
+    if (pendingEmail) verificationHeading.current?.focus();
+  }, [pendingEmail]);
+  useEffect(() => {
+    if (!verificationCooldown) return;
+    const timer = window.setTimeout(() => setVerificationCooldown(null), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [verificationCooldown]);
   const code = link.get('token');
   useEffect(() => {
     if (!code) return;
@@ -51,6 +63,26 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     setShow(false);
     setNotice(null);
     setFailed(false);
+    setPendingEmail(null);
+  }
+  async function resendVerification() {
+    if (!pendingEmail || busy || cooldown) return;
+    setPasswordBusy(true);
+    setResending(true);
+    setNotice(null);
+    setFailed(false);
+    try {
+      await api('/account/password/resend', { method: 'POST', data: { email: pendingEmail, creator } });
+      setNotice(success);
+      setVerificationCooldown({ email: pendingEmail });
+    } catch (error) {
+      setFailed(true);
+      if (errorMessage(error) === 'Too many account requests. Try again in a minute.') setVerificationCooldown({ email: pendingEmail });
+      setNotice('Could not request a verification email. Try again.');
+    } finally {
+      setResending(false);
+      setPasswordBusy(false);
+    }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,7 +93,7 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
       if (key !== 'email' && form.has(key)) data[key] = String(form.get(key));
     }
     if (mode === 'verify' || mode === 'reset' || mode === 'changeEmail') data.code = code;
-    if (creator && ['register', 'forgot', 'resend'].includes(mode)) data.creator = true;
+    if (creator && ['register', 'forgot'].includes(mode)) data.creator = true;
     if (mode === 'reset' && form.get('confirmation') !== form.get('password')) {
       setFailed(true);
       setNotice('Passwords must match.');
@@ -73,6 +105,12 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
     setFailed(false);
     try {
       await api(`/account/password/${mode === 'changeEmail' ? 'email/verify' : mode}`, { method: 'POST', data });
+      if (mode === 'register' && typeof data.email === 'string') {
+        const email = data.email.toLowerCase();
+        setPendingEmail(email);
+        setVerificationCooldown({ email });
+        return;
+      }
       if (mode === 'login') {
         location.replace(creator ? '/creator?onboard=1&auth=signed-in' :
           returnToFinancialProfile ? '/account/financial-profile?auth=signed-in' : '/?auth=signed-in');
@@ -90,7 +128,15 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
         switchMode('login');
         setNotice(mode === 'verify' ? 'Email verified. You can sign in now.' : 'Password updated. Please sign in again.');
       } else setNotice(mode === 'email' ? 'Check your new email address for a verification link.' : success);
-    } catch {
+    } catch (error) {
+      if (mode === 'login' && errorMessage(error) === 'Verify your email before signing in.') {
+        if (delivery && typeof data.email === 'string') setPendingEmail(data.email.toLowerCase());
+        else {
+          setFailed(true);
+          setNotice('Verify your email before signing in.');
+        }
+        return;
+      }
       setFailed(true);
       setNotice(mode === 'verify' ? 'Check your password and verification link, then try again.' :
         mode === 'reset' || mode === 'changeEmail' ? 'This link is invalid or has expired.' :
@@ -106,13 +152,22 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
       <>
         {delivery && !signedIn && entryMode && <div className="account-auth-modes" role="group" aria-label={t('Email authentication')}>
           <button type="button" aria-pressed={mode === 'login'} disabled={busy}
-            onClick={() => mode !== 'login' && switchMode('login')}>{t('Sign in')}</button>
+            onClick={() => (mode !== 'login' || pendingEmail) && switchMode('login')}>{t('Sign in')}</button>
           <button type="button" aria-pressed={mode === 'register'} disabled={busy}
             onClick={() => mode !== 'register' && switchMode('register')}>{t(labels.register)}</button>
         </div>}
-        <form key={mode} ref={formRef} className="account-section" onSubmit={event => void submit(event)}>
+        {pendingEmail ? <div className="account-verification">
+          <h3 tabIndex={-1} ref={verificationHeading}>{t('Check your email')}</h3>
+          <p>{t(mode === 'register'
+            ? 'If you can register with this address, use the link in your email to verify it.'
+            : 'Verify your email before signing in.')}</p>
+          <button type="button" disabled={busy || cooldown} onClick={() => void resendVerification()}>
+            {t(resending ? 'Requesting verification email…' : 'Resend verification email')}
+          </button>
+          {cooldown && <p className="hint" role="status">{t('Wait one minute before requesting another email.')}</p>}
+        </div> : <form key={mode} ref={formRef} className="account-section" onSubmit={event => void submit(event)}>
           {!entryMode && <h3>{t(labels[mode])}</h3>}
-          {['login', 'register', 'forgot', 'resend', 'email'].includes(mode) && <label>{t(mode === 'email' ? 'New email address' : 'Email')}
+          {['login', 'register', 'forgot', 'email'].includes(mode) && <label>{t(mode === 'email' ? 'New email address' : 'Email')}
             <input type="email" name="email" autoComplete="email" required maxLength={254} disabled={busy} />
           </label>}
           {(mode === 'change' || mode === 'email') && <label>{t('Current password')}
@@ -128,22 +183,22 @@ export function PasswordForm({ delivery, signedIn, creator, busy, setPasswordBus
               <button type="button" aria-label={t(show ? 'Hide password' : 'Show password')} disabled={busy}
                 onClick={() => setShow(value => !value)}>{t(show ? 'Hide' : 'Show')}</button>
             </div>
-            {passwordHint && <p id={passwordHintId} className="hint">{t(passwordHint)}</p>}
+            {entryMode && delivery ? <div className="account-password-assist">
+              {passwordHint ? <p id={passwordHintId} className="hint">{t(passwordHint)}</p> :
+                <button type="button" className="account-forgot" disabled={busy}
+                  onClick={() => switchMode('forgot')}>{t('Forgot password?')}</button>}
+            </div> : passwordHint && <p id={passwordHintId} className="hint">{t(passwordHint)}</p>}
           </>}
           {mode === 'reset' && <label>{t('Confirm new password')}
             <input name="confirmation" type={show ? 'text' : 'password'} autoComplete="new-password"
               required minLength={8} maxLength={256} disabled={busy} />
           </label>}
           <button type="submit" className="primary" disabled={busy}>{t(labels[mode])}</button>
-        </form>
+        </form>}
         {notice && <p className={failed ? 'error' : undefined} role={failed ? 'alert' : 'status'}>{t(notice)}</p>}
-        {!signedIn && (!entryMode || delivery) && <div className="actions">
+        {!signedIn && !entryMode && <div className="actions">
           {returnToAccount ? <a href="/account">{t('Back to account')}</a> :
             !entryMode && <button type="button" disabled={busy} onClick={() => switchMode('login')}>{t('Back to sign in')}</button>}
-          {delivery && mode === 'login' && <button type="button" disabled={busy}
-            onClick={() => switchMode('forgot')}>{t(labels.forgot)}</button>}
-          {canResend && <button type="button" disabled={busy}
-            onClick={() => switchMode('resend')}>{t(labels.resend)}</button>}
         </div>}
         {entryMode && alternatives}
       </>}

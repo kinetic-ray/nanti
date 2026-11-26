@@ -507,6 +507,7 @@ a.merchant {
 }
 .consumer .account-signin > .dialog-header { padding-bottom: .65rem; }
 .consumer .account-signin > .dialog-header > h2 { line-height: 1.15; }
+.consumer .account-signin > .dialog-content { scrollbar-gutter: stable; }
 .consumer .account-signin .account-signin-close { border-color: var(--line); }
 .account-editorial { display: none; }
 .consumer .account-signin .account-providers { margin: 0; gap: .5rem; }
@@ -553,6 +554,27 @@ a.merchant {
 }
 .consumer .account-signin form { gap: .75rem; margin: 0; padding: 0; border: 0; }
 .consumer .account-signin form .hint { margin: -.35rem 0 0; }
+.consumer .account-signin form .account-password-assist .hint { margin: 0; }
+.account-password-assist {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin-block: -.5rem -.25rem;
+}
+.consumer .account-signin .account-forgot {
+  margin-inline-start: auto;
+  padding: .25rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: .8125rem;
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+.consumer .account-signin .account-forgot:hover:not(:disabled) { background: var(--wash); }
+.account-verification { display: grid; align-content: start; gap: .75rem; }
+.account-verification p { margin: 0; }
+.account-verification button { justify-self: start; }
 .consumer .account-signin form > .primary { min-height: 3rem; }
 .consumer .account-password input { min-height: 3rem; }
 .account-password-field { position: relative; }
@@ -567,6 +589,7 @@ a.merchant {
   border-color: transparent;
   color: var(--accent-strong);
 }
+.consumer .account-password-field button:focus-visible { outline-offset: -3px; }
 .consumer .account-signin .account-password .actions { gap: 0 .75rem; margin-top: .3rem; }
 .consumer .account-signin .account-password .actions button { font-size: .8125rem; }
 .consumer .account-signin .account-password .actions button,
@@ -601,6 +624,7 @@ a.merchant {
     width: var(--auth-width);
     padding-inline-start: var(--editorial-width);
   }
+  .consumer .account-signin:has(.account-auth-modes) { height: 39rem; }
   .consumer .account-signin > .dialog-header { padding-top: 1.75rem; }
   .account-signin > .dialog-header > h2::before { display: none; }
   .account-editorial {

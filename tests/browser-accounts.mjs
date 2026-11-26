@@ -177,6 +177,98 @@ try {
   await db.creatorProfile.delete({ where: { userId: accountIdentity.userId } });
   console.log('PASS signed-in recovery links, fragment cleanup and accessibility');
 
+  const passwordContext = await device(1280);
+  const email = 'password-fixture@example.test';
+  let resendRequests = 0;
+  await passwordContext.route('**/api/account', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), emailDelivery: true } });
+  });
+  await passwordContext.route('**/api/account/password/*', async route => {
+    const action = new URL(route.request().url()).pathname.split('/').at(-1);
+    const data = route.request().postDataJSON();
+    assert.equal(data.email, email);
+    if (action === 'login') {
+      const error = data.password === 'fixture-password' ? 'Verify your email before signing in.' :
+        'Check your email, password, and email verification.';
+      return route.fulfill({ status: 401, json: { error } });
+    }
+    if (action === 'resend' && ++resendRequests === 1) {
+      return route.fulfill({ status: 503, json: { error: 'Email delivery is currently unavailable.' } });
+    }
+    assert.ok(['register', 'forgot', 'resend'].includes(action));
+    await route.fulfill({ status: 202 });
+  });
+  const passwordPage = await open(passwordContext);
+  await button(passwordPage, 'Masuk').click();
+  const passwordDialog = modal(passwordPage, 'Selamat datang di Nanti');
+  const resend = button(passwordDialog, 'Kirim ulang email verifikasi');
+  const authModes = passwordDialog.getByRole('group', { name: 'Akses dengan email' });
+  const passwordInput = passwordDialog.getByLabel('Kata sandi', { exact: true });
+  const passwordEmail = passwordDialog.getByLabel('Email', { exact: true });
+  const forgot = button(passwordDialog, 'Lupa kata sandi?');
+  const signInShell = await passwordDialog.boundingBox();
+  const promo = passwordDialog.locator('.account-editorial');
+  const promoBounds = await promo.boundingBox();
+  assert.equal(await resend.count(), 0);
+  const [field, recovery, submit] = await Promise.all([
+    passwordInput.boundingBox(), forgot.boundingBox(), button(passwordDialog, 'Masuk dengan email').boundingBox(),
+  ]);
+  assert.ok(recovery.y >= field.y + field.height && recovery.y + recovery.height <= submit.y);
+  assert.ok(Math.abs(recovery.x + recovery.width - field.x - field.width) <= 1);
+  await button(authModes, 'Buat akun').click();
+  assert.deepEqual(await passwordDialog.boundingBox(), signInShell);
+  assert.deepEqual(await promo.boundingBox(), promoBounds);
+  assert.equal(await resend.count(), 0);
+  await audit(passwordPage, '1280px registration');
+  for (const width of [390, 320]) {
+    await passwordPage.setViewportSize({ width, height: 480 });
+    await audit(passwordPage, `${width}px registration`);
+    await button(authModes, 'Masuk').click();
+    await audit(passwordPage, `${width}px sign-in with email delivery`);
+    await button(authModes, 'Buat akun').click();
+  }
+  await passwordPage.clock.install();
+  await passwordEmail.fill(email);
+  await passwordInput.fill('fixture-password');
+  await button(passwordDialog.locator('form'), 'Buat akun').click();
+  await visible(passwordDialog.getByRole('heading', { name: 'Cek email kamu' }));
+  assert.equal(await resend.isDisabled(), true);
+  await audit(passwordPage, '320px registration verification');
+  await button(authModes, 'Masuk').click();
+  await passwordEmail.fill(email);
+  await passwordInput.fill('wrong-password');
+  await button(passwordDialog, 'Masuk dengan email').click();
+  await visible(passwordDialog.getByRole('alert'));
+  assert.equal(await resend.count(), 0);
+  await forgot.click();
+  await passwordEmail.fill(email);
+  await button(passwordDialog, 'Atur ulang kata sandi').click();
+  await visible(passwordDialog.locator('.account-password').getByRole('status'));
+  await button(passwordDialog, 'Kembali ke halaman masuk').click();
+  await passwordPage.clock.fastForward(60_001);
+  await passwordEmail.fill(email);
+  await passwordInput.fill('fixture-password');
+  await button(passwordDialog, 'Masuk dengan email').click();
+  const verificationHeading = passwordDialog.getByRole('heading', { name: 'Cek email kamu' });
+  await visible(verificationHeading);
+  assert.equal(await verificationHeading.evaluate(element => document.activeElement === element), true);
+  await resend.click();
+  await visible(passwordDialog.getByRole('alert'));
+  await resend.click();
+  await visible(passwordDialog.locator('.account-password').getByRole('status').filter({ hasText: 'Tunggu satu menit' }));
+  assert.equal(await resend.isDisabled(), true);
+  assert.equal(resendRequests, 2);
+  await passwordPage.clock.fastForward(60_001);
+  assert.equal(await resend.isEnabled(), true);
+  await button(authModes, 'Masuk').click();
+  assert.equal(await passwordEmail.evaluate(element => document.activeElement === element), true);
+  assert.equal(await resend.count(), 0);
+  await passwordPage.keyboard.press('Escape');
+  await passwordDialog.waitFor({ state: 'hidden' });
+  await passwordContext.close();
+  console.log('PASS desktop shell, 390px and 320px auth layouts, registration, recovery and verification resend states');
+
   const second = await device(390);
   const english = await open(second);
   await button(english, 'Switch to English').click();
@@ -196,6 +288,7 @@ try {
   assert.equal(await english.locator('html').getAttribute('lang'), 'en');
   await english.goto('/account');
   const profile = modal(english, 'Your account');
+  await button(profile, 'Edit').click();
   await profile.getByLabel('Display name').fill('Shared profile');
   await button(profile, 'Save name').click();
   await visible(profile.getByText('Display name saved.', { exact: true }));

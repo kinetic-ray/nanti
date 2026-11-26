@@ -264,12 +264,16 @@ export function accountRoutes(accounts: Accounts, providers: OAuthProviders, sec
       return;
     }
     const anonymous = guest(req);
-    const raw = await accounts.passwords.login(email, password, anonymous && await accounts.guest(anonymous) ? anonymous : null);
-    if (!raw) {
+    const result = await accounts.passwords.login(email, password, anonymous && await accounts.guest(anonymous) ? anonymous : null);
+    if (!result) {
       res.status(401).json({ error: 'Check your email, password, and email verification.' });
       return;
     }
-    res.cookie(sessionCookie, raw, { ...sessionOptions, maxAge: sessionDuration });
+    if (result.verificationRequired) {
+      res.status(401).json({ error: 'Verify your email before signing in.' });
+      return;
+    }
+    res.cookie(sessionCookie, result.sessionToken, { ...sessionOptions, maxAge: sessionDuration });
     clearAttempts(res);
     res.sendStatus(204);
   });
