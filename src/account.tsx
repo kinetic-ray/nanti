@@ -321,8 +321,8 @@ export function AccountDialog({ status, notice, close, update }: {
           </details>
         </section>
       </>}
-    <div className="account-footer"><button type="button" onClick={close} disabled={busy || passwordBusy}>
-      {t(account ? 'Close' : 'Continue as guest')}
-    </button></div>
+    {!account && <div className="account-footer"><button type="button" onClick={close} disabled={busy || passwordBusy}>
+      {t('Continue as guest')}
+    </button></div>}
   </Dialog>;
 }
