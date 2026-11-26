@@ -221,7 +221,7 @@
   width: 100%;
   max-width: none;
   margin-inline: 0;
-  padding: 1.5rem;
+  padding: 1.5rem clamp(.75rem, 3vw, 2rem);
 }
 
 .aw[data-workspace="account"] .account-workspace {
@@ -284,7 +284,7 @@
 
 @media (max-width: 47.99rem) {
   .aw[data-workspace="account"] .aw-main {
-    padding: 1rem;
+    padding: 1rem clamp(.75rem, 3vw, 2rem);
   }
 
   .aw[data-workspace="account"] .account-workspace-content {
