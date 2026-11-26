@@ -491,7 +491,7 @@ function App() {
       {alertsOpen && <Suspense fallback={<p role="status" className="sr-only">{t('Loading price alerts…')}</p>}>
         <PriceAlerts close={() => setAlertsOpen(false)} onRead={() => setRevision(value => value + 1)} />
       </Suspense>}
-      {showAccount && lists && <AccountDialog status={accountStatus} notice={notice}
+      {showAccount && <AccountDialog status={accountStatus} notice={notice}
         close={() => {
           if (/^\/account\/?$/u.test(location.pathname)) {
             if (new URLSearchParams(location.search).get('next') === 'creator') {
