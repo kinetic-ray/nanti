@@ -104,7 +104,9 @@ export function CreatorAccess({ studio }: { studio: (id: string, draft: unknown)
     try {
       if (!state?.continued) await api('/account/creator/continue', { method: 'POST' });
       await api('/account/creator/setup', { method: 'POST', data: { name } });
-      navigateTo('/creator/studio', { replace: true });
+      setState(null);
+      setDraft(null);
+      setRevision(value => value + 1);
     } catch (failure) {
       if (errorMessage(failure) === 'Sign in to continue.') setSignedOut(true);
       else setError('Could not save your creator profile. Try again.');

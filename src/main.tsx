@@ -234,7 +234,7 @@ function App() {
         }
         const address = new URL(location.href);
         if (accountRoute && address.searchParams.get('next') === 'creator' && current.account && !accountRecovery) {
-          navigateTo('/creator?onboard=1', { replace: true });
+          location.replace('/creator?onboard=1');
           return;
         }
         if (accountRoute && address.searchParams.get('section') === 'financial-profile' && !current.account) {
@@ -255,7 +255,7 @@ function App() {
             sessionStorage.removeItem(accountWorkspaceReturnKey);
             if (Math.max(financialReturn, workspaceReturn) > Date.now()) {
               const section = financialReturn > workspaceReturn ? '&section=financial-profile' : '';
-              navigateTo('/account?auth=signed-in' + section, { replace: true });
+              location.replace('/account?auth=signed-in' + section);
               return;
             }
           } catch { /* Sign-in can continue without storage. */ }
@@ -264,7 +264,7 @@ function App() {
             (outcome === 'signed-in' && current?.account?.import)) {
           if (current.account && !accountEntry && !['failed', 'cancelled'].includes(outcome)) {
             const section = outcome === 'signed-in' ? '' : '&section=security';
-            navigateTo('/account?auth=' + outcome + section, { replace: true });
+            location.replace('/account?auth=' + outcome + section);
             return;
           }
           setNotice(outcome);
