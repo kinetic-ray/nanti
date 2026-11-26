@@ -78,7 +78,7 @@ try {
   await page.getByRole('checkbox', { name: 'Jumlah ini sudah mencakup seluruh penghasilan bulananmu.' }).check();
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'Perubahan tersimpan.' }).waitFor();
-  await page.getByRole('button', { name: /Rp6\.000\.000/ }).waitFor();
+  await page.getByRole('button', { name: /Rp\s*6\.000\.000/ }).waitFor();
   assert.equal(profile.income.items[0].monthlyNet, '6000000');
   console.log('PASS income fields, stability, and Rupiah total');
 
@@ -96,13 +96,13 @@ try {
   await page.getByRole('button', { name: /Cicilan/ }).click();
   await page.getByRole('button', { name: 'Tidak ada cicilan', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
-  await page.getByRole('button', { name: /Rp0/ }).waitFor();
+  await page.getByRole('button', { name: /Rp\s*0/ }).waitFor();
 
   await page.getByRole('button', { name: /Target tabungan/ }).click();
   await page.getByLabel('Uang yang ingin ditabung setiap bulan').locator('input').fill('1.000.000');
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.locator('.fp-summary > strong').waitFor();
-  assert.equal(await page.locator('.fp-summary > strong').innerText(), 'Rp3.800.000');
+  assert.equal((await page.locator('.fp-summary > strong').innerText()).replace(/\s/gu, ''), 'Rp3.800.000');
   console.log('PASS budget calculation and explicit zero installments');
 
   await button('Menu profil').click();

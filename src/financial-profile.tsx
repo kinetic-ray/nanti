@@ -49,6 +49,10 @@ function formatDigits(value: string) {
   return value.replace(/\B(?=(\d{3})+(?!\d))/gu, '.');
 }
 
+function formatRupiah(value: string) {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(BigInt(value));
+}
+
 function AmountInput({ label, value, onChange, compact = false }: {
   label: string; value: string | null; onChange: (value: string | null) => void; compact?: boolean;
 }) {
@@ -101,7 +105,7 @@ function today() {
 }
 
 export function FinancialProfilePage() {
-  const { t, date, money: formatMoney, language } = useLocale();
+  const { date, language } = useLocale();
   const l = (id: string, en: string) => language === 'id' ? id : en;
   const [account, setAccount] = useState<AccountStatus['account'] | null>(null);
   const [profile, setProfile] = useState<FinancialProfile | null>(null);
@@ -236,7 +240,7 @@ export function FinancialProfilePage() {
               <p id="fp-summary-heading">{l('Uang bebas per bulan', 'Available per month')}</p>
               <strong className={freeBudget !== null && BigInt(freeBudget) < 0n ? 'is-negative' : ''}>
                 {freeBudget === null ? l('Belum bisa dihitung', 'Not enough information')
-                  : freeBudget.startsWith('-') ? `−${formatMoney(freeBudget.slice(1), 'IDR')}` : formatMoney(freeBudget, 'IDR')}
+                  : freeBudget.startsWith('-') ? `−${formatRupiah(freeBudget.slice(1))}` : formatRupiah(freeBudget)}
               </strong>
               <span>{summaryDescription}</span>
               {allocation && <div className="fp-allocation" role="img" aria-label={l('Perbandingan kebutuhan, cicilan, tabungan, dan uang bebas.', 'Share of expenses, installments, savings, and available money.')}>
@@ -261,7 +265,7 @@ export function FinancialProfilePage() {
                   return <article className={`fp-accordion-item${expandedNow ? ' is-open' : ''}`} key={key}>
                     <h3><button type="button" className="fp-accordion-trigger" aria-expanded={expandedNow}
                       aria-controls={`fp-panel-${key}`} onClick={() => { setExpanded(expandedNow ? null : key); setError(''); }}>
-                      <span>{title}</span><span className="fp-parent-value">{unknown ? l('Belum diisi', 'Not filled in') : formatMoney(amount, 'IDR')}</span>
+                      <span>{title}</span><span className="fp-parent-value">{unknown ? l('Belum diisi', 'Not filled in') : formatRupiah(amount)}</span>
                       <ChevronDown size={18} aria-hidden="true" />
                     </button></h3>
                     {expandedNow && <div id={`fp-panel-${key}`} className="fp-panel">
@@ -371,14 +375,14 @@ export function FinancialProfilePage() {
               <div className="fp-compact-rows">
                 <ReadinessRow title={l('Uang yang bisa dipakai sekarang', 'Cash available now')}
                   helper={l('Uang yang tidak dialokasikan untuk kebutuhan atau tujuan lain.', 'Money not set aside for expenses or other goals.')}
-                  value={drafts.readiness.availableCash} format={value => formatMoney(value, 'IDR')}
+                  value={drafts.readiness.availableCash} format={formatRupiah}
                   editing={editingReadiness === 'cash'} onEdit={() => setEditingReadiness(editingReadiness === 'cash' ? null : 'cash')}
                   onChange={availableCash => setDraft('readiness', { ...drafts.readiness, availableCash })}
                   onSave={() => void saveSection('readiness', drafts.readiness)} busy={saving === 'readiness'}
                   canSave={drafts.readiness.availableCash !== null || Boolean(profile?.readiness)} />
                 <ReadinessRow title={l('Dana darurat', 'Emergency fund')}
                   helper={l('Uang cadangan untuk kejadian tak terduga.', 'Money reserved for unexpected events.')}
-                  value={drafts.readiness.emergencyFund} format={value => formatMoney(value, 'IDR')}
+                  value={drafts.readiness.emergencyFund} format={formatRupiah}
                   editing={editingReadiness === 'emergency'} onEdit={() => setEditingReadiness(editingReadiness === 'emergency' ? null : 'emergency')}
                   onChange={emergencyFund => setDraft('readiness', { ...drafts.readiness, emergencyFund })}
                   onSave={() => void saveSection('readiness', drafts.readiness)} busy={saving === 'readiness'}
@@ -456,7 +460,6 @@ function ReadinessRow({ title, helper, value, format, editing, onEdit, onChange,
 function GoalEditor({ goal, onChange, onRemove }: { goal: FinancialGoal; onChange: (patch: Partial<FinancialGoal>) => void; onRemove: () => void }) {
   const { language } = useLocale();
   const l = (id: string, en: string) => language === 'id' ? id : en;
-  const { money } = useLocale();
   return <article className="fp-goal">
     <div className="fp-goal-top"><label className="fp-text-field"><span>{l('Nama tujuan', 'Goal name')}</span>
       <input value={goal.name} maxLength={80} placeholder={l('Contoh: Laptop baru', 'For example, a new laptop')}
@@ -469,6 +472,6 @@ function GoalEditor({ goal, onChange, onRemove }: { goal: FinancialGoal; onChang
       <label className="fp-text-field"><span>{l('Target tanggal (opsional)', 'Target date (optional)')}</span>
         <input type="date" value={goal.targetDate ?? ''} onChange={event => onChange({ targetDate: event.target.value || null })} /></label>
     </div>
-    <span className="sr-only">{goal.targetAmount ? money(goal.targetAmount, 'IDR') : ''}</span>
+    <span className="sr-only">{goal.targetAmount ? formatRupiah(goal.targetAmount) : ''}</span>
   </article>;
 }
