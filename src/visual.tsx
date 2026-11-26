@@ -21,20 +21,20 @@ export function Loading({ label }: { label: string }) {
   </div>;
 }
 
-function ProductPhoto({ src }: { src: string }) {
+function ProductPhoto({ src, priority = false }: { src: string; priority?: boolean }) {
   const [available, setAvailable] = useState(false);
   const [failed, setFailed] = useState(false);
   if (failed) return null;
-  return <img src={src} alt="" loading="lazy" decoding="async" className={available ? 'is-ready' : undefined}
+  return <img src={src} alt="" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : 'auto'} decoding="async" className={available ? 'is-ready' : undefined}
     onLoad={() => setAvailable(true)} onError={() => setFailed(true)} />;
 }
 
-export function ProductMedia({ item, listId }: { item: Item; listId: string }) {
+export function ProductMedia({ item, listId, priority = false }: { item: Item; listId: string; priority?: boolean }) {
   const listing = item.url ? safeProductUrl(item.url) : null;
   const supported = listing && isIkeaMetadataLink(listing);
   return <div aria-hidden="true" className="product-media">
     <span>{Array.from(item.name)[0]?.toLocaleUpperCase()}</span>
-    {item.imageKey && <ProductPhoto key={item.id} src={`/api/wishlists/${listId}/items/${item.id}/uploaded-image`} />}
-    {!item.imageKey && supported && <ProductPhoto key={listing.href} src={`/api/wishlists/${listId}/items/${item.id}/image`} />}
+    {item.imageKey && <ProductPhoto key={item.id} src={`/api/wishlists/${listId}/items/${item.id}/uploaded-image`} priority={priority} />}
+    {!item.imageKey && supported && <ProductPhoto key={listing.href} src={`/api/wishlists/${listId}/items/${item.id}/image`} priority={priority} />}
   </div>;
 }

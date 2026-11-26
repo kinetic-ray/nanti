@@ -159,6 +159,10 @@ try {
   await visible(list);
   console.log('PASS 360px guest sign-in, keyboard recovery, confirmation, import and accessibility');
 
+  const accountIdentity = await db.authIdentity.findUniqueOrThrow({
+    where: { provider_subjectHash: { provider: 'google', subjectHash: tokenHash(subject) } },
+  });
+  await db.creatorProfile.create({ data: { userId: accountIdentity.userId, name: 'Eligible browser creator' } });
   for (const mode of ['verify', 'reset']) {
     await guest.goto(`/account?recovery=${mode}#mode=${mode}&token=fixture`);
     const recovery = modal(guest, 'Akunmu');
@@ -170,6 +174,7 @@ try {
   }
   await button(account, 'Tutup').click();
   await account.waitFor({ state: 'hidden' });
+  await db.creatorProfile.delete({ where: { userId: accountIdentity.userId } });
   console.log('PASS signed-in recovery links, fragment cleanup and accessibility');
 
   const second = await device(390);

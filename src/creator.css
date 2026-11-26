@@ -185,7 +185,7 @@ body:has(.creator-page){background:#f6f5fc}
 .creator-showcase-note { margin-inline: auto; text-align: center; }
 .creator-post-journey {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 .creator-stepper {
   display: grid;
