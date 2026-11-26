@@ -78,8 +78,11 @@ try {
   await page.getByRole('checkbox', { name: 'Jumlah ini sudah mencakup seluruh penghasilan bulananmu.' }).check();
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'Perubahan tersimpan.' }).waitFor();
-  await page.getByRole('button', { name: /Rp\s*6\.000\.000/ }).waitFor();
   assert.equal(profile.income.items[0].monthlyNet, '6000000');
+  const incomeTotal = page.locator('.fp-accordion-item').filter({ hasText: 'Penghasilan' }).locator('.fp-parent-value');
+  const incomeTotalText = (await incomeTotal.innerText()).replace(/\s/gu, '');
+  console.log(`Income parent total: ${incomeTotalText}`);
+  assert.equal(incomeTotalText, 'Rp6.000.000');
   console.log('PASS income fields, stability, and Rupiah total');
 
   await page.getByRole('button', { name: /Kebutuhan/ }).click();
