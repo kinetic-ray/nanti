@@ -94,17 +94,21 @@ try {
   assert.equal(await expenseRows.first().locator('input[inputmode="numeric"]').inputValue(), '1.200.000');
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'Perubahan tersimpan.' }).waitFor();
+  assert.equal(profile.expenses.confirmed, true);
   console.log('PASS failed save preserves the entered expense and retry succeeds');
 
   await page.getByRole('button', { name: /Cicilan/ }).click();
   await page.getByRole('button', { name: 'Tidak ada cicilan', exact: true }).click();
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.getByRole('button', { name: /Rp\s*0/ }).waitFor();
+  assert.equal(profile.debts.status, 'none');
 
   await page.getByRole('button', { name: /Target tabungan/ }).click();
   await page.getByRole('textbox', { name: /Uang yang ingin ditabung setiap bulan/ }).fill('1.000.000');
   await page.getByRole('button', { name: 'Simpan', exact: true }).click();
   await page.locator('.fp-summary > strong').waitFor();
+  assert.equal(profile.savings.monthlyAmount, '1000000');
+  console.log(`Budget inputs: ${JSON.stringify({ income: profile.income, expenses: profile.expenses, debts: profile.debts, savings: profile.savings })}`);
   assert.equal((await page.locator('.fp-summary > strong').innerText()).replace(/\s/gu, ''), 'Rp3.800.000');
   console.log('PASS budget calculation and explicit zero installments');
 
