@@ -135,14 +135,58 @@ export function FinancialProfile() {
     return () => controller.abort();
   }, [attempt]);
 
-  const incomeTotal = totalAmounts(profile?.income?.items.map(item => ({ amount: item.monthlyNet })) ?? null,
-    Boolean(profile?.income?.confirmed));
-  const expenseTotal = profile?.expenses?.confirmed
-    ? profile.expenses.items.reduce((sum, item) => sum + BigInt(item.monthlyAmount ?? '0'), 0n).toString() : null;
-  const debtTotal = profile?.debts?.status === 'none' ? '0'
-    : profile?.debts?.status === 'listed' && profile.debts.items.every(item => item.monthlyAmount !== null)
-      ? profile.debts.items.reduce((sum, item) => sum + BigInt(item.monthlyAmount), 0n).toString() : null;
-  const savingsTotal = profile?.savings?.monthlyAmount ?? null;
+  const incomeTotal = totalAmounts(
+    drafts.income.items.map(item => ({ amount: item.monthlyNet })),
+    drafts.income.confirmed,
+  );
+
+  const expenseTotal = drafts.expenses.confirmed
+    ? drafts.expenses.items.reduce(
+        (sum, item) => sum + BigInt(item.monthlyAmount ?? '0'),
+        0n,
+      ).toString()
+    : null;
+
+  const debtTotal = drafts.debts.status === 'none'
+    ? '0'
+    : drafts.debts.status === 'listed' &&
+        drafts.debts.items.length > 0 &&
+        drafts.debts.items.every(item => /^\d+$/.test(item.monthlyAmount))
+      ? drafts.debts.items.reduce(
+          (sum, item) => sum + BigInt(item.monthlyAmount),
+          0n,
+        ).toString()
+      : null;
+
+  const savingsTotal = drafts.savings.monthlyAmount;
+
+  const hasUnsavedMonthlyChanges = (
+    ['income', 'expenses', 'debts', 'savings'] as const
+  ).some(key => {
+    const saved = profile?.[key];
+
+    if (saved) {
+      return JSON.stringify(saved) !== JSON.stringify(drafts[key]);
+    }
+
+    if (key === 'income') {
+      return drafts.income.confirmed ||
+        drafts.income.stability !== null ||
+        drafts.income.items.some(item => item.monthlyNet !== null);
+    }
+
+    if (key === 'expenses') {
+      return drafts.expenses.confirmed ||
+        drafts.expenses.items.some(item => item.monthlyAmount !== null);
+    }
+
+    if (key === 'debts') {
+      return drafts.debts.status !== 'unknown';
+    }
+
+    return drafts.savings.monthlyAmount !== null;
+  });
+
   const freeBudget = useMemo(() => {
     if ([incomeTotal, expenseTotal, debtTotal, savingsTotal].some(value => value === null)) return null;
     return (BigInt(incomeTotal!) - BigInt(expenseTotal!) - BigInt(debtTotal!) - BigInt(savingsTotal!)).toString();
@@ -221,6 +265,14 @@ export function FinancialProfile() {
                   : freeBudget.startsWith('-') ? `−${formatRupiah(freeBudget.slice(1))}` : formatRupiah(freeBudget)}
               </strong>
               <span>{summaryDescription}</span>
+              {hasUnsavedMonthlyChanges && (
+                <small className="fp-summary-draft">
+                  {l(
+                    'Perkiraan dari isian saat ini. Perubahan belum tersimpan.',
+                    'Estimate based on current entries. Changes are not saved yet.',
+                  )}
+                </small>
+              )}
               {allocation && <div className="fp-allocation" role="img" aria-label={l('Perbandingan kebutuhan, cicilan, tabungan, dan uang bebas.', 'Share of expenses, installments, savings, and available money.')}>
                 {allocation.map((width, index) => <span key={index} className={`fp-allocation-part fp-allocation-${index}`} style={{ width: `${width}%` }} />)}
               </div>}
@@ -243,7 +295,14 @@ export function FinancialProfile() {
                   return <article className={`fp-accordion-item${expandedNow ? ' is-open' : ''}`} key={key}>
                     <h4><button type="button" className="fp-accordion-trigger" aria-expanded={expandedNow}
                       aria-controls={`fp-panel-${key}`} onClick={() => { setExpanded(expandedNow ? null : key); setError(''); }}>
-                      <span>{title}</span><span className="fp-parent-value">{unknown ? l('Belum diisi', 'Not filled in') : formatRupiah(amount)}</span>
+                      <span className="fp-category-heading">
+  <span>{title}</span>
+  {key === 'income' && profile?.income?.stability == null && (
+    <small className="fp-incomplete-note">
+      {l('Pola penghasilan belum dipilih', 'Income pattern not selected')}
+    </small>
+  )}
+</span><span className="fp-parent-value">{unknown ? l('Belum diisi', 'Not filled in') : formatRupiah(amount)}</span>
                       <ChevronDown size={18} aria-hidden="true" />
                     </button></h4>
                     {expandedNow && <div id={`fp-panel-${key}`} className="fp-panel">
@@ -260,8 +319,8 @@ export function FinancialProfile() {
                         <button className="fp-text-action" type="button" onClick={() => setDraft('income', { ...drafts.income,
                           items: [...drafts.income.items, { id: crypto.randomUUID(), name: '', monthlyNet: null }] })}>
                           <Plus size={16} aria-hidden="true" />{l('Tambah penghasilan', 'Add income')}</button>
-                        <label className="fp-select-field"><span>{l('Penghasilanmu biasanya…', 'Your income is usually…')}</span>
-                          <select value={drafts.income.stability ?? ''} onChange={event => setDraft('income', { ...drafts.income,
+                        <label className="fp-select-field"><span>{l('Pola penghasilan', 'Income pattern')}</span>
+                          <select required aria-required="true" value={drafts.income.stability ?? ''} onChange={event => setDraft('income', { ...drafts.income,
                             stability: (event.target.value || null) as IncomeSection['stability'] })}>
                             <option value="">{l('Pilih salah satu', 'Choose one')}</option>
                             <option value="steady">{l('Tetap setiap bulan', 'The same each month')}</option>
@@ -271,7 +330,7 @@ export function FinancialProfile() {
                         <label className="fp-check"><input type="checkbox" checked={drafts.income.confirmed} onChange={event => setDraft('income', {
                           ...drafts.income, confirmed: event.target.checked })} />
                           <span>{l('Jumlah ini sudah mencakup seluruh penghasilan bulananmu.', 'This covers all of your monthly income.')}</span></label>
-                        <SectionSave busy={saving === key} disabled={drafts.income.items.some(item => !item.name.trim())}
+                        <SectionSave busy={saving === key} disabled={drafts.income.stability === null || drafts.income.items.some(item => !item.name.trim())}
                           onSave={() => void saveSection('income', drafts.income)} />
                       </>}
                       {key === 'expenses' && <>

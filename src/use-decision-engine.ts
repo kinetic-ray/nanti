@@ -17,15 +17,20 @@ import {
   type FinancialProfileSource,
   type PurchaseTerms,
 } from '../shared/decision-engine/index.js';
+import { projectCredit } from '../shared/decision-engine/credit-projection.js';
 
 type DecisionEngineOptions = {
   profile: FinancialProfileSource | null;
   purchase: PurchaseTerms | null;
+  credit?: Omit<Parameters<typeof projectCredit>[0], 'profile'>;
+  lowerRepaymentMinor?: bigint;
 };
 
 export function useDecisionEngine({
   profile,
   purchase,
+  credit,
+  lowerRepaymentMinor,
 }: DecisionEngineOptions) {
   const [session, setSession] = useState<DecisionSession>(
     createDecisionSession,
@@ -44,7 +49,10 @@ export function useDecisionEngine({
   }, [session, next]);
 
   const financialInput = useMemo(
-    () => adaptFinancialProfile(profile),
+    () => adaptFinancialProfile(profile, {
+      debtExcludedFromExpenses: true,
+      reserveIncludedInCash: false,
+    }),
     [profile],
   );
 
@@ -67,6 +75,12 @@ export function useDecisionEngine({
     () => assessment ? buildExplanation(assessment) : null,
     [assessment],
   );
+  const creditProjection = behavioral && credit
+    ? projectCredit({ ...credit, profile: financialInput })
+    : null;
+  const lowerCreditProjection = behavioral && credit && lowerRepaymentMinor !== undefined
+    ? projectCredit({ ...credit, repaymentMinor: lowerRepaymentMinor, profile: financialInput })
+    : null;
 
   function selectMotivation(selection: MotivationSelection) {
     setSession(current => setMotivation(current, selection));
@@ -111,6 +125,8 @@ export function useDecisionEngine({
     financial,
     assessment,
     explanation,
+    creditProjection,
+    lowerCreditProjection,
     answeredCount:
       session.answers.length + (session.motivation ? 1 : 0),
     hasFinancialProfile: financialInput !== null,

@@ -23,6 +23,8 @@ export type FinancialProfileSource = {
     status: 'unknown' | 'none' | 'listed';
     items: readonly {
       monthlyAmount: ProfileAmount;
+      remainingMonths?: number | null;
+      estimateDate?: string | null;
     }[];
   } | null;
 
@@ -129,7 +131,7 @@ export function adaptFinancialProfile(
   const monthlyExpenses =
     profile.expenses?.confirmed
       ? sumAmounts(
-          profile.expenses.items.map(item => item.monthlyAmount),
+          profile.expenses.items.map(item => item.monthlyAmount ?? '0'),
         )
       : null;
 
@@ -161,10 +163,20 @@ export function adaptFinancialProfile(
         ? 0
         : null;
 
+  const existingDebts = monthlyDebtPayments !== null && profile.debts?.status === 'listed'
+    ? profile.debts.items.flatMap(item => {
+      const monthlyPayment = parseRupiah(item.monthlyAmount);
+      return monthlyPayment === null || !item.remainingMonths || !item.estimateDate ? [] : [{
+        monthlyPayment, remainingMonths: item.remainingMonths, estimateDate: item.estimateDate,
+      }];
+    })
+    : [];
+
   return {
     monthlyIncome,
     monthlyExpenses,
     monthlyDebtPayments,
+    ...(existingDebts.length > 0 && { existingDebts }),
     monthlySavings: parseRupiah(
       profile.savings?.monthlyAmount,
     ),

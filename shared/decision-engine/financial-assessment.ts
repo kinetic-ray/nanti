@@ -1,3 +1,5 @@
+import { coversTransaction } from './credit-estimation.js';
+
 export type FinancialStatus =
   | 'not_assessed'
   | 'insufficient_data'
@@ -13,6 +15,11 @@ export type FinancialInput = {
   availableCash: number | null;
   protectedReserve: number | null;
   incomeStability: 'steady' | 'variable' | 'irregular' | null;
+  existingDebts?: readonly {
+    monthlyPayment: number;
+    remainingMonths?: number | null;
+    estimateDate?: string | null;
+  }[];
 };
 
 export type PurchaseTerms =
@@ -26,6 +33,9 @@ export type PurchaseTerms =
       downPayment: number | null;
       monthlyPayment: number | null;
       months: number | null;
+      transactionPriceMinor?: bigint;
+      repaymentMinor?: bigint;
+      estimated?: boolean;
     }
   | {
       method: 'unknown';
@@ -41,6 +51,7 @@ export type FinancialAssessment = {
   totalPurchaseCost: number | null;
   missingFields: readonly string[];
   reasonIds: readonly string[];
+  estimated?: boolean;
 };
 
 function validAmount(value: number | null): value is number {
@@ -63,11 +74,13 @@ export function assessFinancialReadiness(
     missingFields: [],
     reasonIds: [],
   };
+  if (purchase.method === 'installment' && purchase.estimated) result.estimated = true;
 
   if (!input) return result;
 
   const missing: string[] = [];
   const reasons: string[] = [];
+  let budgetInstallment: number | null = null;
 
   const {
     monthlyIncome,
@@ -85,7 +98,9 @@ export function assessFinancialReadiness(
   if (!validAmount(monthlySavings)) missing.push('monthlySavings');
   if (!validAmount(availableCash)) missing.push('availableCash');
   if (!validAmount(protectedReserve)) missing.push('protectedReserve');
-  if (!incomeStability) missing.push('incomeStability');
+  if (incomeStability !== 'steady' && incomeStability !== 'variable' && incomeStability !== 'irregular') {
+    missing.push('incomeStability');
+  }
 
   if (
     validAmount(monthlyIncome) &&
@@ -134,42 +149,33 @@ export function assessFinancialReadiness(
 
   if (purchase.method === 'installment') {
     const { downPayment, monthlyPayment, months } = purchase;
+    const validTerm = months !== null && Number.isSafeInteger(months) && months > 0;
+    const repayment = purchase.repaymentMinor ?? (validTerm && validAmount(monthlyPayment)
+      ? BigInt(monthlyPayment) * BigInt(months) * 100n : null);
+    const divisor = validTerm ? BigInt(months) * 100n : null;
+    budgetInstallment = purchase.repaymentMinor !== undefined && divisor !== null
+      ? Number((purchase.repaymentMinor + divisor - 1n) / divisor)
+      : monthlyPayment;
 
     if (!validAmount(downPayment)) missing.push('downPayment');
 
-    if (
-      !validAmount(monthlyPayment) ||
-      monthlyPayment === 0
-    ) {
+    if (!validAmount(budgetInstallment) || budgetInstallment === 0) {
       missing.push('monthlyPayment');
     }
 
-    if (
-      months === null ||
-      !Number.isSafeInteger(months) ||
-      months <= 0
-    ) {
-      missing.push('installmentMonths');
-    }
+    if (!validTerm) missing.push('installmentMonths');
 
-    if (
-      validAmount(downPayment) &&
-      validAmount(monthlyPayment) &&
-      monthlyPayment > 0 &&
-      months !== null &&
-      Number.isSafeInteger(months) &&
-      months > 0
-    ) {
-      const total = downPayment + monthlyPayment * months;
-
-      if (
-        Number.isSafeInteger(total) &&
-        validAmount(purchase.price) &&
-        total >= purchase.price
-      ) {
-        result.totalPurchaseCost = total;
-      } else {
+    if (validAmount(downPayment)) {
+      const price = validAmount(purchase.price) ? BigInt(purchase.price) * 100n : 0n;
+      const transaction = purchase.transactionPriceMinor ?? price;
+      const down = BigInt(downPayment) * 100n;
+      if (transaction > price || (price > 0n && down >= transaction) ||
+          (repayment !== null && (repayment > 0n || purchase.repaymentMinor !== undefined) &&
+            !coversTransaction(transaction, down, repayment))) {
         missing.push('validInstallmentTerms');
+      } else if (repayment !== null && repayment > 0n) {
+        const total = Number((down + repayment + 99n) / 100n);
+        if (Number.isSafeInteger(total)) result.totalPurchaseCost = total;
       }
     }
 
@@ -183,10 +189,11 @@ export function assessFinancialReadiness(
 
     if (
       result.monthlySurplus !== null &&
-      validAmount(monthlyPayment)
+      validAmount(budgetInstallment) &&
+      !missing.includes('validInstallmentTerms')
     ) {
       result.remainingMonthlySurplus =
-        result.monthlySurplus - monthlyPayment;
+        result.monthlySurplus - budgetInstallment;
     }
   }
 
@@ -221,6 +228,10 @@ export function assessFinancialReadiness(
 
   result.missingFields = missing;
 
+  if (missing.includes('validInstallmentTerms')) {
+    return { ...result, status: 'insufficient_data', reasonIds: ['financial_information_incomplete'] };
+  }
+
   // Confirmed financial risks take precedence over missing data.
   if (reasons.length) {
     return {
@@ -254,8 +265,8 @@ export function assessFinancialReadiness(
     purchase.method === 'installment' &&
     result.monthlySurplus !== null &&
     result.monthlySurplus > 0 &&
-    validAmount(purchase.monthlyPayment) &&
-    purchase.monthlyPayment / result.monthlySurplus > 0.5
+    validAmount(budgetInstallment) &&
+    budgetInstallment / result.monthlySurplus > 0.5
   ) {
     reasons.push('installment_consumes_surplus');
   }

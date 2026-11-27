@@ -291,3 +291,39 @@
     padding: 1rem;
   }
 }
+
+
+/* Standalone account workspace */
+
+.consumer.account-workspace-shell {
+  width: 100%;
+  max-width: none;
+  min-height: 100svh;
+  margin: 0;
+  padding: 0;
+}
+
+.account-workspace-shell > .aw[data-workspace="account"] {
+  width: 100%;
+  max-width: none;
+  min-height: 100svh;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.fp-category-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .25rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.fp-incomplete-note {
+  color: #946200;
+  font-size: .75rem;
+  font-weight: 500;
+  line-height: 1.5;
+}

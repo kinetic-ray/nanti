@@ -416,7 +416,7 @@ function App() {
   }
 
   if (accountRoute && !accountRecovery && accountStatus?.account) {
-    return <div className="site consumer">{renderHeader()}
+    return <div className="consumer account-workspace-shell">
       <Suspense fallback={<RouteLoading label="Preparing your account…" />}>
         <AccountWorkspace status={accountStatus} notice={notice} update={setAccountStatus}
           signOut={signOut} statusMessage={status} requestSignOut={requestSignOut} />
@@ -530,7 +530,15 @@ function App() {
                             {link.hostname.replace(/^www\./u, '')}
                             <span className="sr-only"> ({t('opens in a new tab')})</span>
                           </a>}
-                          <h3>{item.name}</h3>
+                          <h3>
+  <button
+    type="button"
+    className="wishlist-product-title"
+    onClick={() => setTools({ kind: 'product', item, initialTool: 'decision' })}
+  >
+    {item.name}
+  </button>
+</h3>
                           {item.sellerName && <span className="hint">{t('Seller: {seller}', { seller: item.sellerName })}</span>}
                           <div className="product-price">
                             <strong className={item.priceMinor === null ? 'price-missing' : undefined}>

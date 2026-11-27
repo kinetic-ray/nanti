@@ -41,6 +41,9 @@ export function combineAssessments(
     actionId: behavioral.actionId,
   };
 
+  // A financing simulation can inform readiness without upgrading the purchase verdict.
+  if (financial.estimated) return base;
+
   const safetyNeed = behavioral.reasonIds.includes(
     'confirmed_safety_need',
   );

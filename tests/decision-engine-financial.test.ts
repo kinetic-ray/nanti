@@ -192,6 +192,24 @@ describe('Combined assessment', () => {
     expect(result.outcome).toBe('worth_buying');
   });
 
+  it('keeps the behavioral verdict when the budget fits an estimated installment', () => {
+    const simulated = assessFinancialReadiness(financial, {
+      method: 'installment', price: 600_000, downPayment: 0, monthlyPayment: 200_000, months: 3, estimated: true,
+    });
+    expect(simulated.status).toBe('affordable');
+    expect(combineAssessments(behavioral(), simulated).outcome).toBe('worth_considering');
+  });
+
+  it('uses exact repayment instead of a mismatched monthly amount for readiness', () => {
+    expect(assessFinancialReadiness(financial, {
+      method: 'installment', price: 6_000_000, downPayment: 0, monthlyPayment: 1,
+      months: 2, repaymentMinor: 600_000_001n, estimated: true,
+    })).toMatchObject({
+      status: 'risky', remainingMonthlySurplus: -1_000_001,
+      reasonIds: ['installment_exceeds_monthly_surplus'],
+    });
+  });
+
   it('blocks a financially risky purchase', () => {
     const result = combineAssessments(
       behavioral(),
@@ -270,6 +288,55 @@ describe('Financial profile adapter', () => {
     })).toEqual(financial);
   });
 
+  it('counts confirmed empty expense rows as zero', () => {
+    const result = adaptFinancialProfile({
+      ...profile,
+      expenses: {
+        confirmed: true,
+        items: [
+          { monthlyAmount: '3000000', classification: 'essential' },
+          { monthlyAmount: null, classification: 'flexible' },
+        ],
+      },
+    });
+
+    expect(result?.monthlyExpenses).toBe(3000000);
+  });
+
+  it('preserves unknown expenses when not confirmed', () => {
+    const result = adaptFinancialProfile({
+      ...profile,
+      expenses: {
+        confirmed: false,
+        items: [
+          { monthlyAmount: null, classification: 'essential' },
+        ],
+      },
+    });
+
+    expect(result?.monthlyExpenses).toBeNull();
+  });
+
+  it('uses the native financial profile semantics', () => {
+    const input = adaptFinancialProfile(profile, {
+      debtExcludedFromExpenses: true,
+      reserveIncludedInCash: false,
+    });
+
+    expect(input?.monthlyDebtPayments).toBe(500000);
+    expect(input?.protectedReserve).toBe(0);
+
+    const result = assessFinancialReadiness(input, {
+      method: 'cash',
+      price: 1000000,
+    });
+
+    expect(result.monthlySurplus).toBe(2000000);
+    expect(result.safeCash).toBe(3500000);
+    expect(result.remainingCash).toBe(2500000);
+    expect(result.status).toBe('affordable');
+  });
+
   it('does not guess whether debt is already included', () => {
     expect(
       adaptFinancialProfile(profile)?.monthlyDebtPayments,
@@ -327,5 +394,126 @@ describe('Financial profile adapter', () => {
     expect(parseRupiah(null)).toBeNull();
     expect(priceMinorToRupiah('')).toBeNull();
     expect(priceMinorToRupiah(100, 0)).toBeNull();
+  });
+});
+
+describe('Financial readiness edge cases', () => {
+  const input = {
+    monthlyIncome: 6000000,
+    monthlyExpenses: 3000000,
+    monthlyDebtPayments: 500000,
+    monthlySavings: 500000,
+    availableCash: 3500000,
+    protectedReserve: 2000000,
+    incomeStability: 'steady' as const,
+  };
+
+  it('rejects zero purchase price', () => {
+    const result = assessFinancialReadiness(input, {
+      method: 'cash',
+      price: 0,
+    });
+
+    expect(result.status).toBe('insufficient_data');
+    expect(result.missingFields).toContain('purchasePrice');
+  });
+
+  it('rejects zero installment duration', () => {
+    const result = assessFinancialReadiness(input, {
+      method: 'installment',
+      price: 1000000,
+      downPayment: 0,
+      monthlyPayment: 200000,
+      months: 0,
+    });
+
+    expect(result.status).toBe('insufficient_data');
+    expect(result.missingFields).toContain('installmentMonths');
+  });
+
+  it('accepts promotional installment totals against an adjusted transaction price', () => {
+    const result = assessFinancialReadiness(input, {
+      method: 'installment',
+      price: 1000000,
+      transactionPriceMinor: 50_000_000n,
+      downPayment: 0,
+      monthlyPayment: 100000,
+      months: 5,
+    });
+
+    expect(result.totalPurchaseCost).toBe(500000);
+    expect(result.missingFields).not.toContain('validInstallmentTerms');
+  });
+
+  it('blocks a one-rupiah installment without a confirmed discount', () => {
+    expect(assessFinancialReadiness(input, {
+      method: 'installment', price: 2_000_000, downPayment: 0, monthlyPayment: 1, months: 12,
+    })).toMatchObject({
+      status: 'insufficient_data', totalPurchaseCost: null, remainingMonthlySurplus: null,
+      missingFields: ['validInstallmentTerms'],
+    });
+  });
+
+  it('flags down payment exceeding safe cash', () => {
+    const result = assessFinancialReadiness(input, {
+      method: 'installment',
+      price: 3000000,
+      downPayment: 2000000,
+      monthlyPayment: 200000,
+      months: 5,
+    });
+
+    expect(result.status).toBe('risky');
+    expect(result.reasonIds).toContain('purchase_exceeds_safe_cash');
+  });
+
+  it('limits installments consuming all monthly surplus', () => {
+    const result = assessFinancialReadiness(input, {
+      method: 'installment',
+      price: 2000000,
+      downPayment: 0,
+      monthlyPayment: 2000000,
+      months: 1,
+    });
+
+    expect(result.status).toBe('limited');
+    expect(result.remainingMonthlySurplus).toBe(0);
+  });
+
+  it('limits cash purchases consuming all safe cash', () => {
+    const result = assessFinancialReadiness(input, {
+      method: 'cash',
+      price: 1500000,
+    });
+
+    expect(result.status).toBe('limited');
+    expect(result.remainingCash).toBe(0);
+  });
+
+  it('limits purchases with irregular income', () => {
+    const result = assessFinancialReadiness({
+      ...input,
+      incomeStability: 'irregular',
+    }, {
+      method: 'cash',
+      price: 500000,
+    });
+
+    expect(result.status).toBe('limited');
+    expect(result.reasonIds).toContain('income_not_steady');
+  });
+
+  it('preserves confirmed risk despite missing income', () => {
+    const result = assessFinancialReadiness({
+      ...input,
+      monthlyIncome: null,
+    }, {
+      method: 'cash',
+      price: 2000000,
+    });
+
+    expect(result.status).toBe('risky');
+    expect(result.missingFields).toContain('monthlyIncome');
+    expect(result.reasonIds).toContain('purchase_exceeds_safe_cash');
   });
 });

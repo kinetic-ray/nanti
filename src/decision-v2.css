@@ -1,112 +1,395 @@
 .decision-v2 {
   display: grid;
-  gap: 18px;
+  gap: 1.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.guided-decision.decision-v2 > .decision-v2-product {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: center;
+  gap: .75rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.guided-decision.decision-v2 .decision-v2-product .product-media {
+  width: 3rem;
+  height: 3rem;
+  min-height: 0;
+  border-radius: var(--radius);
+}
+
+.decision-v2-product .product-media::after { content: none; }
+.decision-v2-product .product-media > span { font-size: 1.125rem; }
+
+.decision-v2-product > .product-media {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  align-self: center;
+}
+
+.decision-v2-product > .decision-v2-product-copy {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.decision-v2-product-copy,
+.decision-v2-option-copy {
+  display: grid;
+  gap: .15rem;
   min-width: 0;
 }
 
-.decision-v2-product {
-  display: grid;
-  gap: 4px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border, #8883);
+.decision-v2-product-copy > span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: .875rem;
 }
 
-.decision-v2 .decision-section {
+.decision-v2-section,
+.decision-v2-group {
   display: grid;
-  gap: 14px;
+  gap: .875rem;
   min-width: 0;
+}
+
+.decision-v2 h3,
+.decision-v2 h4,
+.decision-v2 p,
+.decision-v2 .decision-reasons {
+  margin: 0;
 }
 
 .decision-v2 h3 {
-  margin: 0;
-  font-size: 1.2rem;
+  font-size: clamp(1.125rem, 1rem + .65vw, 1.375rem);
   line-height: 1.4;
+  font-weight: 800;
 }
 
-.decision-v2-progress {
-  height: 4px;
-  background: #8882;
-  border-radius: 8px;
-  overflow: hidden;
-}
+.decision-v2 h4 { font-size: 1rem; font-weight: 800; }
+.decision-v2-step { color: var(--accent-strong); font-weight: 750; }
 
-.decision-v2-progress > div {
-  height: 100%;
-  background: var(--accent, #7c3aed);
-  transition: width 180ms ease;
+.decision-v2-question-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: .25rem 1rem;
+  color: var(--muted);
+  font-size: .875rem;
 }
 
 .decision-v2-options {
   display: grid;
-  gap: 8px;
+  gap: .5rem;
+  min-width: 0;
 }
 
-.decision-v2-option {
+.decision-v2 .decision-v2-option {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: .75rem;
   width: 100%;
   min-height: 48px;
-  padding: 12px 14px;
-  text-align: left;
-  color: inherit;
-  background: transparent;
-  border: 1px solid var(--border, #8885);
-  border-radius: 10px;
+  padding: .625rem .75rem;
+  text-align: start;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--field);
+  border-radius: var(--radius);
   font: inherit;
-  cursor: pointer;
+  line-height: 1.45;
   white-space: normal;
+  transition: background-color var(--motion), border-color var(--motion);
 }
 
-.decision-v2-option:hover,
-.decision-v2-option[aria-pressed="true"] {
-  border-color: var(--accent, #7c3aed);
-  background: #7c3aed0c;
+.decision-v2-motivations .decision-v2-option {
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
 }
+
+.decision-v2 .decision-v2-option:hover,
+.decision-v2 .decision-v2-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--wash);
+}
+
+.decision-v2-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: .5rem;
+  color: var(--accent-strong);
+  background: var(--wash);
+}
+
+.decision-v2-icon svg { width: 1.125rem; height: 1.125rem; }
+.decision-v2-option-marker {
+  width: .375rem;
+  height: .375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.decision-v2-selected {
+  width: 1rem;
+  height: 1rem;
+  color: var(--accent);
+  visibility: hidden;
+}
+
+[aria-pressed="true"] > .decision-v2-selected { visibility: visible; }
+.decision-v2-option-copy > span { color: var(--muted); font-size: .8125rem; }
 
 .decision-v2-field {
   display: grid;
-  gap: 6px;
+  gap: .375rem;
+  min-width: 0;
   font-size: .875rem;
+  font-weight: 700;
 }
 
-.decision-v2-field input,
-.decision-v2-field select {
+.decision-v2 .decision-v2-field :is(input, select) {
   width: 100%;
-  min-height: 42px;
-  box-sizing: border-box;
-}
-
-.decision-v2-primary {
+  min-width: 0;
   min-height: 44px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--accent, #7c3aed);
-  color: white;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
+  font-size: 16px;
+  border-radius: var(--radius);
 }
 
-.decision-v2-primary:disabled {
-  opacity: .45;
-  cursor: not-allowed;
+.decision-v2-terms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: .75rem;
+}
+
+.decision-v2 button { min-height: 44px; max-width: 100%; white-space: normal; }
+.decision-v2 .decision-v2-primary {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--paper);
+  font-weight: 750;
+}
+
+.decision-v2 .decision-v2-primary:disabled { opacity: .55; cursor: not-allowed; }
+.decision-v2 .decision-v2-primary:hover:not(:disabled) { background: var(--accent-strong); }
+
+.decision-v2 .decision-v2-back {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: .5rem;
+}
+
+.decision-v2-back svg { width: 1rem; height: 1rem; flex: none; }
+
+.decision-v2-recommendation {
+  gap: .375rem;
+  padding: .75rem 1rem;
+  border-radius: var(--radius);
+  background: var(--mint);
+}
+
+.decision-v2-recommendation .decision-v2-step,
+.decision-v2-recommendation h4 { font-size: .8125rem; }
+.decision-v2-recommendation h4 { margin-top: .25rem; }
+.decision-v2-recommendation p:not(.decision-v2-step) { font-weight: 650; }
+
+.decision-v2:has(> .decision-v2-assessment),
+.decision-v2-assessment { gap: .75rem; }
+
+.guided-decision.decision-v2:has(> .decision-v2-assessment) > .decision-v2-product {
+  padding-bottom: .5rem;
+  border-bottom: 0;
+}
+
+.decision-v2-assessment .decision-v2-payment,
+.decision-v2-payment-fields,
+.decision-v2-credit-form {
+  display: grid;
+  gap: .5rem .75rem;
+  min-width: 0;
+}
+
+.decision-v2-payment .decision-v2-field { gap: .25rem; }
+.decision-v2-payment-fields > .decision-v2-field:has(input) { grid-column: 1 / -1; }
+
+@media (min-width: 600px) {
+  .decision-v2-payment-fields[data-installment="true"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .decision-v2-payment-fields[data-installment="true"] :is(.decision-v2-credit-form, .decision-v2-terms) {
+    display: contents;
+  }
+  .decision-v2-credit-form > :is(p, .credit-form-actions) { grid-column: 1 / -1; }
+}
+.decision-v2 .decision-reasons { padding-inline-start: 1.25rem; }
+.decision-v2-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.decision-v2-actions a { display: inline-flex; align-items: center; min-height: 44px; }
+.decision-v2-details { border-bottom: 1px solid var(--line); }
+
+.decision-v2-details > summary {
+  min-height: 44px;
+  padding-block: .625rem;
+  font-weight: 750;
+  cursor: pointer;
 }
 
 .decision-v2-score {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px;
-  font-size: .85rem;
-  padding: 8px 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .375rem;
+  font-size: .875rem;
+  padding-block: .375rem;
 }
 
 .decision-v2-score progress {
   grid-column: 1 / -1;
   width: 100%;
-  height: 6px;
-  accent-color: var(--accent, #7c3aed);
+  height: .375rem;
+  accent-color: var(--accent);
 }
 
-.decision-v2 button:focus-visible,
-.decision-v2 a:focus-visible {
-  outline: 2px solid var(--accent, #7c3aed);
-  outline-offset: 3px;
+.decision-v2 :is(button, a, input, select, summary):focus-visible {
+
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.decision-v2-financial-impact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: .5rem 1rem;
+  margin: 0;
+  padding: .75rem;
+  border-radius: var(--radius);
+  background: var(--wash);
+}
+
+.decision-v2-financial-metric { display: grid; align-content: start; gap: .25rem; min-width: 0; }
+.decision-v2-financial-metric dt { color: var(--muted); font-size: .8125rem; }
+.decision-v2-financial-metric dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+.decision-v2-financial-metric dd[data-negative="true"] { color: var(--danger); }
+
+.credit-projection {
+  display: grid;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.credit-monthly-result h5 {
+  margin: 0 0 .25rem;
+  font-size: .875rem;
+}
+
+.credit-monthly-result strong {
+  color: var(--accent-strong);
+  font-size: clamp(1.25rem, 1rem + 1vw, 1.65rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.credit-source p { font-size: .8125rem; }
+.credit-source a { display: inline-flex; align-items: center; min-height: 44px; margin-inline-end: .5rem; }
+.credit-form-actions,
+.decision-v2-profile-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 .75rem;
+}
+
+.credit-form-actions details[open] { flex-basis: 100%; }
+.credit-form-actions details > summary,
+.consumer .decision-v2 button.decision-v2-text-action {
+  min-height: 44px;
+  padding: .625rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: .8125rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.credit-form-actions details > summary:hover,
+.consumer .decision-v2 button.decision-v2-text-action:hover { text-decoration: underline; }
+.credit-offer-options > label { margin-top: .5rem; }
+.credit-option-check { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.credit-validation { color: var(--danger); }
+.decision-v2-profile-status h4 { margin-inline-end: auto; font-size: .875rem; }
+.decision-v2-profile-status a { display: inline-flex; align-items: center; min-height: 44px; font-size: .8125rem; }
+.decision-v2-profile-complete { display: flex; align-items: center; gap: .5rem; color: var(--mint-ink); }
+.decision-v2-profile-complete svg { flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .decision-v2 *, .decision-v2 *::after { transition: none; }
+}
+
+/* Programmatic heading focus */
+.decision-v2 h3[tabindex="-1"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.decision-v2-product .product-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.credit-projection .credit-difference-positive {
+  color: var(--danger);
+}
+
+.credit-projection .credit-difference-negative {
+  color: var(--mint-ink);
+}
+
+/* Credit simulation: responsive container layout */
+
+.credit-projection {
+  container-type: inline-size;
+}
+
+.credit-projection .decision-v2-financial-impact,
+.decision-v2-cash-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem .75rem;
+  padding: .625rem .75rem;
+}
+.credit-estimate-notes { font-size: .8125rem; }
+
+.credit-projection .credit-monthly-result strong {
+  display: block;
+  line-height: 1.4;
+  letter-spacing: -.025em;
+}
+
+@container (max-width: 480px) {
+  .credit-projection .decision-v2-financial-impact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .credit-projection .decision-v2-financial-metric dd {
+    font-size: .875rem;
+  }
+}
+
+.credit-projection .credit-assumptions {
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+
+.credit-projection .credit-assumptions summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: .625rem;
 }

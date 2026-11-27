@@ -12,7 +12,7 @@ import { safeProductUrl } from '../shared/wishlist.js';
 import { PriceDetails } from './price-tools.js';
 
 export type IntelligenceSelection =
-  | { kind: 'product'; item: Item }
+  | { kind: 'product'; item: Item; initialTool?: 'decision' }
   | { kind: 'comparison' }
   | { kind: 'timing' };
 
@@ -26,14 +26,14 @@ export function PurchaseTools({ list, lists, selection, close, drafts, onPriceUp
   if (selection.kind === 'timing') return <PurchaseTiming list={list} path={path} close={close} />;
   const item = list.items.find(entry => entry.id === selection.item.id) ?? selection.item;
   return <ProductDetails list={list} item={item} path={`${path}/items/${item.id}`} close={close}
-    drafts={drafts.impulse} onPriceUpdate={onPriceUpdate} />;
+    drafts={drafts.impulse} onPriceUpdate={onPriceUpdate} initialTool={selection.initialTool} />;
 }
 
-function ProductDetails({ list, item, path, close, drafts, onPriceUpdate }: {
-  list: Wishlist; item: Item; path: string; close: () => void; drafts: IntelligenceDrafts['impulse']; onPriceUpdate: () => void;
+function ProductDetails({ list, item, path, close, drafts, onPriceUpdate, initialTool }: {
+  list: Wishlist; item: Item; path: string; close: () => void; drafts: IntelligenceDrafts['impulse']; onPriceUpdate: () => void; initialTool?: 'decision';
 }) {
   const { t, money, number, language } = useLocale();
-  const [tool, setTool] = useState<'decision' | 'prices' | null>(null);
+  const [tool, setTool] = useState<'decision' | 'prices' | null>(initialTool ?? null);
   const merchant = item.url ? safeProductUrl(item.url) : null;
   return <Dialog title={tool === 'decision' ? (language === 'id' ? 'Bantu putuskan beli' : 'Help me decide') : item.name} busy={false} close={close} focusHeading className="decision product-dialog">
     {tool === 'decision' ? <GuidedPurchaseDecision list={list} item={item} close={() => setTool(null)} /> : <>
