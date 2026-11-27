@@ -1,6 +1,6 @@
-import { CreatorAccess } from './creator-access.js';
 import { createRoot } from 'react-dom/client';
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
+import type { SetStateAction } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { safeProductUrl } from '../shared/wishlist.js';
 import { sharedProductLink } from './share-target.js';
@@ -17,6 +17,7 @@ import type { AccountStatus } from '../shared/account.js';
 import { financialProfileReturnKey } from '../shared/account.js';
 import type { PriceInbox } from '../shared/prices.js';
 import { BookmarkArt, Icon, Loading, ProductMedia } from './visual.js';
+import { isInternalNavigationClick, navigateTo, prefetchInternalNavigation } from './navigation.js';
 import './styles.css';
 import './consumer.css';
 
@@ -34,6 +35,7 @@ const AccountAdmin = lazy(() => import('./account-admin.js').then(({ AccountAdmi
 const AdminCenter = lazy(() => import('./admin.js').then(({ AdminCenter }) => ({ default: AdminCenter })));
 const CreatorWorkspace = lazy(() => import('./creator-workspace.js').then(({ CreatorWorkspace }) => ({ default: CreatorWorkspace })));
 const LiveCreatorStorefront = lazy(() => import('./creator-workspace.js').then(({ LiveCreatorStorefront }) => ({ default: LiveCreatorStorefront })));
+const CreatorAccess = lazy(() => import('./creator-access.js').then(({ CreatorAccess }) => ({ default: CreatorAccess })));
 const CreatorStorefront = lazy(() => import('./creator-storefront.js').then(({ CreatorStorefront }) => ({ default: CreatorStorefront })));
 const CreatorLanding = lazy(() => import('./creator.js').then(({ CreatorLanding }) => ({ default: CreatorLanding })));
 const PriceAlerts = lazy(() => import('./price-tools.js').then(({ PriceAlerts }) => ({ default: PriceAlerts })));
@@ -45,6 +47,10 @@ type Editor =
   | { kind: 'item'; item?: Item; list: WishlistSummary }
   | { kind: 'privacy' }
   | { kind: 'delete'; list: WishlistSummary; item?: Item };
+
+const sessionCache: { account: AccountStatus | null; lists: WishlistSummary[] | null; identity: string | null; validatedAt: number } = {
+  account: null, lists: null, identity: null, validatedAt: 0,
+};
 
 function WishlistPicker({ lists, activeId, label, onChange }: {
   lists: WishlistSummary[]; activeId: string; label: string; onChange: (id: string) => void;
@@ -131,11 +137,12 @@ function RouteLoading({ label, storefront = false }: { label: Message; storefron
 
 function App() {
   const { t, error, money, number } = useLocale();
-  const [lists, setLists] = useState<WishlistSummary[] | null>(null);
+  const [lists, setListsState] = useState<WishlistSummary[] | null>(() => sessionCache.lists);
   const [sessionError, setSessionError] = useState('');
   const [sessionRefreshing, setSessionRefreshing] = useState(false);
   const [sessionAttempt, setSessionAttempt] = useState(0);
-  const listsLoaded = useRef(false);
+  const listsLoaded = useRef(sessionCache.lists !== null);
+  const listsRef = useRef<WishlistSummary[] | null>(sessionCache.lists);
   const previousIdentity = useRef<string | null>(null);
   const identityLoaded = useRef(false);
   const hiddenAt = useRef(0);
@@ -148,7 +155,8 @@ function App() {
   const [tools, setTools] = useState<IntelligenceSelection | null>(null);
   const [drafts] = useState<IntelligenceDrafts>(() => ({ impulse: new Map() }));
   const [status, setStatus] = useState<Message | ''>('');
-  const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
+  const [accountStatus, setAccountStatusState] = useState<AccountStatus | null>(() => sessionCache.account);
+  const accountStatusRef = useRef<AccountStatus | null>(sessionCache.account);
   const accountRoute = /^\/account\/?$/u.test(location.pathname);
   const [showAccount, setShowAccount] = useState(false);
   const [accountRecovery] = useState(hasAccountRecovery);
@@ -161,11 +169,18 @@ function App() {
   const [sharedLink, setSharedLink] = useState(() => sharedProductLink(new URL(location.href)));
   const [sharedDraft, setSharedDraft] = useState(() => sharedProductLink(new URL(location.href)));
 
-  useEffect(() => {
-    const changed = (event: StorageEvent) => { if (event.key === authChangeKey) location.reload(); };
-    window.addEventListener('storage', changed);
-    return () => window.removeEventListener('storage', changed);
-  }, []);
+  function setLists(update: SetStateAction<WishlistSummary[] | null>) {
+    setListsState(current => {
+      const next = typeof update === 'function' ? update(current) : update;
+      sessionCache.lists = next;
+      return next;
+    });
+  }
+
+  function setAccountStatus(status: AccountStatus | null) {
+    sessionCache.account = status;
+    setAccountStatusState(status);
+  }
 
   useEffect(() => {
     const visibility = () => {
@@ -183,27 +198,40 @@ function App() {
   useEffect(() => {
     const controller = new AbortController();
     setSessionError('');
-    if (listsLoaded.current) setSessionRefreshing(true);
-    const accountRequest = api<AccountStatus>('/account', { signal: controller.signal });
+    const sessionFresh = accountStatusRef.current !== null && Date.now() - sessionCache.validatedAt < 5 * 60_000;
+    const useLoadedSession = sessionAttempt === 0 && sessionFresh;
+    if (listsLoaded.current && !accountEntry && !useLoadedSession) setSessionRefreshing(true);
+    if (accountEntry && !useLoadedSession) setAccountStatus(null);
+    const accountRequest = useLoadedSession
+      ? Promise.resolve(accountStatusRef.current!)
+      : api<AccountStatus>('/account', { signal: controller.signal });
     const loadLists = () => api<WishlistSummary[]>('/session', { method: 'POST', signal: controller.signal });
-    const wishlistRequest = accountEntry ? Promise.resolve([]) : loadLists();
+    const wishlistRequest = accountEntry ? Promise.resolve(null)
+      : useLoadedSession && listsLoaded.current ? Promise.resolve(listsRef.current ?? []) : loadLists();
     Promise.all([wishlistRequest, accountRequest]).then(
       ([lists, current]) => {
         if (controller.signal.aborted) return;
         const identity = current.account
           ? `account:${current.account.email?.trim().toLocaleLowerCase() || 'signed-in'}`
           : 'guest';
-        if (identityLoaded.current && previousIdentity.current !== identity) {
+        if ((identityLoaded.current && previousIdentity.current !== identity) ||
+            (sessionCache.identity !== null && sessionCache.identity !== identity)) {
           location.reload();
           return;
         }
         previousIdentity.current = identity;
         identityLoaded.current = true;
-        listsLoaded.current = true;
+        sessionCache.identity = identity;
+        sessionCache.validatedAt = Date.now();
+        accountStatusRef.current = current;
         setSessionRefreshing(false);
         setSessionError('');
         setAccountStatus(current);
-        setLists(lists);
+        if (lists !== null && !accountEntry) {
+          listsLoaded.current = true;
+          listsRef.current = lists;
+          setLists(lists);
+        }
         const address = new URL(location.href);
         if (accountRoute && address.searchParams.get('next') === 'creator' && current.account && !accountRecovery) {
           location.replace('/creator?onboard=1');
@@ -245,11 +273,17 @@ function App() {
       (error: unknown) => {
         if (controller.signal.aborted) return;
         listsLoaded.current = false;
+        listsRef.current = null;
+        sessionCache.account = null;
+        sessionCache.lists = null;
+        sessionCache.identity = null;
+        sessionCache.validatedAt = 0;
         setSessionRefreshing(false);
         setDetailLoading(false);
         setLists(null);
         setDetail(null);
         setAccountStatus(null);
+        accountStatusRef.current = null;
         setSessionError(errorMessage(error));
       },
     );
@@ -355,8 +389,24 @@ function App() {
 
   const list = detail?.id === activeId ? detail : null;
   const account = accountStatus?.account;
+
+  function renderHeader() {
+    return <header className="masthead">
+      <div className="brand-group">
+        <span className="brand-symbol" aria-hidden="true" />
+        <div className="brand">nanti<span>.</span></div>
+      </div>
+      <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
+        openAlerts={() => setAlertsOpen(true)} signIn={() => setShowAccount(true)} signOut={requestSignOut} />
+    </header>;
+  }
+
   async function signOut() {
     await api('/account/logout', { method: 'POST' });
+    sessionCache.account = null;
+    sessionCache.lists = null;
+    sessionCache.identity = null;
+    sessionCache.validatedAt = 0;
     announceAuthChange();
     location.replace('/?auth=signed-out');
   }
@@ -366,37 +416,33 @@ function App() {
   }
 
   if (accountRoute && !accountRecovery && accountStatus?.account) {
-    return <Suspense fallback={<RouteLoading label="Preparing your account…" />}>
-      <AccountWorkspace status={accountStatus} notice={notice} update={setAccountStatus}
-        signOut={signOut} statusMessage={status} requestSignOut={requestSignOut} />
-    </Suspense>;
+    return <div className="site consumer">{renderHeader()}
+      <Suspense fallback={<RouteLoading label="Preparing your account…" />}>
+        <AccountWorkspace status={accountStatus} notice={notice} update={setAccountStatus}
+          signOut={signOut} statusMessage={status} requestSignOut={requestSignOut} />
+      </Suspense>
+    </div>;
   }
 
   if (accountEntry && !accountStatus) {
-    return sessionError ? <div className="site consumer"><main className="account-route-panel">
+    return <div className="site consumer">{renderHeader()}{sessionError ? <main className="account-route-panel">
       <p role="alert">{t('Could not load your account. Try again.')}</p>
       <button type="button" onClick={() => setSessionAttempt(value => value + 1)}>{t('Try again')}</button>
       <a href="/">{t('Back to wishlists')}</a>
-    </main></div> : <RouteLoading label="Preparing your account…" />;
+    </main> : <RouteLoading label="Preparing your account…" />}</div>;
   }
 
   if (accountEntry) {
     return <div className="site consumer">
+      {renderHeader()}
       <AccountSignInPage status={accountStatus} notice={notice} update={setAccountStatus}
-        close={() => location.replace(new URLSearchParams(location.search).get('next') === 'creator' ? '/creator' : '/')} />
+        close={() => navigateTo(new URLSearchParams(location.search).get('next') === 'creator' ? '/creator' : '/', { replace: true })} />
     </div>;
   }
 
   return (
     <div className="site consumer">
-      <header className="masthead">
-        <div className="brand-group">
-          <span className="brand-symbol" aria-hidden="true" />
-          <div className="brand">nanti<span>.</span></div>
-        </div>
-        <HeaderActions account={account} ready={Boolean(lists)} unread={activeId ? unreadAlerts : 0}
-          openAlerts={() => setAlertsOpen(true)} signIn={() => setShowAccount(true)} signOut={requestSignOut} />
-      </header>
+      {renderHeader()}
       <div className={`workspace${selected ? ' workspace-collection' : ''}`}>
         {selected && <aside className="collection-rail">
           <div className="rail-heading">
@@ -554,37 +600,87 @@ function App() {
   );
 }
 
-const root = document.getElementById('root');
-if (root) {
+function normalizeLocation() {
   const address = new URL(location.href);
+  const original = `${address.pathname}${address.search}${address.hash}`;
   if (/^\/account\/financial-profile\/?$/u.test(address.pathname)) {
     address.pathname = '/account';
     address.searchParams.set('section', 'financial-profile');
-    history.replaceState(history.state, '', address);
   } else if (/^\/account\/?$/u.test(address.pathname) && address.searchParams.get('view') === 'settings') {
     address.searchParams.delete('view');
     address.searchParams.set('section', 'security');
-    history.replaceState(history.state, '', address);
   }
   if (/^\/account\/?$/u.test(address.pathname) && address.searchParams.get('next') === 'financial-profile') {
     address.searchParams.set('section', 'financial-profile');
-    history.replaceState(history.state, '', address);
   }
-  if (/^\/admin\/?$/u.test(location.pathname)) {
-    document.documentElement.lang = 'id';
-    const accounts = new URLSearchParams(location.search).get('view') === 'accounts';
-    createRoot(root).render(<Suspense fallback={<p className="site" role="status">Membuka administrasi…</p>}>
-      {accounts ? <AccountAdmin /> : <AdminCenter />}
-    </Suspense>);
-  } else if (/^\/creator\/studio\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<RouteLoading label="Preparing the studio…" />}><CreatorAccess studio={(ownerId, draft) => <CreatorWorkspace key={ownerId} ownerId={ownerId} draft={draft} />} /></Suspense></LocaleProvider>);
-  } else if (/^\/store\/[^/]+\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<RouteLoading label="Loading storefront…" storefront />}><LiveCreatorStorefront /></Suspense></LocaleProvider>);
-  } else if (/^\/creator\/demo\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<RouteLoading label="Loading storefront…" storefront />}><CreatorStorefront /></Suspense></LocaleProvider>);
-  } else if (/^\/creator\/?$/u.test(location.pathname)) {
-    createRoot(root).render(<LocaleProvider><Suspense fallback={<RouteLoading label="Loading creator page…" />} >
-      {new URLSearchParams(location.search).get('onboard') === '1' ? <CreatorAccess studio={() => null} /> : <CreatorLanding />}
-    </Suspense></LocaleProvider>);
-  } else createRoot(root).render(<LocaleProvider><App /></LocaleProvider>);
+  const normalized = `${address.pathname}${address.search}${address.hash}`;
+  if (normalized !== original) history.replaceState(history.state, '', normalized);
+  return normalized;
 }
+
+function isMainRoute(pathname: string) {
+  return !/^\/admin\/?$/u.test(pathname) &&
+    !/^\/creator\/?$/u.test(pathname) &&
+    !/^\/creator\/studio\/?$/u.test(pathname) &&
+    !/^\/creator\/demo\/?$/u.test(pathname) &&
+    !/^\/store\/[^/]+\/?$/u.test(pathname);
+}
+
+function ApplicationRouter() {
+  const [route, setRoute] = useState(normalizeLocation);
+  const address = new URL(route, location.origin);
+  const { pathname } = address;
+  const mainRoute = isMainRoute(pathname);
+  const adminRoute = /^\/admin\/?$/u.test(pathname);
+  const creatorStudioRoute = /^\/creator\/studio\/?$/u.test(pathname);
+  const storefrontRoute = /^\/store\/[^/]+\/?$/u.test(pathname);
+  const demoRoute = /^\/creator\/demo\/?$/u.test(pathname);
+  const creatorRoute = /^\/creator\/?$/u.test(pathname);
+
+  useEffect(() => {
+    function syncLocation() {
+      setRoute(normalizeLocation());
+      if (/^\/admin\/?$/u.test(location.pathname)) document.documentElement.lang = 'id';
+    }
+    function onAuthChange(event: StorageEvent) {
+      if (event.key === authChangeKey) location.reload();
+    }
+    function onClick(event: MouseEvent) {
+      const destination = isInternalNavigationClick(event);
+      if (!destination) return;
+      event.preventDefault();
+      navigateTo(destination);
+    }
+    window.addEventListener('popstate', syncLocation);
+    document.addEventListener('click', onClick);
+    document.addEventListener('pointerover', prefetchInternalNavigation);
+    document.addEventListener('focusin', prefetchInternalNavigation);
+    window.addEventListener('storage', onAuthChange);
+    if (adminRoute) document.documentElement.lang = 'id';
+    return () => {
+      window.removeEventListener('popstate', syncLocation);
+      document.removeEventListener('click', onClick);
+      document.removeEventListener('pointerover', prefetchInternalNavigation);
+      document.removeEventListener('focusin', prefetchInternalNavigation);
+      window.removeEventListener('storage', onAuthChange);
+    };
+  }, [adminRoute]);
+
+  return <LocaleProvider>
+    {mainRoute && <App />}
+    {adminRoute && <Suspense fallback={<p className="site" role="status">Membuka administrasi…</p>}>
+      {new URLSearchParams(address.search).get('view') === 'accounts' ? <AccountAdmin /> : <AdminCenter />}
+    </Suspense>}
+    {creatorStudioRoute && <Suspense fallback={<RouteLoading label="Preparing the studio…" />}>
+      <CreatorAccess studio={(ownerId, draft) => <CreatorWorkspace key={ownerId} ownerId={ownerId} draft={draft} />} />
+    </Suspense>}
+    {storefrontRoute && <Suspense fallback={<RouteLoading label="Loading storefront…" storefront />}><LiveCreatorStorefront /></Suspense>}
+    {demoRoute && <Suspense fallback={<RouteLoading label="Loading storefront…" storefront />}><CreatorStorefront /></Suspense>}
+    {creatorRoute && <Suspense fallback={<RouteLoading label="Loading creator page…" />}>
+      {new URLSearchParams(address.search).get('onboard') === '1' ? <CreatorAccess studio={() => null} /> : <CreatorLanding />}
+    </Suspense>}
+  </LocaleProvider>;
+}
+
+const root = document.getElementById('root');
+if (root) createRoot(root).render(<ApplicationRouter />);
